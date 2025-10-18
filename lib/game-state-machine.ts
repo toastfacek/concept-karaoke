@@ -1,4 +1,5 @@
-import { CREATION_PHASES, CreationPhase, GAME_STATUSES, GameStatus } from "./types"
+import type { CreationPhase, GameStatus } from "./types";
+import { CREATION_PHASES, GAME_STATUSES } from "./types"
 
 export interface GameStateSnapshot {
   status: GameStatus

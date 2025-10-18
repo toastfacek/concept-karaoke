@@ -18,7 +18,7 @@ async function resolveRoom(identifier: string) {
 
   const roomQuery = supabase
     .from(TABLES.gameRooms)
-    .select("id, code, status, current_phase, phase_start_time, host_id")
+    .select("id, code, status, current_phase, phase_start_time, host_id, current_pitch_index, pitch_sequence")
 
   const { data: room, error: roomError } = matchByCode
     ? await roomQuery.eq("code", identifier).maybeSingle()
@@ -67,7 +67,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const { data: adlobs, error: adlobsError } = await supabase
       .from(TABLES.adLobs)
       .select(
-        "id, big_idea_text, big_idea_created_by, visual_canvas_data, visual_image_urls, visual_created_by, headline_canvas_data, headline_created_by, mantra_text, mantra_created_by, created_at",
+        "id, big_idea_text, big_idea_created_by, visual_canvas_data, visual_image_urls, visual_created_by, headline_canvas_data, headline_created_by, mantra_text, mantra_created_by, created_at, assigned_pitcher, pitch_order, pitch_started_at, pitch_completed_at",
       )
       .eq("room_id", room.id)
       .order("created_at", { ascending: true })
@@ -85,6 +85,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
         currentPhase: room.current_phase,
         phaseStartTime: room.phase_start_time,
         hostId: room.host_id,
+        currentPitchIndex: room.current_pitch_index,
+        pitchSequence: room.pitch_sequence ?? [],
         players: players?.map((player) => ({
           id: player.id,
           name: player.name,
@@ -117,6 +119,10 @@ export async function GET(request: Request, { params }: { params: { id: string }
             mantra: adlob.mantra_text,
             mantraAuthorId: adlob.mantra_created_by,
             createdAt: adlob.created_at,
+            assignedPitcherId: adlob.assigned_pitcher,
+            pitchOrder: adlob.pitch_order,
+            pitchStartedAt: adlob.pitch_started_at,
+            pitchCompletedAt: adlob.pitch_completed_at,
           })) ?? [],
       },
     })
@@ -194,12 +200,52 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       )
     }
 
+    let pitchSequence: string[] = []
+
+    if (nextState.status === "pitching") {
+      const { data: adlobsForPitch, error: adlobsSelectError } = await supabase
+        .from(TABLES.adLobs)
+        .select("id, assigned_pitcher, mantra_created_by")
+        .eq("room_id", room.id)
+        .order("created_at", { ascending: true })
+
+      if (adlobsSelectError) {
+        throw adlobsSelectError
+      }
+
+      const orderedAdlobs = adlobsForPitch ?? []
+      pitchSequence = orderedAdlobs.map((item) => item.id)
+
+      for (let index = 0; index < orderedAdlobs.length; index += 1) {
+        const adlob = orderedAdlobs[index]
+        const assignedPitcher = adlob.assigned_pitcher ?? adlob.mantra_created_by ?? null
+
+        const { error: adlobUpdateError } = await supabase
+          .from(TABLES.adLobs)
+          .update({
+            assigned_pitcher: assignedPitcher,
+            pitch_order: index,
+            pitch_started_at: null,
+            pitch_completed_at: null,
+          })
+          .eq("id", adlob.id)
+
+        if (adlobUpdateError) {
+          throw adlobUpdateError
+        }
+      }
+    }
+
+    const hasPitchSequence = pitchSequence.length > 0
+
     const { error: updateError } = await supabase
       .from(TABLES.gameRooms)
       .update({
         status: nextState.status,
-        current_phase: nextState.currentPhase,
+        current_phase: nextState.status === "creating" ? nextState.currentPhase : null,
         phase_start_time: new Date().toISOString(),
+        current_pitch_index: nextState.status === "pitching" ? (hasPitchSequence ? 0 : null) : null,
+        pitch_sequence: nextState.status === "pitching" ? (hasPitchSequence ? pitchSequence : null) : null,
       })
       .eq("id", room.id)
 

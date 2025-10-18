@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { roomId, voterId, adlobId } = body
+    const { roomId: _roomId, voterId: _voterId, adlobId: _adlobId } = body
 
     // TODO: Validate voter hasn't already voted
     // TODO: Validate voter isn't voting for their own pitch
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       success: true,
       message: "Vote recorded",
     })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, error: "Failed to record vote" }, { status: 500 })
   }
 }

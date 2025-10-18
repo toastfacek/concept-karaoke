@@ -44,6 +44,9 @@ export interface AdLob {
     createdBy: string
   }
   assignedPitcher: string | null
+  pitchOrder?: number | null
+  pitchStartedAt?: Date | null
+  pitchCompletedAt?: Date | null
   voteCount: number
 }
 

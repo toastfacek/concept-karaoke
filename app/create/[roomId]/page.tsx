@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 
 import { Canvas } from "@/components/canvas"
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Timer } from "@/components/timer"
 import { PlayerList } from "@/components/player-list"
+import { canvasHasContent, canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/canvas"
 import { TABLES } from "@/lib/db"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { roomChannel } from "@/lib/realtime"
@@ -35,6 +36,10 @@ type AdLobRecord = {
   mantra: string | null
   mantraAuthorId: string | null
   createdAt: string
+  assignedPitcherId: string | null
+  pitchOrder: number | null
+  pitchStartedAt: string | null
+  pitchCompletedAt: string | null
 }
 
 const CREATION_SEQUENCE: CreationPhase[] = ["big_idea", "visual", "headline", "mantra"]
@@ -73,6 +78,21 @@ function extractNotes(data: unknown): string {
   return ""
 }
 
+function parseCanvasData(data: unknown): CanvasState | null {
+  const parsed = canvasStateSchema.safeParse(data)
+  if (!parsed.success) {
+    return null
+  }
+  return cloneCanvasState(parsed.data)
+}
+
+function countWords(value: string): number {
+  return value
+    .trim()
+    .split(/\s+/)
+    .filter((word) => word.length > 0).length
+}
+
 export default function CreatePage() {
   const router = useRouter()
   const params = useParams()
@@ -88,6 +108,8 @@ export default function CreatePage() {
     currentPhase: CreationPhase | null
     phaseStartTime: string | null
     players: GamePlayer[]
+    currentPitchIndex: number | null
+    pitchSequence: string[]
     adlobs: AdLobRecord[]
   } | null>(null)
 
@@ -101,6 +123,10 @@ export default function CreatePage() {
   const [visualNotes, setVisualNotes] = useState("")
   const [headlineNotes, setHeadlineNotes] = useState("")
   const [mantraInput, setMantraInput] = useState("")
+  const [visualCanvas, setVisualCanvas] = useState<CanvasState | null>(null)
+  const [headlineCanvas, setHeadlineCanvas] = useState<CanvasState | null>(null)
+  const lastPhaseRef = useRef<CreationPhase | null>(null)
+  const lastAdlobIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     setStoredPlayer(loadPlayer(roomCode))
@@ -132,6 +158,8 @@ export default function CreatePage() {
           hostId: gameData.hostId,
           currentPhase: gameData.currentPhase ?? null,
           phaseStartTime: gameData.phaseStartTime ?? null,
+           currentPitchIndex: gameData.currentPitchIndex ?? null,
+           pitchSequence: gameData.pitchSequence ?? [],
           players: gameData.players,
           adlobs: gameData.adlobs,
         })
@@ -192,25 +220,56 @@ export default function CreatePage() {
     return game.adlobs[targetIndex] ?? null
   }, [game, currentPlayer, playerIndex, phaseIndex])
 
+  const visualCanvasData = useMemo(() => parseCanvasData(currentAdlob?.visualCanvasData), [currentAdlob])
+  const headlineCanvasData = useMemo(() => parseCanvasData(currentAdlob?.headlineCanvasData), [currentAdlob])
+
   useEffect(() => {
+    const nextPhase = game?.currentPhase ?? null
+    const nextAdlobId = currentAdlob?.id ?? null
+
+    const phaseChanged = lastPhaseRef.current !== nextPhase
+    const adlobChanged = lastAdlobIdRef.current !== nextAdlobId
+
     if (!game || !currentAdlob) {
       setBigIdeaInput("")
       setVisualNotes("")
       setHeadlineNotes("")
       setMantraInput("")
+      setVisualCanvas(null)
+      setHeadlineCanvas(null)
+      lastPhaseRef.current = nextPhase
+      lastAdlobIdRef.current = nextAdlobId
       return
     }
 
-    if (game.currentPhase === "big_idea") {
+    if (!phaseChanged && !adlobChanged) {
+      return
+    }
+
+    lastPhaseRef.current = nextPhase
+    lastAdlobIdRef.current = nextAdlobId
+
+    if (nextPhase === "big_idea") {
       setBigIdeaInput(currentAdlob.bigIdea ?? "")
-    } else if (game.currentPhase === "visual") {
+      setVisualNotes("")
+      setHeadlineNotes("")
+      setMantraInput("")
+      setVisualCanvas(null)
+      setHeadlineCanvas(null)
+    } else if (nextPhase === "visual") {
       setVisualNotes(extractNotes(currentAdlob.visualCanvasData))
-    } else if (game.currentPhase === "headline") {
+      setVisualCanvas(parseCanvasData(currentAdlob.visualCanvasData))
+      setHeadlineNotes("")
+      setMantraInput("")
+      setHeadlineCanvas(null)
+    } else if (nextPhase === "headline") {
       setHeadlineNotes(extractNotes(currentAdlob.headlineCanvasData))
-    } else if (game.currentPhase === "mantra") {
+      setHeadlineCanvas(parseCanvasData(currentAdlob.headlineCanvasData))
+      setMantraInput("")
+    } else if (nextPhase === "mantra") {
       setMantraInput(currentAdlob.mantra ?? "")
     }
-  }, [game?.currentPhase, currentAdlob?.id])
+  }, [game, currentAdlob])
 
   const readyCount = useMemo(() => game?.players.filter((player) => player.isReady).length ?? 0, [game])
   const totalPlayers = game?.players.length ?? 0
@@ -225,59 +284,98 @@ export default function CreatePage() {
     setError(null)
 
     try {
+      let submissionEndpoint: string | null = null
+      let submissionPayload: Record<string, unknown> | null = null
+
       if (game.currentPhase === "big_idea") {
-        const response = await fetch(`/api/adlobs/${currentAdlob.id}/big-idea`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text: bigIdeaInput.trim(),
-            createdBy: currentPlayer.id,
-          }),
-        })
-        const payload = await response.json()
-        if (!response.ok || !payload.success) {
-          throw new Error(payload.error ?? "Failed to save big idea")
+        const text = bigIdeaInput.trim()
+        if (text.length < 20) {
+          setError("Big ideas need at least 20 characters to feel grounded.")
+          setIsSubmitting(false)
+          return
+        }
+
+        submissionEndpoint = `/api/adlobs/${currentAdlob.id}/big-idea`
+        submissionPayload = {
+          text,
+          createdBy: currentPlayer.id,
         }
       } else if (game.currentPhase === "visual") {
-        const response = await fetch(`/api/adlobs/${currentAdlob.id}/visual`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            canvasData: { notes: visualNotes },
-            imageUrls: [],
-            createdBy: currentPlayer.id,
-          }),
-        })
-        const payload = await response.json()
-        if (!response.ok || !payload.success) {
-          throw new Error(payload.error ?? "Failed to save visual")
+        if (!visualCanvas || !canvasHasContent(visualCanvas)) {
+          setError("Sketch or jot something on the canvas before submitting.")
+          setIsSubmitting(false)
+          return
+        }
+
+        const notes = visualNotes.trim()
+        if (notes.length < 10) {
+          setError("Add at least one sentence (10+ characters) of visual guidance for the next teammate.")
+          setIsSubmitting(false)
+          return
+        }
+
+        const canvasPayload = cloneCanvasState(visualCanvas)
+        canvasPayload.notes = notes
+
+        submissionEndpoint = `/api/adlobs/${currentAdlob.id}/visual`
+        submissionPayload = {
+          canvasData: canvasPayload,
+          imageUrls: [],
+          createdBy: currentPlayer.id,
         }
       } else if (game.currentPhase === "headline") {
-        const response = await fetch(`/api/adlobs/${currentAdlob.id}/headline`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            canvasData: { notes: headlineNotes },
-            createdBy: currentPlayer.id,
-          }),
-        })
-        const payload = await response.json()
-        if (!response.ok || !payload.success) {
-          throw new Error(payload.error ?? "Failed to save headline")
+        if (!headlineCanvas || !canvasHasContent(headlineCanvas)) {
+          setError("Block out the headline layout on the canvas so the final team can see the plan.")
+          setIsSubmitting(false)
+          return
+        }
+
+        const notes = headlineNotes.trim()
+        if (notes.length < 10) {
+          setError("Give the copy a little more love — add 10+ characters for headline guidance.")
+          setIsSubmitting(false)
+          return
+        }
+
+        const canvasPayload = cloneCanvasState(headlineCanvas)
+        canvasPayload.notes = notes
+
+        submissionEndpoint = `/api/adlobs/${currentAdlob.id}/headline`
+        submissionPayload = {
+          canvasData: canvasPayload,
+          createdBy: currentPlayer.id,
         }
       } else if (game.currentPhase === "mantra") {
-        const response = await fetch(`/api/adlobs/${currentAdlob.id}/mantra`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text: mantraInput.trim(),
-            createdBy: currentPlayer.id,
-          }),
-        })
-        const payload = await response.json()
-        if (!response.ok || !payload.success) {
-          throw new Error(payload.error ?? "Failed to save mantra")
+        const text = mantraInput.trim()
+        const words = countWords(text)
+
+        if (words < 50) {
+          setError("Mantras should be at least 50 words — give the pitch a little more runway.")
+          setIsSubmitting(false)
+          return
         }
+
+        submissionEndpoint = `/api/adlobs/${currentAdlob.id}/mantra`
+        submissionPayload = {
+          text,
+          createdBy: currentPlayer.id,
+        }
+      }
+
+      if (!submissionEndpoint || !submissionPayload) {
+        setIsSubmitting(false)
+        return
+      }
+
+      const response = await fetch(submissionEndpoint, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(submissionPayload),
+      })
+      const phasePayload = await response.json()
+
+      if (!response.ok || !phasePayload.success) {
+        throw new Error(phasePayload.error ?? "Failed to save your work")
       }
 
       await fetch(`/api/games/${roomCode}/players/${currentPlayer.id}`, {
@@ -431,9 +529,9 @@ export default function CreatePage() {
               rows={4}
               className="text-lg"
             />
-            <Canvas readOnly className="pointer-events-none opacity-60" />
+            <Canvas initialData={visualCanvas} onChange={setVisualCanvas} />
             <p className="font-mono text-xs text-muted-foreground">
-              Canvas tooling coming soon — capture ideas in the notes for now.
+              Sketch the layout and use the notes to tee up the next teammate.
             </p>
           </div>
         )
@@ -447,7 +545,7 @@ export default function CreatePage() {
               </div>
               <div>
                 <p className="font-mono text-xs uppercase text-muted-foreground">Visual Notes</p>
-                <p>{visualNotes || extractNotes(currentAdlob.visualCanvasData) || "Visual pending..."}</p>
+                <p>{extractNotes(currentAdlob.visualCanvasData) || "Visual pending..."}</p>
               </div>
             </div>
 
@@ -458,9 +556,9 @@ export default function CreatePage() {
               rows={3}
               className="text-lg"
             />
-            <Canvas readOnly className="pointer-events-none opacity-60" />
+            <Canvas initialData={headlineCanvas ?? headlineCanvasData} onChange={setHeadlineCanvas} />
             <p className="font-mono text-xs text-muted-foreground">
-              Canvas support coming soon — jot the headline placement and copy in the notes for now.
+              Map the headline placement and note copy decisions so the final pitcher has a clear script.
             </p>
           </div>
         )
@@ -480,6 +578,30 @@ export default function CreatePage() {
                 <p className="font-mono text-xs uppercase text-muted-foreground">Headline Notes</p>
                 <p>{extractNotes(currentAdlob.headlineCanvasData) || "Headline pending..."}</p>
               </div>
+              <div>
+                <p className="font-mono text-xs uppercase text-muted-foreground">Visual Sketch</p>
+                {visualCanvasData ? (
+                  <Canvas
+                    initialData={visualCanvasData}
+                    readOnly
+                    className="pointer-events-none bg-card sm:mx-auto sm:max-w-3xl"
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground">Visual canvas pending...</p>
+                )}
+              </div>
+              <div>
+                <p className="font-mono text-xs uppercase text-muted-foreground">Headline Layout</p>
+                {headlineCanvasData ? (
+                  <Canvas
+                    initialData={headlineCanvasData}
+                    readOnly
+                    className="pointer-events-none bg-card sm:mx-auto sm:max-w-3xl"
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground">Headline canvas pending...</p>
+                )}
+              </div>
             </div>
 
             <Textarea
@@ -490,7 +612,7 @@ export default function CreatePage() {
               className="text-lg"
             />
             <p className="font-mono text-sm text-muted-foreground">
-              {mantraInput.split(" ").filter((word) => word.trim().length > 0).length} words (aim for 50-100)
+              {countWords(mantraInput)} words (aim for 50-100)
             </p>
           </div>
         )

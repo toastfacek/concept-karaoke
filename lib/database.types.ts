@@ -22,6 +22,8 @@ export type Database = {
           host_id: string
           created_at: string
           updated_at: string
+          current_pitch_index: number | null
+          pitch_sequence: string[] | null
         }
         Insert: {
           id?: string
@@ -32,6 +34,8 @@ export type Database = {
           host_id: string
           created_at?: string
           updated_at?: string
+          current_pitch_index?: number | null
+          pitch_sequence?: string[] | null
         }
         Update: {
           id?: string
@@ -42,6 +46,8 @@ export type Database = {
           host_id?: string
           created_at?: string
           updated_at?: string
+          current_pitch_index?: number | null
+          pitch_sequence?: string[] | null
         }
         Relationships: []
       }
@@ -148,6 +154,9 @@ export type Database = {
           vote_count: number
           created_at: string
           updated_at: string
+          pitch_order: number | null
+          pitch_started_at: string | null
+          pitch_completed_at: string | null
         }
         Insert: {
           id?: string
@@ -166,6 +175,9 @@ export type Database = {
           vote_count?: number
           created_at?: string
           updated_at?: string
+          pitch_order?: number | null
+          pitch_started_at?: string | null
+          pitch_completed_at?: string | null
         }
         Update: {
           id?: string
@@ -184,6 +196,9 @@ export type Database = {
           vote_count?: number
           created_at?: string
           updated_at?: string
+          pitch_order?: number | null
+          pitch_started_at?: string | null
+          pitch_completed_at?: string | null
         }
         Relationships: [
           {

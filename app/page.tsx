@@ -65,11 +65,9 @@ export default function Home() {
       <div className="retro-border w-full max-w-2xl space-y-8 bg-card p-12 text-center">
         <div className="space-y-4">
           <h1 className="text-6xl font-bold uppercase leading-tight tracking-tight">
-            Concept
-            <br />
-            Karaoke
+            Badlobs
           </h1>
-          <p className="font-mono text-lg text-muted-foreground">The Exquisite Corpse Ad Game</p>
+          <p className="font-mono text-lg text-muted-foreground">The Group Ad Concept Game</p>
         </div>
 
         <div className="space-y-6 pt-8 text-left">

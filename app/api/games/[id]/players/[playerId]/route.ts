@@ -8,7 +8,12 @@ const updateSchema = z.object({
   isReady: z.boolean(),
 })
 
-export async function PATCH(request: Request, { params }: { params: { code: string; playerId: string } }) {
+function normalizeId(id: string) {
+  const trimmed = id.trim()
+  return trimmed.length === 6 ? trimmed.toUpperCase() : trimmed
+}
+
+export async function PATCH(request: Request, { params }: { params: { id: string; playerId: string } }) {
   try {
     const body = await request.json()
     const parsed = updateSchema.safeParse(body)
@@ -18,15 +23,15 @@ export async function PATCH(request: Request, { params }: { params: { code: stri
       return NextResponse.json({ success: false, error: message }, { status: 400 })
     }
 
-    const code = params.code.toUpperCase()
+    const identifier = normalizeId(params.id)
     const playerId = params.playerId
     const supabase = getSupabaseAdminClient()
 
-    const { data: room, error: roomError } = await supabase
-      .from(TABLES.gameRooms)
-      .select("id")
-      .eq("code", code)
-      .maybeSingle()
+    const roomQuery = supabase.from(TABLES.gameRooms).select("id, code").limit(1)
+
+    const { data: room, error: roomError } = /^[A-Z0-9]{6}$/.test(identifier)
+      ? await roomQuery.eq("code", identifier).maybeSingle()
+      : await roomQuery.eq("id", identifier).maybeSingle()
 
     if (roomError) {
       throw roomError
@@ -42,13 +47,17 @@ export async function PATCH(request: Request, { params }: { params: { code: stri
       .eq("id", playerId)
       .eq("room_id", room.id)
       .select("id, name, emoji, is_ready, is_host")
-      .single()
+      .maybeSingle()
 
     if (playerError) {
       if (playerError.code === "PGRST116") {
         return NextResponse.json({ success: false, error: "Player not found" }, { status: 404 })
       }
       throw playerError
+    }
+
+    if (!player) {
+      return NextResponse.json({ success: false, error: "Player not found" }, { status: 404 })
     }
 
     return NextResponse.json({
