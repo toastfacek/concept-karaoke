@@ -1,0 +1,256 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Cassette Futurism Color Palette */
+  --primary: #0047ff; /* Electric Blue */
+  --primary-foreground: #fafafa;
+  --secondary: #ff006e; /* Hot Pink */
+  --secondary-foreground: #fafafa;
+  --accent: #ffd60a; /* Highlight Yellow */
+  --accent-foreground: #0a0a0a;
+
+  --background: #fafafa;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+  --muted: #e5e5e5;
+  --muted-foreground: #737373;
+  --destructive: #dc2626;
+  --destructive-foreground: #fafafa;
+  --border: #262626;
+  --input: #e5e5e5;
+  --ring: #0047ff;
+
+  --chart-1: #0047ff;
+  --chart-2: #ff006e;
+  --chart-3: #ffd60a;
+  --chart-4: #00d9ff;
+  --chart-5: #7c3aed;
+
+  --radius: 0.25rem;
+
+  --sidebar: #fafafa;
+  --sidebar-foreground: #0a0a0a;
+  --sidebar-primary: #0047ff;
+  --sidebar-primary-foreground: #fafafa;
+  --sidebar-accent: #e5e5e5;
+  --sidebar-accent-foreground: #0a0a0a;
+  --sidebar-border: #262626;
+  --sidebar-ring: #0047ff;
+}
+
+.dark {
+  /* Dark mode with cassette futurism colors */
+  --primary: #0047ff;
+  --primary-foreground: #fafafa;
+  --secondary: #ff006e;
+  --secondary-foreground: #fafafa;
+  --accent: #ffd60a;
+  --accent-foreground: #0a0a0a;
+
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+  --card: #171717;
+  --card-foreground: #fafafa;
+  --popover: #171717;
+  --popover-foreground: #fafafa;
+  --muted: #262626;
+  --muted-foreground: #a3a3a3;
+  --destructive: #dc2626;
+  --destructive-foreground: #fafafa;
+  --border: #404040;
+  --input: #262626;
+  --ring: #0047ff;
+
+  --chart-1: #0047ff;
+  --chart-2: #ff006e;
+  --chart-3: #ffd60a;
+  --chart-4: #00d9ff;
+  --chart-5: #7c3aed;
+
+  --sidebar: #171717;
+  --sidebar-foreground: #fafafa;
+  --sidebar-primary: #0047ff;
+  --sidebar-primary-foreground: #fafafa;
+  --sidebar-accent: #262626;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: #404040;
+  --sidebar-ring: #0047ff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Cassette Futurism Typography and Styles */
+body {
+  font-feature-settings: "rlig" 1, "calt" 1;
+  font-family: "Space Grotesk", "Space Grotesk Fallback", system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+/* Typography Scale - Big, Bold, Ogilvy-style */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: clamp(2.5rem, 8vw, 6rem);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+h2 {
+  font-size: clamp(2rem, 6vw, 4rem);
+  font-weight: 800;
+}
+
+h3 {
+  font-size: clamp(1.5rem, 4vw, 2.5rem);
+  font-weight: 700;
+}
+
+/* Retro UI Elements */
+.retro-border {
+  border: 3px solid var(--foreground);
+  box-shadow: 4px 4px 0 var(--foreground);
+}
+
+.retro-button {
+  border: 3px solid var(--foreground);
+  box-shadow: 4px 4px 0 var(--foreground);
+  transition: all 0.1s ease;
+}
+
+.retro-button:hover {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--foreground);
+}
+
+.retro-button:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 var(--foreground);
+}
+
+/* Cassette Tape Aesthetic */
+.cassette-lines {
+  background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, var(--muted) 2px, var(--muted) 3px);
+}
+
+/* VHS Scanlines Effect */
+.scanlines {
+  position: relative;
+}
+
+.scanlines::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.03) 0px,
+    transparent 1px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 3px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Grid System - Classic Ad Layout */
+.ad-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 1.5rem;
+}
+
+/* Highlight Effect - Like a marker */
+.highlight {
+  background: linear-gradient(180deg, transparent 60%, var(--accent) 60%, var(--accent) 95%, transparent 95%);
+  padding: 0 0.25rem;
+}
+
+/* Monospace Numbers - Retro Digital Display */
+.mono-numbers {
+  font-family: "IBM Plex Mono", "IBM Plex Mono Fallback", "Courier New", monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+}
+
+/* Print-style Pull Quote */
+.pull-quote {
+  border-left: 6px solid var(--primary);
+  padding-left: 1.5rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-style: italic;
+  margin: 2rem 0;
+}
+
+/* Stamp Effect */
+.stamp {
+  border: 3px dashed var(--primary);
+  padding: 0.5rem 1rem;
+  display: inline-block;
+  transform: rotate(-2deg);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
