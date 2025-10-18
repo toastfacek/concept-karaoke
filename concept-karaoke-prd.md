@@ -125,7 +125,7 @@ Each phase has a **60-second timer**. All players work simultaneously on differe
 - **Real-time Sync**: Supabase Realtime
 - **File Storage**: Supabase Storage (for generated images)
 - **AI Integration**: 
-  - Google Gemini API for brief generation
+  - OpenAI API for brief generation
   - Gemini Nano Banana for image generation
 
 **Hosting & Deployment**:
@@ -324,7 +324,7 @@ interface Vote {
 
 ### AI Integration
 
-**Brief Generation** (Gemini API):
+**Brief Generation** (OpenAI API):
 ```
 Prompt Template:
 "Generate a creative advertising brief for a fictional product. 
@@ -479,7 +479,7 @@ Response format: JSON
 - Text styling for headlines
 
 ### Phase 3: AI Integration (Week 6)
-- Gemini API for brief generation
+- OpenAI API for brief generation
 - Nano Banana for image generation
 - Prompt engineering and refinement
 

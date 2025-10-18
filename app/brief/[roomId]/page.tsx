@@ -283,7 +283,7 @@ export default function BriefPage() {
       }
 
       setBriefDraft(generated)
-      await handleSaveBrief(generated)
+      await fetchGame({ silent: true })
     } catch (generateError) {
       console.error(generateError)
       setError(generateError instanceof Error ? generateError.message : "Failed to generate brief.")
@@ -310,6 +310,22 @@ export default function BriefPage() {
 
       if (!response.ok || !payload.success) {
         throw new Error(payload.error ?? "Failed to advance game")
+      }
+
+      if (payload.status === "creating" && game?.id) {
+        const createResponse = await fetch("/api/adlobs/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            roomId: game.id,
+            briefId: game.brief?.id,
+          }),
+        })
+
+        if (!createResponse.ok) {
+          const createPayload = await createResponse.json().catch(() => null)
+          console.error("Failed to create AdLobs", createPayload ?? "")
+        }
       }
 
       await fetchGame({ silent: true })

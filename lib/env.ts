@@ -10,6 +10,7 @@ const serverSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
 })
 
@@ -25,6 +26,7 @@ const rawServerEnv = {
   SUPABASE_SERVICE_ROLE_KEY: optional(process.env.SUPABASE_SERVICE_ROLE_KEY),
   STRIPE_SECRET_KEY: optional(process.env.STRIPE_SECRET_KEY),
   STRIPE_WEBHOOK_SECRET: optional(process.env.STRIPE_WEBHOOK_SECRET),
+  OPENAI_API_KEY: optional(process.env.OPENAI_API_KEY),
   GEMINI_API_KEY: optional(process.env.GEMINI_API_KEY),
 }
 

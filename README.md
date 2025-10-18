@@ -7,7 +7,7 @@ The Exquisite Corpse Ad Game - A multiplayer web game where players collaborativ
 - **Frontend**: Next.js 15 (App Router), React, TypeScript, Shadcn UI
 - **Design**: Cassette Futurism + Classic Ogilvy Advertising aesthetic
 - **Database**: Supabase (PostgreSQL + Realtime + Storage) - TODO
-- **AI**: Gemini API (brief generation) + Nano Banana (image generation) - TODO
+- **AI**: OpenAI (brief generation) + Nano Banana (image generation) - TODO
 - **Hosting**: Vercel
 
 ## Project Structure
@@ -76,7 +76,7 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ### Environment Variables
 
-Copy `.env.example` to `.env` and populate the Supabase keys. At a minimum, set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` so the app can connect to Supabase locally.
+Copy `.env.example` to `.env` and populate the Supabase keys. At a minimum, set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` so the app can connect to Supabase locally. Add `OPENAI_API_KEY` if you want server routes to generate campaign briefs via OpenAI.
 
 ### Useful Scripts
 

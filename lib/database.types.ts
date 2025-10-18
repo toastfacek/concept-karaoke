@@ -130,6 +130,78 @@ export type Database = {
           },
         ]
       }
+      adlobs: {
+        Row: {
+          id: string
+          room_id: string
+          brief_id: string | null
+          big_idea_text: string | null
+          big_idea_created_by: string | null
+          visual_canvas_data: Json | null
+          visual_image_urls: string[] | null
+          visual_created_by: string | null
+          headline_canvas_data: Json | null
+          headline_created_by: string | null
+          mantra_text: string | null
+          mantra_created_by: string | null
+          assigned_pitcher: string | null
+          vote_count: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          room_id: string
+          brief_id?: string | null
+          big_idea_text?: string | null
+          big_idea_created_by?: string | null
+          visual_canvas_data?: Json | null
+          visual_image_urls?: string[] | null
+          visual_created_by?: string | null
+          headline_canvas_data?: Json | null
+          headline_created_by?: string | null
+          mantra_text?: string | null
+          mantra_created_by?: string | null
+          assigned_pitcher?: string | null
+          vote_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          room_id?: string
+          brief_id?: string | null
+          big_idea_text?: string | null
+          big_idea_created_by?: string | null
+          visual_canvas_data?: Json | null
+          visual_image_urls?: string[] | null
+          visual_created_by?: string | null
+          headline_canvas_data?: Json | null
+          headline_created_by?: string | null
+          mantra_text?: string | null
+          mantra_created_by?: string | null
+          assigned_pitcher?: string | null
+          vote_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "adlobs_brief_id_fkey"
+            columns: ["brief_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_briefs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "adlobs_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "game_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

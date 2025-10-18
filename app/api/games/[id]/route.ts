@@ -64,6 +64,18 @@ export async function GET(request: Request, { params }: { params: { id: string }
       throw briefError
     }
 
+    const { data: adlobs, error: adlobsError } = await supabase
+      .from(TABLES.adLobs)
+      .select(
+        "id, big_idea_text, big_idea_created_by, visual_canvas_data, visual_image_urls, visual_created_by, headline_canvas_data, headline_created_by, mantra_text, mantra_created_by, created_at",
+      )
+      .eq("room_id", room.id)
+      .order("created_at", { ascending: true })
+
+    if (adlobsError) {
+      throw adlobsError
+    }
+
     return NextResponse.json({
       success: true,
       game: {
@@ -92,6 +104,20 @@ export async function GET(request: Request, { params }: { params: { id: string }
               updatedAt: brief.updated_at,
             }
           : null,
+        adlobs:
+          adlobs?.map((adlob) => ({
+            id: adlob.id,
+            bigIdea: adlob.big_idea_text,
+            bigIdeaAuthorId: adlob.big_idea_created_by,
+            visualCanvasData: adlob.visual_canvas_data,
+            visualImageUrls: adlob.visual_image_urls,
+            visualAuthorId: adlob.visual_created_by,
+            headlineCanvasData: adlob.headline_canvas_data,
+            headlineAuthorId: adlob.headline_created_by,
+            mantra: adlob.mantra_text,
+            mantraAuthorId: adlob.mantra_created_by,
+            createdAt: adlob.created_at,
+          })) ?? [],
       },
     })
   } catch (error) {

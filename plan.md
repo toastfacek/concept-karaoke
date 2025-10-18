@@ -58,6 +58,7 @@
 - [x] `app/join/page.tsx`: Form that accepts code, display name, emoji and routes to lobby.
 - [x] `app/lobby/[roomId]/page.tsx`: Lobby UI with live player list, ready toggle, host start control.
 - [x] `app/brief/[roomId]/page.tsx`: Shared brief editing screen with realtime updates and host start.
+- [x] `app/create/[roomId]/page.tsx`: Creation rounds interface tied to Supabase state and phase timers.
 - [x] Supabase schema seed for `game_rooms`, `players`, `player_status` tables with realtime channels wired in `lib/realtime.ts`.
 - [x] Minimal lobby state helpers (`lib/game-state-machine.ts`, `lib/routes.ts`) supporting host/guest flows.
 - [ ] Happy-path Playwright script that walks Create → Lobby → Ready toggle interactions using stubbed APIs.
@@ -71,6 +72,8 @@
 - [x] **Error/edge handling**: Surface inline validation (invalid code, lobby full), add optimistic reconnect for refresh.
 - [x] **Briefing collaboration**: Persist brief edits, regenerate stubs, and broadcast updates while players ready up.
 - [x] **Brief lock & advance**: Gate creation phase on host command with everyone ready, resetting readiness between stages.
+- [x] **Creation rounds**: Capture per-phase submissions, manage ready signals, and advance hosts through Supabase state.
+- [x] **Brief generation**: Swap Gemini stubs for OpenAI-powered briefs, store results, and hydrate clients realtime.
 
 ### Dependencies & Notes
 - Supabase service role env vars must be populated locally for API route access.
