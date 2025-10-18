@@ -33,7 +33,6 @@ components/
 └── game-icons.tsx             # 30+ cartoony game icons
 
 lib/
-├── auth.ts                   # Supabase auth helpers
 ├── database.types.ts         # Supabase (placeholder) typed schema
 ├── db.ts                     # Table constants and code generator
 ├── env.ts                    # Runtime env parsing

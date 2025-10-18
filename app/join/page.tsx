@@ -6,18 +6,55 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { emojis } from "@/lib/sample-data"
+import { savePlayer } from "@/lib/player-storage"
 
 export default function JoinPage() {
   const router = useRouter()
   const [code, setCode] = useState("")
   const [name, setName] = useState("")
   const [selectedEmoji, setSelectedEmoji] = useState(emojis[0])
+  const [isJoining, setIsJoining] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleJoin = () => {
-    // TODO: Call API to join game with code
-    // For now, just navigate to lobby
-    if (code && name) {
-      router.push(`/lobby/${code.toUpperCase()}`)
+  const normalizedCode = code.toUpperCase()
+
+  const handleJoin = async () => {
+    if (!normalizedCode || !name) return
+
+    setIsJoining(true)
+    setError(null)
+
+    try {
+      const response = await fetch("/api/games/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: normalizedCode,
+          name,
+          emoji: selectedEmoji,
+        }),
+      })
+
+      const payload = await response.json()
+
+      if (!response.ok || !payload.success) {
+        setError(payload.error ?? "Failed to join game. Please try again.")
+        return
+      }
+
+      savePlayer(payload.room.code, {
+        id: payload.player.id,
+        name: payload.player.name,
+        emoji: payload.player.emoji,
+        isHost: payload.player.isHost,
+      })
+
+      router.push(`/lobby/${payload.room.code}`)
+    } catch (joinError) {
+      console.error(joinError)
+      setError("Something went wrong while joining the game.")
+    } finally {
+      setIsJoining(false)
     }
   }
 
@@ -67,8 +104,10 @@ export default function JoinPage() {
             </p>
           </div>
 
-          <Button onClick={handleJoin} disabled={!code || !name} size="lg" className="w-full">
-            Join Game
+          {error && <p className="text-sm font-medium text-destructive">{error}</p>}
+
+          <Button onClick={handleJoin} disabled={!normalizedCode || !name || isJoining} size="lg" className="w-full">
+            {isJoining ? "Joining..." : "Join Game"}
           </Button>
 
           <Button variant="ghost" onClick={() => router.push("/")} className="w-full">

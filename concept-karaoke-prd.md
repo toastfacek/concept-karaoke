@@ -121,7 +121,7 @@ Each phase has a **60-second timer**. All players work simultaneously on differe
 - **Routing**: React Router
 
 **Backend**:
-- **Database & Auth**: Supabase (PostgreSQL)
+- **Database**: Supabase (PostgreSQL)
 - **Real-time Sync**: Supabase Realtime
 - **File Storage**: Supabase Storage (for generated images)
 - **AI Integration**: 
@@ -295,7 +295,7 @@ interface Vote {
 
 ### Timer System
 
-- Server-authoritative timing
+- Server-managed timing
 - `phaseStartTime` stored in database
 - Clients calculate remaining time locally
 - WebSocket broadcasts time warnings:

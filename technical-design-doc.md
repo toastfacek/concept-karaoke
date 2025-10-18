@@ -6,7 +6,7 @@ This document turns the PRD into an explicit build plan an AI (or a human) can f
 
 0) Tech Stack
 	•	Frontend: Next.js (App Router) + React + TypeScript + Shadcn UI
-	•	Auth/DB/Realtime/Storage: Supabase (Postgres + Auth + Realtime + Storage)
+	•	DB/Realtime/Storage: Supabase (Postgres + Realtime + Storage)
 	•	Hosting: Vercel (frontend + Next.js API routes)
 	•	Testing: Jest + React Testing Library (unit), Playwright (e2e)
 
@@ -15,7 +15,7 @@ This document turns the PRD into an explicit build plan an AI (or a human) can f
 1) Product Assumptions (from PRD → MVP choices)
 	•	Players: 3–8 per room (host creates, others join via 6‑char code).
 	•	Phases: Lobby → Brief (gen & edit) → Creation Rounds (Big Idea → Visual → Headline → Mantra, each 60s) → Pitch → Voting → Results.
-	•	Realtime via Supabase Realtime channels (room + adlob channels) with server‑authoritative timers stored in DB.
+	•	Realtime via Supabase Realtime channels (room + adlob channels) with server-managed timers stored in DB.
 	•	Image handling: Uploads to Supabase Storage (AI image gen can be stubbed first; optional later).
 
 ⸻
@@ -43,7 +43,7 @@ This document turns the PRD into an explicit build plan an AI (or a human) can f
 │  │  └─ page.tsx                   # Results & winner
 │  ├─ api/
 │  │  ├─ games/
-│  │  │  ├─ create/route.ts         # POST create game (requires paid host)
+│  │  │  ├─ create/route.ts         # POST create game
 │  │  │  ├─ join/route.ts           # POST join with code
 │  │  │  ├─ start/route.ts          # POST start game (host only)
 │  │  │  └─ [id]/route.ts           # GET game state
@@ -78,7 +78,6 @@ This document turns the PRD into an explicit build plan an AI (or a human) can f
 │  │  ├─ browser.ts                 # browser Supabase client
 │  │  ├─ server.ts                  # server Supabase client
 │  │  └─ admin.ts                   # service role Supabase client
-│  ├─ auth.ts                       # helpers (getUser, requireUser)
 │  ├─ db.ts                         # table constants + room code helper
 │  ├─ realtime.ts                   # channel names + helpers
 │  ├─ routes.ts                     # route/URL builders
@@ -110,7 +109,7 @@ This document turns the PRD into an explicit build plan an AI (or a human) can f
 
 UI: App name, short tagline, big primary buttons.
 	•	Buttons:
-	•	Create Game → starts auth if needed → calls /api/games/create → on success redirect to /lobby/[roomId] (created from API).
+	•	Create Game → calls /api/games/create → on success redirect to /lobby/[roomId] (created from API).
 	•	Join Game (secondary) → takes to /join.
 
 3.2 /join
