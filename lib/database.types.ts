@@ -86,6 +86,50 @@ export type Database = {
           },
         ]
       }
+      campaign_briefs: {
+        Row: {
+          id: string
+          room_id: string
+          product_name: string
+          product_category: string
+          business_problem: string
+          target_audience: string
+          objective: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          room_id: string
+          product_name: string
+          product_category: string
+          business_problem: string
+          target_audience: string
+          objective: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          room_id?: string
+          product_name?: string
+          product_category?: string
+          business_problem?: string
+          target_audience?: string
+          objective?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_briefs_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "game_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

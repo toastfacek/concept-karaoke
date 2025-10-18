@@ -57,6 +57,7 @@
 - [x] `app/page.tsx`: CTA section that spins up a room instantly and surfaces the join code.
 - [x] `app/join/page.tsx`: Form that accepts code, display name, emoji and routes to lobby.
 - [x] `app/lobby/[roomId]/page.tsx`: Lobby UI with live player list, ready toggle, host start control.
+- [x] `app/brief/[roomId]/page.tsx`: Shared brief editing screen with realtime updates and host start.
 - [x] Supabase schema seed for `game_rooms`, `players`, `player_status` tables with realtime channels wired in `lib/realtime.ts`.
 - [x] Minimal lobby state helpers (`lib/game-state-machine.ts`, `lib/routes.ts`) supporting host/guest flows.
 - [ ] Happy-path Playwright script that walks Create → Lobby → Ready toggle interactions using stubbed APIs.
@@ -68,6 +69,8 @@
 - [x] **Ready logic**: Enforce minimum three ready players before enabling start; persist `is_ready` on toggle.
 - [x] **Host tools**: Auto-assign first player as host, transfer host if they disconnect, gate “Start Game” button accordingly.
 - [x] **Error/edge handling**: Surface inline validation (invalid code, lobby full), add optimistic reconnect for refresh.
+- [x] **Briefing collaboration**: Persist brief edits, regenerate stubs, and broadcast updates while players ready up.
+- [x] **Brief lock & advance**: Gate creation phase on host command with everyone ready, resetting readiness between stages.
 
 ### Dependencies & Notes
 - Supabase service role env vars must be populated locally for API route access.

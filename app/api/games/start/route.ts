@@ -101,6 +101,40 @@ export async function POST(request: Request) {
       throw updateError
     }
 
+    const { error: resetReadyError } = await supabase
+      .from(TABLES.players)
+      .update({ is_ready: false })
+      .eq("room_id", room.id)
+
+    if (resetReadyError) {
+      throw resetReadyError
+    }
+
+    const { data: existingBrief, error: briefSelectError } = await supabase
+      .from(TABLES.campaignBriefs)
+      .select("id")
+      .eq("room_id", room.id)
+      .maybeSingle()
+
+    if (briefSelectError) {
+      throw briefSelectError
+    }
+
+    if (!existingBrief) {
+      const { error: insertBriefError } = await supabase.from(TABLES.campaignBriefs).insert({
+        room_id: room.id,
+        product_name: "",
+        product_category: "",
+        business_problem: "",
+        target_audience: "",
+        objective: "",
+      })
+
+      if (insertBriefError) {
+        throw insertBriefError
+      }
+    }
+
     return NextResponse.json({
       success: true,
       status: nextState.status,
