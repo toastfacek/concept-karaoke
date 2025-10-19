@@ -271,7 +271,9 @@ export default function CreatePage() {
                   ...previous,
                   version,
                   players: previous.players.map((player) =>
-                    player.id === readyPlayerId ? { ...player, isReady } : player,
+                    player.id === readyPlayerId
+                      ? { ...player, isReady, joinedAt: player.joinedAt ?? new Date().toISOString() }
+                      : { ...player, joinedAt: player.joinedAt ?? new Date().toISOString() },
                   ),
                 }
               : previous,
@@ -343,7 +345,9 @@ export default function CreatePage() {
                   ...previous,
                   version,
                   players: previous.players.map((player) =>
-                    player.id === leftPlayerId ? { ...player, isReady: false } : player,
+                    player.id === leftPlayerId
+                      ? { ...player, isReady: false, joinedAt: player.joinedAt ?? new Date().toISOString() }
+                      : { ...player, joinedAt: player.joinedAt ?? new Date().toISOString() },
                   ),
                   hostId:
                     previous.players.find((player) => player.isHost)?.id === leftPlayerId
@@ -581,7 +585,9 @@ export default function CreatePage() {
         ? {
             ...previous,
             players: previous.players.map((player) =>
-              player.id === currentPlayer.id ? { ...player, isReady: desiredReady } : player,
+              player.id === currentPlayer.id
+                ? { ...player, isReady: desiredReady, joinedAt: player.joinedAt ?? new Date().toISOString() }
+                : { ...player, joinedAt: player.joinedAt ?? new Date().toISOString() },
             ),
           }
         : previous,
@@ -615,7 +621,9 @@ export default function CreatePage() {
           ? {
               ...previous,
               players: previous.players.map((player) =>
-                player.id === currentPlayer.id ? { ...player, isReady: !desiredReady } : player,
+                player.id === currentPlayer.id
+                  ? { ...player, isReady: !desiredReady, joinedAt: player.joinedAt ?? new Date().toISOString() }
+                  : { ...player, joinedAt: player.joinedAt ?? new Date().toISOString() },
               ),
             }
           : previous,
