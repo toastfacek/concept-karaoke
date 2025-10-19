@@ -15,8 +15,8 @@ const ibmPlexMono = IBM_Plex_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Concept Karaoke",
-  description: "The Exquisite Corpse Ad Game - Cassette futurism meets classic Ogilvy advertising",
+  title: "Badlobs",
+  description: "Make bad ad campaign concepts with friends",
     generator: 'v0.app'
 }
 

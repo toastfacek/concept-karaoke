@@ -290,7 +290,7 @@ export default function CreatePage() {
       if (game.currentPhase === "big_idea") {
         const text = bigIdeaInput.trim()
         if (text.length < 20) {
-          setError("Big ideas need at least 20 characters to feel grounded.")
+          setError("Big ideas need at least 20 characters to give others something to work with.")
           setIsSubmitting(false)
           return
         }
@@ -331,8 +331,8 @@ export default function CreatePage() {
         }
 
         const notes = headlineNotes.trim()
-        if (notes.length < 10) {
-          setError("Give the copy a little more love — add 10+ characters for headline guidance.")
+        if (notes.length < 3) {
+          setError("Give the copy a little more love — add 3+ characters for headline guidance.")
           setIsSubmitting(false)
           return
         }
@@ -349,8 +349,8 @@ export default function CreatePage() {
         const text = mantraInput.trim()
         const words = countWords(text)
 
-        if (words < 50) {
-          setError("Mantras should be at least 50 words — give the pitch a little more runway.")
+        if (words < 3) {
+          setError("Mantras should be at least 3 words — give the pitch a little more runway.")
           setIsSubmitting(false)
           return
         }
