@@ -7,8 +7,8 @@ const requestSchema = z.object({
   prompt: z.string().trim().min(5, "Prompt must be at least 5 characters"),
 })
 
-const GEMINI_IMAGE_MODEL = "models/gemini-1.5-flash-latest"
-const GEMINI_IMAGE_URL = `https://generativelanguage.googleapis.com/v1beta/${GEMINI_IMAGE_MODEL}:generateImage`
+const GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image"
+const GEMINI_IMAGE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent`
 
 type ImagePayload = { data: string; mimeType: string }
 
@@ -127,41 +127,53 @@ export async function POST(request: Request) {
       `Prompt: ${parsed.data.prompt}`,
     ].join("\n")
 
+    const requestPayload = {
+      contents: [
+        {
+          parts: [{ text: promptText }],
+        },
+      ],
+      generationConfig: {
+        responseModalities: ["Image"],
+        temperature: 0.7,
+      },
+    }
+
+    console.log("[Gemini Image] Request URL:", GEMINI_IMAGE_URL)
+    console.log("[Gemini Image] Request payload:", JSON.stringify(requestPayload, null, 2))
+    console.log("[Gemini Image] Timestamp:", new Date().toISOString())
+
     const response = await fetch(`${GEMINI_IMAGE_URL}?key=${geminiKey}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: GEMINI_IMAGE_MODEL,
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: promptText }],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.7,
-        },
-        imageGenerationConfig: {
-          numberOfImages: 1,
-        },
-      }),
+      body: JSON.stringify(requestPayload),
     })
+
+    console.log("[Gemini Image] Response status:", response.status)
+    console.log("[Gemini Image] Response headers:", Object.fromEntries(response.headers.entries()))
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error("Gemini image request failed with status", response.status, errorText)
-      throw new Error(`Gemini image request failed: ${errorText}`)
+      console.error("[Gemini Image] Error response body:", errorText)
+      console.error("[Gemini Image] Failed with status", response.status)
+      throw new Error(`Gemini image request failed (${response.status}): ${errorText}`)
     }
 
     const payload = await response.json()
+    console.log("[Gemini Image] Response payload structure:", JSON.stringify(payload, null, 2))
+
     const image = extractImageFromPayload(payload)
 
     if (!image?.data) {
-      console.error("Gemini image response payload", JSON.stringify(payload, null, 2))
+      console.error("[Gemini Image] Failed to extract image from payload")
+      console.error("[Gemini Image] Full payload:", JSON.stringify(payload, null, 2))
       throw new Error("Gemini image response missing image data")
     }
+
+    console.log("[Gemini Image] Successfully extracted image, mime type:", image.mimeType)
+    console.log("[Gemini Image] Image data length:", image.data.length, "characters")
 
     const mimeType = image.mimeType ?? "image/png"
     const dataUrl = `data:${mimeType};base64,${image.data}`

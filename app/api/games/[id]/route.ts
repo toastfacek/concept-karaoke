@@ -31,9 +31,9 @@ async function resolveRoom(identifier: string) {
   return room ?? null
 }
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const rawId = params.id
+    const { id: rawId } = await params
     const identifier = normalizeId(rawId)
     const supabase = getSupabaseAdminClient()
 
@@ -137,7 +137,7 @@ const updateSchema = z.object({
   playerId: z.string().uuid("Invalid player identifier"),
 })
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const body = await request.json()
     const parsed = updateSchema.safeParse(body)
@@ -147,7 +147,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return NextResponse.json({ success: false, error: message }, { status: 400 })
     }
 
-    const rawId = params.id
+    const { id: rawId } = await params
     const identifier = normalizeId(rawId)
     const supabase = getSupabaseAdminClient()
 
