@@ -79,3 +79,35 @@
 - Supabase service role env vars must be populated locally for API route access.
 - Canvas, AI, and pitch flows remain out of scope—stub any downstream calls.
 - Ensure data model keeps future phases in mind (timestamps, foreign keys) but stay lean for Week 1–2 delivery.
+
+## Realtime Service Migration Plan
+
+### Phase 0 – Foundations (1–2 days)
+- Document the WebSocket protocol (event enum, payload schemas, error handling) in `docs/realtime-protocol.md`.
+- Bootstrap `services/realtime-server/` with TypeScript, `ws` (uWebSockets.js later if needed), shared game types, linting, and tests.
+- Implement a `RoomRegistry` abstraction hiding storage (in-memory Map now, Redis-capable later).
+- Add a React realtime client provider (`lib/realtime-client.ts`) that manages the socket lifecycle, exposes `send/subscribe`, and falls back to REST on reconnect.
+
+### Phase 1 – Core Loop Migration (3–5 days)
+- Move join/leave/ready/phase logic to the realtime server; keep Postgres writes async for durability.
+- Update creation/lobby flows to consume socket events (`room_state`, `player_joined`, `ready_update`, etc.) instead of Supabase polling.
+- Stream canvas deltas through the socket so the server remains authoritative for in-room state.
+- Expand realtime adoption to other live pages (lobby, brief, pitch) and remove redundant Supabase realtime subscriptions.
+
+### Phase 2 – Persistence & Fallbacks (2–3 days)
+- Build a snapshot pipeline to flush room state to Postgres on key transitions or a timed cadence (`room_snapshots`, `room_events`).
+- Provide client rehydration on reconnect (snapshot fetch or socket RPC) before resubscribing to live deltas.
+- Add heartbeat/timeout handling and REST fallback logic when the socket drops.
+- Harden authentication on the socket handshake with signed tokens validated by the realtime server.
+- Replace creation/lobby/brief/pitch Supabase realtime listeners with the new socket client once token auth lands.
+
+**Remaining Tasks**
+- [x] Issue signed realtime tokens from `/api/realtime/token` and cache them on the client.
+- [x] Validate tokens inside the Node websocket handshake; reject invalid/expired signatures.
+- [x] Update creation/lobby/brief/pitch flows to fetch tokens and connect via the realtime provider.
+- [x] Remove Supabase channel subscriptions from those pages after socket parity is confirmed.
+
+### Phase 3 – Observability & Docs (1–2 days)
+- [x] Instrument structured logging and basic metrics (join counts, broadcast latency, errors).
+- [x] Write an operational runbook (`docs/realtime-runbook.md`) covering deployment, env vars, scaling hooks, and how to swap the registry for Redis.
+- [x] Create integration tests that spin up the WS server in-memory, simulate multiple clients, and assert state convergence; define manual QA scripts for host/guest flows.

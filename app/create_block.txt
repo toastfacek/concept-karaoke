@@ -1,0 +1,139 @@
+  useEffect(() => {
+    const snapshotSource = latestGameRef.current
+    const playerId = storedPlayer?.id
+    if (!playerId || !snapshotSource) return
+
+    const connectionKey = `${roomCode}:${playerId}`
+    if (realtimeConnectionKeyRef.current === connectionKey) {
+      return
+    }
+
+    let cancelled = false
+    let cleanupFns: Array<() => void> = []
+
+    const initialize = async () => {
+      try {
+        const token = await fetchRealtimeToken(roomCode, playerId)
+        if (cancelled) return
+
+        connectRealtime({
+          roomCode,
+          playerId,
+          playerToken: token,
+          initialSnapshot: stateToSnapshot(snapshotSource),
+        })
+        realtimeConnectionKeyRef.current = connectionKey
+
+        const unsubHello = addRealtimeListener("hello_ack", ({ snapshot: incoming }) => {
+          setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as GameState) : previous))
+        })
+
+        const unsubRoomState = addRealtimeListener("room_state", ({ snapshot: incoming }) => {
+          setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as GameState) : previous))
+        })
+
+        const unsubReady = addRealtimeListener("ready_update", ({ playerId: readyPlayerId, isReady, version }) => {
+          setGame((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  version,
+                  players: previous.players.map((player) =>
+                    player.id === readyPlayerId ? { ...player, isReady } : player,
+                  ),
+                }
+              : previous,
+          )
+        })
+
+        const unsubPhase = addRealtimeListener("phase_changed", ({ currentPhase, phaseStartTime, version }) => {
+          setGame((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  currentPhase,
+                  phaseStartTime,
+                  version,
+                }
+              : previous,
+          )
+        })
+
+        const unsubPlayerJoined = addRealtimeListener("player_joined", ({ player, version }) => {
+          setGame((previous) => {
+            if (!previous) return previous
+            const exists = previous.players.some((existing) => existing.id === player.id)
+            if (exists) {
+              const updatedPlayers = previous.players.map((existing) =>
+                existing.id === player.id
+                  ? {
+                      ...existing,
+                      name: player.name,
+                      emoji: player.emoji,
+                      isReady: player.isReady,
+                      isHost: player.isHost,
+                    }
+                  : existing,
+              )
+              const hostId = updatedPlayers.find((candidate) => candidate.isHost)?.id ?? previous.hostId
+              return {
+                ...previous,
+                version,
+                players: updatedPlayers,
+                hostId,
+              }
+            }
+            const updatedPlayers = [
+              ...previous.players,
+              {
+                id: player.id,
+                name: player.name,
+                emoji: player.emoji,
+                isReady: player.isReady,
+                isHost: player.isHost,
+                joinedAt: new Date().toISOString(),
+              },
+            ]
+            const hostId = updatedPlayers.find((candidate) => candidate.isHost)?.id ?? previous.hostId
+            return {
+              ...previous,
+              version,
+              players: updatedPlayers,
+              hostId,
+            }
+          })
+        })
+
+        const unsubPlayerLeft = addRealtimeListener("player_left", ({ playerId: leftPlayerId, version }) => {
+          setGame((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  version,
+                  players: previous.players.map((player) =>
+                    player.id === leftPlayerId ? { ...player, isReady: false } : player,
+                  ),
+                  hostId:
+                    previous.players.find((player) => player.isHost)?.id === leftPlayerId
+                      ? previous.players.find((player) => player.id !== leftPlayerId && player.isHost)?.id ?? previous.hostId
+                      : previous.hostId,
+                }
+              : previous,
+          )
+        })
+
+        cleanupFns = [unsubHello, unsubRoomState, unsubReady, unsubPhase, unsubPlayerJoined, unsubPlayerLeft]
+      } catch (error) {
+        console.error("Failed to initialize realtime connection", error)
+      }
+    }
+
+    void initialize()
+
+    return () => {
+      cancelled = true
+      cleanupFns.forEach((fn) => fn())
+      disconnectRealtime()
+      realtimeConnectionKeyRef.current = null
+    }
+  }, [addRealtimeListener, connectRealtime, disconnectRealtime, roomCode, storedPlayer?.id])

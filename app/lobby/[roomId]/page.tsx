@@ -1,16 +1,17 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Copy, Check } from "lucide-react"
 
+import { useRealtime } from "@/components/realtime-provider"
 import { Button } from "@/components/ui/button"
 import { PlayerList } from "@/components/player-list"
-import { TABLES } from "@/lib/db"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
-import { roomChannel } from "@/lib/realtime"
 import { routes } from "@/lib/routes"
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
+import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
+import type { RealtimeStatus } from "@/lib/realtime-client"
+import { fetchRealtimeToken, type RealtimeToken } from "@/lib/realtime/token"
 
 type LobbyPlayer = {
   id: string
@@ -20,25 +21,33 @@ type LobbyPlayer = {
   isHost: boolean
 }
 
+type LobbyState = SnapshotDrivenState & {
+  players: LobbyPlayer[]
+}
+
 export default function LobbyPage() {
   const router = useRouter()
   const params = useParams()
   const roomCode = (params.roomId as string).toUpperCase()
-  const supabase = useMemo(() => getSupabaseBrowserClient(), [])
+  const {
+    connect: connectRealtime,
+    disconnect: disconnectRealtime,
+    send: sendRealtime,
+    addListener: addRealtimeListener,
+    status: realtimeStatus,
+  } = useRealtime()
 
   const [storedPlayer, setStoredPlayer] = useState<StoredPlayer | null>(null)
-  const [lobby, setLobby] = useState<{
-    id: string
-    code: string
-    status: string
-    players: LobbyPlayer[]
-    hostId: string
-  } | null>(null)
+  const [lobby, setLobby] = useState<LobbyState | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [isUpdatingReady, setIsUpdatingReady] = useState(false)
   const [isStarting, setIsStarting] = useState(false)
+  const realtimeConnectionKeyRef = useRef<string | null>(null)
+  const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
+  const tokenRef = useRef<RealtimeToken | null>(null)
+  const latestLobbyRef = useRef<LobbyState | null>(null)
 
   useEffect(() => {
     setStoredPlayer(loadPlayer(roomCode))
@@ -61,7 +70,13 @@ export default function LobbyPage() {
           return
         }
 
-        const players: LobbyPlayer[] = payload.game.players ?? []
+        const players: LobbyPlayer[] = (payload.game.players ?? []).map((player: LobbyPlayer) => ({
+          id: player.id,
+          name: player.name,
+          emoji: player.emoji,
+          isReady: player.isReady,
+          isHost: player.isHost,
+        }))
 
         setLobby({
           id: payload.game.id,
@@ -69,6 +84,7 @@ export default function LobbyPage() {
           status: payload.game.status,
           hostId: payload.game.hostId,
           players,
+          version: typeof payload.game.version === "number" ? payload.game.version : 0,
         })
 
         const localPlayer = loadPlayer(roomCode)
@@ -102,6 +118,23 @@ export default function LobbyPage() {
     fetchLobby()
   }, [fetchLobby])
 
+  useEffect(() => {
+    latestLobbyRef.current = lobby
+  }, [lobby])
+
+  useEffect(() => {
+    if (realtimeStatus === "disconnected") {
+      fetchLobby({ silent: true }).catch((error) => {
+        console.error("Failed to refresh lobby after disconnect", error)
+      })
+    } else if (realtimeStatus === "connected" && lastRealtimeStatusRef.current === "disconnected") {
+      fetchLobby({ silent: true }).catch((error) => {
+        console.error("Failed to refresh lobby after reconnect", error)
+      })
+    }
+    lastRealtimeStatusRef.current = realtimeStatus
+  }, [fetchLobby, realtimeStatus])
+
   const currentPlayer = useMemo(() => {
     if (!storedPlayer || !lobby) return null
     return lobby.players.find((player) => player.id === storedPlayer.id) ?? null
@@ -121,36 +154,55 @@ export default function LobbyPage() {
   const handleToggleReady = async () => {
     if (!currentPlayer) return
 
+    const desiredReady = !isReady
     setIsUpdatingReady(true)
     setError(null)
+
+    setLobby((previous) =>
+      previous
+        ? {
+            ...previous,
+            players: previous.players.map((player) =>
+              player.id === currentPlayer.id ? { ...player, isReady: desiredReady } : player,
+            ),
+          }
+        : previous,
+    )
+
+    sendRealtime({
+      type: "set_ready",
+      roomCode,
+      playerId: currentPlayer.id,
+      isReady: desiredReady,
+    })
 
     try {
       const response = await fetch(`/api/games/${roomCode}/players/${currentPlayer.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isReady: !isReady }),
+        body: JSON.stringify({ isReady: desiredReady }),
       })
 
       const payload = await response.json()
 
       if (!response.ok || !payload.success) {
-        setError(payload.error ?? "Unable to update ready state.")
-        return
+        throw new Error(payload.error ?? "Unable to update ready state.")
       }
 
+      await fetchLobby({ silent: true })
+    } catch (readyError) {
+      console.error(readyError)
+      setError(readyError instanceof Error ? readyError.message : "Unable to update ready state.")
       setLobby((previous) =>
         previous
           ? {
               ...previous,
               players: previous.players.map((player) =>
-                player.id === currentPlayer.id ? { ...player, isReady: payload.player.isReady } : player,
+                player.id === currentPlayer.id ? { ...player, isReady } : player,
               ),
             }
           : previous,
       )
-    } catch (readyError) {
-      console.error(readyError)
-      setError("Unable to update ready state.")
     } finally {
       setIsUpdatingReady(false)
     }
@@ -189,32 +241,145 @@ export default function LobbyPage() {
   }
 
   useEffect(() => {
-    if (!lobby?.id) {
+    const snapshotSource = latestLobbyRef.current
+    const playerId = storedPlayer?.id
+    if (!playerId || !snapshotSource) return
+
+    const connectionKey = `${roomCode}:${playerId}`
+    if (realtimeConnectionKeyRef.current === connectionKey) {
       return
     }
 
-    const channel = supabase
-      .channel(roomChannel(lobby.code))
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: TABLES.players, filter: `room_id=eq.${lobby.id}` },
-        () => {
-          fetchLobby({ silent: true })
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: TABLES.gameRooms, filter: `id=eq.${lobby.id}` },
-        () => {
-          fetchLobby({ silent: true })
-        },
-      )
-      .subscribe()
+    let cancelled = false
+    let cleanupFns: Array<() => void> = []
+
+    const initialize = async () => {
+      try {
+        let tokenInfo = tokenRef.current
+        if (!tokenInfo || tokenInfo.expiresAt <= Date.now() + 5_000) {
+          tokenInfo = await fetchRealtimeToken(roomCode, playerId)
+          if (cancelled) return
+          tokenRef.current = tokenInfo
+        }
+
+        connectRealtime({
+          roomCode,
+          playerId,
+          playerToken: tokenInfo.token,
+          initialSnapshot: stateToSnapshot(snapshotSource),
+        })
+        realtimeConnectionKeyRef.current = connectionKey
+
+        const unsubscribeHello = addRealtimeListener("hello_ack", ({ snapshot: incoming }) => {
+          setLobby((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as LobbyState) : previous))
+        })
+
+        const unsubscribeRoomState = addRealtimeListener("room_state", ({ snapshot: incoming }) => {
+          setLobby((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as LobbyState) : previous))
+        })
+
+        const unsubscribeReady = addRealtimeListener("ready_update", ({ playerId: readyPlayerId, isReady, version }) => {
+          setLobby((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  version,
+                  players: previous.players.map((player) =>
+                    player.id === readyPlayerId ? { ...player, isReady } : player,
+                  ),
+                }
+              : previous,
+          )
+        })
+
+        const unsubscribePlayerJoined = addRealtimeListener("player_joined", ({ player, version }) => {
+          setLobby((previous) => {
+            if (!previous) return previous
+            const existing = previous.players.find((candidate) => candidate.id === player.id)
+            const players = existing
+              ? previous.players.map((candidate) =>
+                  candidate.id === player.id
+                    ? {
+                        ...candidate,
+                        name: player.name,
+                        emoji: player.emoji,
+                        isReady: player.isReady,
+                        isHost: player.isHost,
+                      }
+                    : candidate,
+                )
+              : [
+                  ...previous.players,
+                  {
+                    id: player.id,
+                    name: player.name,
+                    emoji: player.emoji,
+                    isReady: player.isReady,
+                    isHost: player.isHost,
+                    joinedAt: new Date().toISOString(),
+                  },
+                ]
+            const hostId = players.find((candidate) => candidate.isHost)?.id ?? previous.hostId
+            return {
+              ...previous,
+              version,
+              players,
+              hostId,
+            }
+          })
+        })
+
+        const unsubscribePlayerLeft = addRealtimeListener("player_left", ({ playerId: leftPlayerId, version }) => {
+          setLobby((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  version,
+                  players: previous.players.map((player) =>
+                    player.id === leftPlayerId ? { ...player, isReady: false } : player,
+                  ),
+                }
+              : previous,
+          )
+        })
+
+        const unsubscribePhaseChanged = addRealtimeListener("phase_changed", ({ version }) => {
+          setLobby((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  version,
+                  status: previous.status === "creating" ? previous.status : "creating",
+                }
+              : previous,
+          )
+          fetchLobby({ silent: true }).catch((error) => {
+            console.error("Failed to refresh lobby after phase change", error)
+          })
+        })
+
+        cleanupFns = [
+          unsubscribeHello,
+          unsubscribeRoomState,
+          unsubscribeReady,
+          unsubscribePlayerJoined,
+          unsubscribePlayerLeft,
+          unsubscribePhaseChanged,
+        ]
+      } catch (error) {
+        console.error("Failed to initialize lobby realtime connection", error)
+      }
+    }
+
+    void initialize()
 
     return () => {
-      supabase.removeChannel(channel)
+      cancelled = true
+      cleanupFns.forEach((fn) => fn())
+      disconnectRealtime()
+      realtimeConnectionKeyRef.current = null
     }
-  }, [supabase, lobby?.id, lobby?.code, fetchLobby])
+  }, [addRealtimeListener, connectRealtime, disconnectRealtime, fetchLobby, roomCode, storedPlayer?.id])
 
   useEffect(() => {
     if (!lobby) return

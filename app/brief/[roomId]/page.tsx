@@ -1,16 +1,17 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 
 import { BriefEditor } from "@/components/brief-editor"
 import { Button } from "@/components/ui/button"
 import { PlayerList } from "@/components/player-list"
-import { TABLES } from "@/lib/db"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
-import { roomChannel } from "@/lib/realtime"
 import { routes } from "@/lib/routes"
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
+import { useRealtime } from "@/components/realtime-provider"
+import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
+import type { RealtimeStatus } from "@/lib/realtime-client"
+import { fetchRealtimeToken, type RealtimeToken } from "@/lib/realtime/token"
 
 type CampaignBrief = {
   productName: string
@@ -30,6 +31,7 @@ type GamePlayer = {
   emoji: string
   isReady: boolean
   isHost: boolean
+  joinedAt: string
 }
 
 const EMPTY_BRIEF: CampaignBrief = {
@@ -40,21 +42,25 @@ const EMPTY_BRIEF: CampaignBrief = {
   objective: "",
 }
 
+type BriefGameState = SnapshotDrivenState & {
+  players: GamePlayer[]
+  brief: BriefRecord | null
+}
+
 export default function BriefPage() {
   const router = useRouter()
   const params = useParams()
   const roomCode = (params.roomId as string).toUpperCase()
-  const supabase = useMemo(() => getSupabaseBrowserClient(), [])
+  const {
+    connect: connectRealtime,
+    disconnect: disconnectRealtime,
+    send: sendRealtime,
+    addListener: addRealtimeListener,
+    status: realtimeStatus,
+  } = useRealtime()
 
   const [storedPlayer, setStoredPlayer] = useState<StoredPlayer | null>(null)
-  const [game, setGame] = useState<{
-    id: string
-    code: string
-    status: string
-    hostId: string
-    players: GamePlayer[]
-    brief: BriefRecord | null
-  } | null>(null)
+  const [game, setGame] = useState<BriefGameState | null>(null)
   const [briefDraft, setBriefDraft] = useState<CampaignBrief>(EMPTY_BRIEF)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -62,6 +68,10 @@ export default function BriefPage() {
   const [isLockingBrief, setIsLockingBrief] = useState(false)
   const [isUpdatingReady, setIsUpdatingReady] = useState(false)
   const [isAdvancing, setIsAdvancing] = useState(false)
+  const realtimeConnectionKeyRef = useRef<string | null>(null)
+  const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
+  const tokenRef = useRef<RealtimeToken | null>(null)
+  const latestGameRef = useRef<BriefGameState | null>(null)
 
   useEffect(() => {
     setStoredPlayer(loadPlayer(roomCode))
@@ -95,13 +105,23 @@ export default function BriefPage() {
             }
           : null
 
+        const players: GamePlayer[] = (payload.game.players ?? []).map((player: GamePlayer & { joined_at?: string }) => ({
+          id: player.id,
+          name: player.name,
+          emoji: player.emoji,
+          isReady: player.isReady,
+          isHost: player.isHost,
+          joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
+        }))
+
         setGame({
           id: payload.game.id,
           code: payload.game.code,
           status: payload.game.status,
           hostId: payload.game.hostId,
-          players: payload.game.players,
+          players,
           brief: briefResponse,
+          version: typeof payload.game.version === "number" ? payload.game.version : 0,
         })
 
         setBriefDraft(briefResponse ?? EMPTY_BRIEF)
@@ -136,6 +156,19 @@ export default function BriefPage() {
   useEffect(() => {
     fetchGame()
   }, [fetchGame])
+
+  useEffect(() => {
+    if (realtimeStatus === "disconnected") {
+      fetchGame({ silent: true }).catch((error) => {
+        console.error("Failed to refresh briefing room after disconnect", error)
+      })
+    } else if (realtimeStatus === "connected" && lastRealtimeStatusRef.current === "disconnected") {
+      fetchGame({ silent: true }).catch((error) => {
+        console.error("Failed to refresh briefing room after reconnect", error)
+      })
+    }
+    lastRealtimeStatusRef.current = realtimeStatus
+  }, [fetchGame, realtimeStatus])
 
   const currentPlayer = useMemo(() => {
     if (!storedPlayer || !game) return null
@@ -226,6 +259,13 @@ export default function BriefPage() {
         throw new Error(payload.error ?? "Failed to lock brief")
       }
 
+      sendRealtime({
+        type: "set_ready",
+        roomCode,
+        playerId: currentPlayer.id,
+        isReady: true,
+      })
+
       setGame((previous) =>
         previous
           ? {
@@ -246,14 +286,34 @@ export default function BriefPage() {
 
   const handleToggleReady = async () => {
     if (!currentPlayer) return
+
+    const desiredReady = !currentPlayer.isReady
     setIsUpdatingReady(true)
     setError(null)
+
+    setGame((previous) =>
+      previous
+        ? {
+            ...previous,
+            players: previous.players.map((player) =>
+              player.id === currentPlayer.id ? { ...player, isReady: desiredReady } : player,
+            ),
+          }
+        : previous,
+    )
+
+    sendRealtime({
+      type: "set_ready",
+      roomCode,
+      playerId: currentPlayer.id,
+      isReady: desiredReady,
+    })
 
     try {
       const response = await fetch(`/api/games/${roomCode}/players/${currentPlayer.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isReady: !currentPlayer.isReady }),
+        body: JSON.stringify({ isReady: desiredReady }),
       })
 
       const payload = await response.json()
@@ -262,19 +322,20 @@ export default function BriefPage() {
         throw new Error(payload.error ?? "Unable to update ready state.")
       }
 
+      await fetchGame({ silent: true })
+    } catch (readyError) {
+      console.error(readyError)
+      setError(readyError instanceof Error ? readyError.message : "Unable to update ready state.")
       setGame((previous) =>
         previous
           ? {
               ...previous,
               players: previous.players.map((player) =>
-                player.id === currentPlayer.id ? { ...player, isReady: !currentPlayer.isReady } : player,
+                player.id === currentPlayer.id ? { ...player, isReady: !desiredReady } : player,
               ),
             }
           : previous,
       )
-    } catch (readyError) {
-      console.error(readyError)
-      setError(readyError instanceof Error ? readyError.message : "Unable to update ready state.")
     } finally {
       setIsUpdatingReady(false)
     }
@@ -360,33 +421,149 @@ export default function BriefPage() {
   }
 
   useEffect(() => {
-    if (!game?.id) {
+    latestGameRef.current = game
+  }, [game])
+
+  useEffect(() => {
+    const snapshotSource = latestGameRef.current
+    const playerId = storedPlayer?.id
+    if (!playerId || !snapshotSource) return
+
+    const connectionKey = `${roomCode}:${playerId}`
+    if (realtimeConnectionKeyRef.current === connectionKey) {
       return
     }
 
-    const channel = supabase
-      .channel(roomChannel(game.code))
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: TABLES.players, filter: `room_id=eq.${game.id}` },
-        () => fetchGame({ silent: true }),
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: TABLES.gameRooms, filter: `id=eq.${game.id}` },
-        () => fetchGame({ silent: true }),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: TABLES.campaignBriefs, filter: `room_id=eq.${game.id}` },
-        () => fetchGame({ silent: true }),
-      )
-      .subscribe()
+    let cancelled = false
+    let cleanupFns: Array<() => void> = []
+
+    const initialize = async () => {
+      try {
+        let tokenInfo = tokenRef.current
+        if (!tokenInfo || tokenInfo.expiresAt <= Date.now() + 5_000) {
+          tokenInfo = await fetchRealtimeToken(roomCode, playerId)
+          if (cancelled) return
+          tokenRef.current = tokenInfo
+        }
+
+        connectRealtime({
+          roomCode,
+          playerId,
+          playerToken: tokenInfo.token,
+          initialSnapshot: stateToSnapshot(snapshotSource),
+        })
+        realtimeConnectionKeyRef.current = connectionKey
+
+        const unsubscribeHello = addRealtimeListener("hello_ack", ({ snapshot: incoming }) => {
+          setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as BriefGameState) : previous))
+        })
+
+        const unsubscribeRoomState = addRealtimeListener("room_state", ({ snapshot: incoming }) => {
+          setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as BriefGameState) : previous))
+        })
+
+        const unsubscribeReady = addRealtimeListener("ready_update", ({ playerId: readyPlayerId, isReady, version }) => {
+          setGame((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  version,
+                  players: previous.players.map((player) =>
+                    player.id === readyPlayerId ? { ...player, isReady } : player,
+                  ),
+                }
+              : previous,
+          )
+        })
+
+        const unsubscribePlayerJoined = addRealtimeListener("player_joined", ({ player, version }) => {
+          setGame((previous) => {
+            if (!previous) return previous
+            const existing = previous.players.find((candidate) => candidate.id === player.id)
+            const players = existing
+              ? previous.players.map((candidate) =>
+                  candidate.id === player.id
+                    ? {
+                        ...candidate,
+                        name: player.name,
+                        emoji: player.emoji,
+                        isReady: player.isReady,
+                        isHost: player.isHost,
+                      }
+                    : candidate,
+                )
+              : [
+                  ...previous.players,
+                  {
+                    id: player.id,
+                    name: player.name,
+                    emoji: player.emoji,
+                    isReady: player.isReady,
+                    isHost: player.isHost,
+                    joinedAt: new Date().toISOString(),
+                  },
+                ]
+            const hostId = players.find((candidate) => candidate.isHost)?.id ?? previous.hostId
+            return {
+              ...previous,
+              version,
+              players,
+              hostId,
+            }
+          })
+        })
+
+        const unsubscribePlayerLeft = addRealtimeListener("player_left", ({ playerId: leftPlayerId, version }) => {
+          setGame((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  version,
+                  players: previous.players.map((player) =>
+                    player.id === leftPlayerId ? { ...player, isReady: false } : player,
+                  ),
+                }
+              : previous,
+          )
+        })
+
+        const unsubscribePhaseChanged = addRealtimeListener("phase_changed", ({ version }) => {
+          setGame((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  version,
+                  status: previous.status === "creating" ? previous.status : "creating",
+                }
+              : previous,
+          )
+          fetchGame({ silent: true }).catch((error) => {
+            console.error("Failed to refresh briefing room after phase change", error)
+          })
+        })
+
+        cleanupFns = [
+          unsubscribeHello,
+          unsubscribeRoomState,
+          unsubscribeReady,
+          unsubscribePlayerJoined,
+          unsubscribePlayerLeft,
+          unsubscribePhaseChanged,
+        ]
+      } catch (error) {
+        console.error("Failed to initialize briefing realtime connection", error)
+      }
+    }
+
+    void initialize()
 
     return () => {
-      supabase.removeChannel(channel)
+      cancelled = true
+      cleanupFns.forEach((fn) => fn())
+      disconnectRealtime()
+      realtimeConnectionKeyRef.current = null
     }
-  }, [supabase, game?.id, game?.code, fetchGame])
+  }, [addRealtimeListener, connectRealtime, disconnectRealtime, fetchGame, roomCode, storedPlayer?.id])
 
   useEffect(() => {
     if (!game) return

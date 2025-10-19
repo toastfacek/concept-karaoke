@@ -7,11 +7,12 @@ import { Canvas } from "@/components/canvas"
 import { Button } from "@/components/ui/button"
 import { PlayerList } from "@/components/player-list"
 import { canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/canvas"
-import { TABLES } from "@/lib/db"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
-import { roomChannel } from "@/lib/realtime"
 import { routes } from "@/lib/routes"
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
+import { useRealtime } from "@/components/realtime-provider"
+import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
+import type { RealtimeStatus } from "@/lib/realtime-client"
+import { fetchRealtimeToken, type RealtimeToken } from "@/lib/realtime/token"
 
 type GamePlayer = {
   id: string
@@ -19,6 +20,7 @@ type GamePlayer = {
   emoji: string
   isReady: boolean
   isHost: boolean
+  joinedAt: string
 }
 
 type PitchAdlob = {
@@ -37,6 +39,13 @@ type PitchAdlob = {
   pitchOrder: number | null
   pitchStartedAt: string | null
   pitchCompletedAt: string | null
+}
+
+type PitchGameState = SnapshotDrivenState & {
+  players: GamePlayer[]
+  currentPitchIndex: number | null
+  pitchSequence: string[]
+  adlobs: PitchAdlob[]
 }
 
 function extractNotes(data: unknown): string {
@@ -62,19 +71,15 @@ export default function PitchPage() {
   const router = useRouter()
   const params = useParams()
   const roomCode = (params.roomId as string).toUpperCase()
-  const supabase = useMemo(() => getSupabaseBrowserClient(), [])
+  const {
+    connect: connectRealtime,
+    disconnect: disconnectRealtime,
+    addListener: addRealtimeListener,
+    status: realtimeStatus,
+  } = useRealtime()
 
   const [storedPlayer, setStoredPlayer] = useState<StoredPlayer | null>(null)
-  const [game, setGame] = useState<{
-    id: string
-    code: string
-    status: string
-    hostId: string
-    currentPitchIndex: number | null
-    pitchSequence: string[]
-    players: GamePlayer[]
-    adlobs: PitchAdlob[]
-  } | null>(null)
+  const [game, setGame] = useState<PitchGameState | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -84,6 +89,10 @@ export default function PitchPage() {
   const [showCampaign, setShowCampaign] = useState(false)
 
   const lastPitchIdRef = useRef<string | null>(null)
+  const realtimeConnectionKeyRef = useRef<string | null>(null)
+  const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
+  const tokenRef = useRef<RealtimeToken | null>(null)
+  const latestGameRef = useRef<PitchGameState | null>(null)
 
   useEffect(() => {
     setStoredPlayer(loadPlayer(roomCode))
@@ -108,6 +117,15 @@ export default function PitchPage() {
 
         const gameData = payload.game
 
+        const players: GamePlayer[] = (gameData.players ?? []).map((player: GamePlayer & { joined_at?: string }) => ({
+          id: player.id,
+          name: player.name,
+          emoji: player.emoji,
+          isReady: player.isReady,
+          isHost: player.isHost,
+          joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
+        }))
+
         setGame({
           id: gameData.id,
           code: gameData.code,
@@ -115,8 +133,9 @@ export default function PitchPage() {
           hostId: gameData.hostId,
           currentPitchIndex: gameData.currentPitchIndex ?? 0,
           pitchSequence: gameData.pitchSequence ?? [],
-          players: gameData.players,
+          players,
           adlobs: gameData.adlobs,
+          version: typeof gameData.version === "number" ? gameData.version : 0,
         })
 
         const localPlayer = loadPlayer(roomCode)
@@ -149,6 +168,19 @@ export default function PitchPage() {
   useEffect(() => {
     fetchGame()
   }, [fetchGame])
+
+  useEffect(() => {
+    if (realtimeStatus === "disconnected") {
+      fetchGame({ silent: true }).catch((error) => {
+        console.error("Failed to refresh pitch flow after disconnect", error)
+      })
+    } else if (realtimeStatus === "connected" && lastRealtimeStatusRef.current === "disconnected") {
+      fetchGame({ silent: true }).catch((error) => {
+        console.error("Failed to refresh pitch flow after reconnect", error)
+      })
+    }
+    lastRealtimeStatusRef.current = realtimeStatus
+  }, [fetchGame, realtimeStatus])
 
   const currentPlayer = useMemo(() => {
     if (!storedPlayer || !game) return null
@@ -246,27 +278,149 @@ export default function PitchPage() {
   }
 
   useEffect(() => {
-    if (!game?.id) return
+    latestGameRef.current = game
+  }, [game])
 
-    const channel = supabase
-      .channel(roomChannel(game.code))
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: TABLES.gameRooms, filter: `id=eq.${game.id}` },
-        () => fetchGame({ silent: true }),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: TABLES.adLobs, filter: `room_id=eq.${game.id}` },
-        () => fetchGame({ silent: true }),
-      )
-      .subscribe()
+  useEffect(() => {
+    const snapshotSource = latestGameRef.current
+    const playerId = storedPlayer?.id
+    if (!playerId || !snapshotSource) return
+
+    const connectionKey = `${roomCode}:${playerId}`
+    if (realtimeConnectionKeyRef.current === connectionKey) {
+      return
+    }
+
+    let cancelled = false
+    let cleanupFns: Array<() => void> = []
+
+    const initialize = async () => {
+      try {
+        let tokenInfo = tokenRef.current
+        if (!tokenInfo || tokenInfo.expiresAt <= Date.now() + 5_000) {
+          tokenInfo = await fetchRealtimeToken(roomCode, playerId)
+          if (cancelled) return
+          tokenRef.current = tokenInfo
+        }
+
+        connectRealtime({
+          roomCode,
+          playerId,
+          playerToken: tokenInfo.token,
+          initialSnapshot: stateToSnapshot(snapshotSource),
+        })
+        realtimeConnectionKeyRef.current = connectionKey
+
+        const unsubscribeHello = addRealtimeListener("hello_ack", ({ snapshot: incoming }) => {
+          setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as PitchGameState) : previous))
+        })
+
+        const unsubscribeRoomState = addRealtimeListener("room_state", ({ snapshot: incoming }) => {
+          setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as PitchGameState) : previous))
+        })
+
+        const unsubscribePlayerJoined = addRealtimeListener("player_joined", ({ player, version }) => {
+          setGame((previous) => {
+            if (!previous) return previous
+            const existing = previous.players.find((candidate) => candidate.id === player.id)
+            const players = existing
+              ? previous.players.map((candidate) =>
+                  candidate.id === player.id
+                    ? {
+                        ...candidate,
+                        name: player.name,
+                        emoji: player.emoji,
+                        isReady: player.isReady,
+                        isHost: player.isHost,
+                      }
+                    : candidate,
+                )
+              : [
+                  ...previous.players,
+                  {
+                    id: player.id,
+                    name: player.name,
+                    emoji: player.emoji,
+                    isReady: player.isReady,
+                    isHost: player.isHost,
+                    joinedAt: new Date().toISOString(),
+                  },
+                ]
+            const hostId = players.find((candidate) => candidate.isHost)?.id ?? previous.hostId
+            return {
+              ...previous,
+              version,
+              players,
+              hostId,
+            }
+          })
+        })
+
+        const unsubscribePlayerLeft = addRealtimeListener("player_left", ({ playerId: leftPlayerId, version }) => {
+          setGame((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  version,
+                  players: previous.players.map((player) =>
+                    player.id === leftPlayerId ? { ...player, isReady: false } : player,
+                  ),
+                }
+              : previous,
+          )
+        })
+
+        const unsubscribeReady = addRealtimeListener("ready_update", ({ playerId: readyPlayerId, isReady, version }) => {
+          setGame((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  version,
+                  players: previous.players.map((player) =>
+                    player.id === readyPlayerId ? { ...player, isReady } : player,
+                  ),
+                }
+              : previous,
+          )
+        })
+
+        const unsubscribePhaseChanged = addRealtimeListener("phase_changed", ({ version }) => {
+          setGame((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  version,
+                  status: previous.status === "pitching" ? previous.status : "pitching",
+                }
+              : previous,
+          )
+          fetchGame({ silent: true }).catch((error) => {
+            console.error("Failed to refresh pitch flow after phase change", error)
+          })
+        })
+
+        cleanupFns = [
+          unsubscribeHello,
+          unsubscribeRoomState,
+          unsubscribePlayerJoined,
+          unsubscribePlayerLeft,
+          unsubscribeReady,
+          unsubscribePhaseChanged,
+        ]
+      } catch (error) {
+        console.error("Failed to initialize pitch realtime connection", error)
+      }
+    }
+
+    void initialize()
 
     return () => {
-      supabase.removeChannel(channel)
+      cancelled = true
+      cleanupFns.forEach((fn) => fn())
+      disconnectRealtime()
+      realtimeConnectionKeyRef.current = null
     }
-  }, [supabase, game?.id, game?.code, fetchGame])
-
+  }, [addRealtimeListener, connectRealtime, disconnectRealtime, fetchGame, roomCode, storedPlayer?.id])
   useEffect(() => {
     if (!game) return
 

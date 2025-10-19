@@ -4,17 +4,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 
 import { Canvas } from "@/components/canvas"
+import { useRealtime } from "@/components/realtime-provider"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Timer } from "@/components/timer"
 import { PlayerList } from "@/components/player-list"
 import { canvasHasContent, canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/canvas"
-import { TABLES } from "@/lib/db"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
-import { roomChannel } from "@/lib/realtime"
 import { routes } from "@/lib/routes"
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser"
+import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
+import { fetchRealtimeToken, type RealtimeToken } from "@/lib/realtime/token"
 import type { CreationPhase } from "@/lib/types"
+import type { RealtimeStatus } from "@/lib/realtime-client"
 
 type GamePlayer = {
   id: string
@@ -22,6 +23,7 @@ type GamePlayer = {
   emoji: string
   isReady: boolean
   isHost: boolean
+  joinedAt: string
 }
 
 type AdLobRecord = {
@@ -40,6 +42,15 @@ type AdLobRecord = {
   pitchOrder: number | null
   pitchStartedAt: string | null
   pitchCompletedAt: string | null
+}
+
+type GameState = SnapshotDrivenState & {
+  players: GamePlayer[]
+  currentPhase: CreationPhase | null
+  phaseStartTime: string | null
+  currentPitchIndex: number | null
+  pitchSequence: string[]
+  adlobs: AdLobRecord[]
 }
 
 const CREATION_SEQUENCE: CreationPhase[] = ["big_idea", "visual", "headline", "mantra"]
@@ -97,21 +108,16 @@ export default function CreatePage() {
   const router = useRouter()
   const params = useParams()
   const roomCode = (params.roomId as string).toUpperCase()
-  const supabase = useMemo(() => getSupabaseBrowserClient(), [])
+  const {
+    connect: connectRealtime,
+    disconnect: disconnectRealtime,
+    send: sendRealtime,
+    addListener: addRealtimeListener,
+    status: realtimeStatus,
+  } = useRealtime()
 
   const [storedPlayer, setStoredPlayer] = useState<StoredPlayer | null>(null)
-  const [game, setGame] = useState<{
-    id: string
-    code: string
-    status: string
-    hostId: string
-    currentPhase: CreationPhase | null
-    phaseStartTime: string | null
-    players: GamePlayer[]
-    currentPitchIndex: number | null
-    pitchSequence: string[]
-    adlobs: AdLobRecord[]
-  } | null>(null)
+  const [game, setGame] = useState<GameState | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -127,6 +133,10 @@ export default function CreatePage() {
   const [headlineCanvas, setHeadlineCanvas] = useState<CanvasState | null>(null)
   const lastPhaseRef = useRef<CreationPhase | null>(null)
   const lastAdlobIdRef = useRef<string | null>(null)
+  const realtimeConnectionKeyRef = useRef<string | null>(null)
+  const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
+  const tokenRef = useRef<RealtimeToken | null>(null)
+  const latestGameRef = useRef<GameState | null>(null)
 
   useEffect(() => {
     setStoredPlayer(loadPlayer(roomCode))
@@ -158,10 +168,14 @@ export default function CreatePage() {
           hostId: gameData.hostId,
           currentPhase: gameData.currentPhase ?? null,
           phaseStartTime: gameData.phaseStartTime ?? null,
-           currentPitchIndex: gameData.currentPitchIndex ?? null,
-           pitchSequence: gameData.pitchSequence ?? [],
-          players: gameData.players,
+          currentPitchIndex: gameData.currentPitchIndex ?? null,
+          pitchSequence: gameData.pitchSequence ?? [],
+          players: (gameData.players ?? []).map((player: GamePlayer & { joined_at?: string }) => ({
+            ...player,
+            joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
+          })),
           adlobs: gameData.adlobs,
+          version: typeof gameData.version === "number" ? gameData.version : 0,
         })
 
         const localPlayer = loadPlayer(roomCode)
@@ -194,6 +208,167 @@ export default function CreatePage() {
   useEffect(() => {
     fetchGame()
   }, [fetchGame])
+
+  useEffect(() => {
+    latestGameRef.current = game
+  }, [game])
+
+  useEffect(() => {
+    if (realtimeStatus === "disconnected") {
+      fetchGame({ silent: true }).catch((error) => {
+        console.error("Failed to refresh snapshot after disconnect", error)
+      })
+    } else if (realtimeStatus === "connected" && lastRealtimeStatusRef.current === "disconnected") {
+      fetchGame({ silent: true }).catch((error) => {
+        console.error("Failed to refresh snapshot after reconnect", error)
+      })
+    }
+    lastRealtimeStatusRef.current = realtimeStatus
+  }, [fetchGame, realtimeStatus])
+
+  useEffect(() => {
+    const snapshotSource = latestGameRef.current
+    const playerId = storedPlayer?.id
+    if (!playerId || !snapshotSource) return
+
+    const connectionKey = `${roomCode}:${playerId}`
+    if (realtimeConnectionKeyRef.current === connectionKey) {
+      return
+    }
+
+    let cancelled = false
+    let cleanupFns: Array<() => void> = []
+
+    const initialize = async () => {
+      try {
+        let tokenInfo = tokenRef.current
+        if (!tokenInfo || tokenInfo.expiresAt <= Date.now() + 5_000) {
+          tokenInfo = await fetchRealtimeToken(roomCode, playerId)
+          if (cancelled) return
+          tokenRef.current = tokenInfo
+        }
+
+        connectRealtime({
+          roomCode,
+          playerId,
+          playerToken: tokenInfo.token,
+          initialSnapshot: stateToSnapshot(snapshotSource),
+        })
+        realtimeConnectionKeyRef.current = connectionKey
+
+        const unsubHello = addRealtimeListener("hello_ack", ({ snapshot: incoming }) => {
+          setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as GameState) : previous))
+        })
+
+        const unsubRoomState = addRealtimeListener("room_state", ({ snapshot: incoming }) => {
+          setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as GameState) : previous))
+        })
+
+        const unsubReady = addRealtimeListener("ready_update", ({ playerId: readyPlayerId, isReady, version }) => {
+          setGame((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  version,
+                  players: previous.players.map((player) =>
+                    player.id === readyPlayerId ? { ...player, isReady } : player,
+                  ),
+                }
+              : previous,
+          )
+        })
+
+        const unsubPhase = addRealtimeListener("phase_changed", ({ currentPhase, phaseStartTime, version }) => {
+          setGame((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  currentPhase,
+                  phaseStartTime,
+                  version,
+                }
+              : previous,
+          )
+        })
+
+        const unsubPlayerJoined = addRealtimeListener("player_joined", ({ player, version }) => {
+          setGame((previous) => {
+            if (!previous) return previous
+            const exists = previous.players.some((existing) => existing.id === player.id)
+            if (exists) {
+              const updatedPlayers = previous.players.map((existing) =>
+                existing.id === player.id
+                  ? {
+                      ...existing,
+                      name: player.name,
+                      emoji: player.emoji,
+                      isReady: player.isReady,
+                      isHost: player.isHost,
+                    }
+                  : existing,
+              )
+              const hostId = updatedPlayers.find((candidate) => candidate.isHost)?.id ?? previous.hostId
+              return {
+                ...previous,
+                version,
+                players: updatedPlayers,
+                hostId,
+              }
+            }
+            const updatedPlayers = [
+              ...previous.players,
+              {
+                id: player.id,
+                name: player.name,
+                emoji: player.emoji,
+                isReady: player.isReady,
+                isHost: player.isHost,
+                joinedAt: new Date().toISOString(),
+              },
+            ]
+            const hostId = updatedPlayers.find((candidate) => candidate.isHost)?.id ?? previous.hostId
+            return {
+              ...previous,
+              version,
+              players: updatedPlayers,
+              hostId,
+            }
+          })
+        })
+
+        const unsubPlayerLeft = addRealtimeListener("player_left", ({ playerId: leftPlayerId, version }) => {
+          setGame((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  version,
+                  players: previous.players.map((player) =>
+                    player.id === leftPlayerId ? { ...player, isReady: false } : player,
+                  ),
+                  hostId:
+                    previous.players.find((player) => player.isHost)?.id === leftPlayerId
+                      ? previous.players.find((player) => player.id !== leftPlayerId && player.isHost)?.id ?? previous.hostId
+                      : previous.hostId,
+                }
+              : previous,
+          )
+        })
+
+        cleanupFns = [unsubHello, unsubRoomState, unsubReady, unsubPhase, unsubPlayerJoined, unsubPlayerLeft]
+      } catch (error) {
+        console.error("Failed to initialize realtime connection", error)
+      }
+    }
+
+    void initialize()
+
+    return () => {
+      cancelled = true
+      cleanupFns.forEach((fn) => fn())
+      disconnectRealtime()
+      realtimeConnectionKeyRef.current = null
+    }
+  }, [addRealtimeListener, connectRealtime, disconnectRealtime, roomCode, storedPlayer?.id])
 
   const currentPlayer = useMemo(() => {
     if (!storedPlayer || !game) return null
@@ -394,15 +569,36 @@ export default function CreatePage() {
   }
 
   const handleToggleReady = async () => {
-    if (!currentPlayer) return
+    if (!currentPlayer || !game) return
+
+    const desiredReady = !currentPlayer.isReady
+
     setIsTogglingReady(true)
     setError(null)
+
+    setGame((previous) =>
+      previous
+        ? {
+            ...previous,
+            players: previous.players.map((player) =>
+              player.id === currentPlayer.id ? { ...player, isReady: desiredReady } : player,
+            ),
+          }
+        : previous,
+    )
+
+    sendRealtime({
+      type: "set_ready",
+      roomCode,
+      playerId: currentPlayer.id,
+      isReady: desiredReady,
+    })
 
     try {
       const response = await fetch(`/api/games/${roomCode}/players/${currentPlayer.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isReady: !currentPlayer.isReady }),
+        body: JSON.stringify({ isReady: desiredReady }),
       })
 
       const payload = await response.json()
@@ -410,8 +606,20 @@ export default function CreatePage() {
       if (!response.ok || !payload.success) {
         throw new Error(payload.error ?? "Unable to update ready state.")
       }
+
+      await fetchGame({ silent: true })
     } catch (readyError) {
       console.error(readyError)
+      setGame((previous) =>
+        previous
+          ? {
+              ...previous,
+              players: previous.players.map((player) =>
+                player.id === currentPlayer.id ? { ...player, isReady: !desiredReady } : player,
+              ),
+            }
+          : previous,
+      )
       setError(readyError instanceof Error ? readyError.message : "Unable to update ready state.")
     } finally {
       setIsTogglingReady(false)
@@ -437,6 +645,12 @@ export default function CreatePage() {
         throw new Error(payload.error ?? "Failed to advance phase")
       }
 
+      sendRealtime({
+        type: "advance_phase",
+        roomCode,
+        playerId: currentPlayer.id,
+      })
+
       await fetchGame({ silent: true })
     } catch (advanceError) {
       console.error(advanceError)
@@ -445,35 +659,6 @@ export default function CreatePage() {
       setIsAdvancingPhase(false)
     }
   }
-
-  useEffect(() => {
-    if (!game?.id) {
-      return
-    }
-
-    const channel = supabase
-      .channel(roomChannel(game.code))
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: TABLES.players, filter: `room_id=eq.${game.id}` },
-        () => fetchGame({ silent: true }),
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: TABLES.gameRooms, filter: `id=eq.${game.id}` },
-        () => fetchGame({ silent: true }),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: TABLES.adLobs, filter: `room_id=eq.${game.id}` },
-        () => fetchGame({ silent: true }),
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [supabase, game?.id, game?.code, fetchGame])
 
   useEffect(() => {
     if (!game) return

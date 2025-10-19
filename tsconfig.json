@@ -18,10 +18,13 @@
         "name": "next"
       }
     ],
+    "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@concept-karaoke/realtime-shared": ["./packages/realtime-shared/src/index.ts"],
+      "@concept-karaoke/realtime-shared/*": ["./packages/realtime-shared/src/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", ".next"]
 }
