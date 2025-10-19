@@ -42,8 +42,7 @@ const EMPTY_BRIEF: CampaignBrief = {
   objective: "",
 }
 
-type BriefGameState = SnapshotDrivenState & {
-  players: GamePlayer[]
+type BriefGameState = SnapshotDrivenState<GamePlayer> & {
   brief: BriefRecord | null
 }
 

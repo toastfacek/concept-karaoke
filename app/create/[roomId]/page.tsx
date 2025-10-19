@@ -44,8 +44,7 @@ type AdLobRecord = {
   pitchCompletedAt: string | null
 }
 
-type GameState = SnapshotDrivenState & {
-  players: GamePlayer[]
+type GameState = SnapshotDrivenState<GamePlayer> & {
   currentPhase: CreationPhase | null
   phaseStartTime: string | null
   currentPitchIndex: number | null

@@ -30,7 +30,7 @@ export default function Home() {
 
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Button asChild size="lg" className="retro-border min-w-[200px] text-lg font-bold uppercase">
-              <Link href="/lobby/ABC123">Create Game</Link>
+              <Link href="/create">Create Game</Link>
             </Button>
 
             <Button
@@ -168,7 +168,7 @@ export default function Home() {
             size="lg"
             className="retro-border min-w-[250px] bg-accent text-lg font-bold uppercase text-foreground hover:bg-accent/90"
           >
-            <Link href="/lobby/ABC123">Start Playing Now</Link>
+            <Link href="/create">Start Playing Now</Link>
           </Button>
         </div>
       </section>

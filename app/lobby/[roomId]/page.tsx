@@ -19,11 +19,10 @@ type LobbyPlayer = {
   emoji: string
   isReady: boolean
   isHost: boolean
+  joinedAt: string
 }
 
-type LobbyState = SnapshotDrivenState & {
-  players: LobbyPlayer[]
-}
+type LobbyState = SnapshotDrivenState<LobbyPlayer>
 
 export default function LobbyPage() {
   const router = useRouter()
@@ -70,12 +69,13 @@ export default function LobbyPage() {
           return
         }
 
-        const players: LobbyPlayer[] = (payload.game.players ?? []).map((player: LobbyPlayer) => ({
+        const players: LobbyPlayer[] = (payload.game.players ?? []).map((player: LobbyPlayer & { joined_at?: string }) => ({
           id: player.id,
           name: player.name,
           emoji: player.emoji,
           isReady: player.isReady,
           isHost: player.isHost,
+          joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
         }))
 
         setLobby({

@@ -8,21 +8,21 @@ export type SnapshotPlayer = {
   emoji: string
   isReady: boolean
   isHost: boolean
-  joinedAt?: string
+  joinedAt: string
 }
 
-export interface SnapshotDrivenState {
+export interface SnapshotDrivenState<TPlayer extends SnapshotPlayer = SnapshotPlayer> {
   id: string
   code: string
   status: string
   hostId: string
-  players: SnapshotPlayer[]
+  players: TPlayer[]
   version: number
   currentPhase?: CreationPhase | null
   phaseStartTime?: string | null
 }
 
-export function stateToSnapshot<T extends SnapshotDrivenState>(state: T): RoomSnapshot {
+export function stateToSnapshot<TState extends SnapshotDrivenState>(state: TState): RoomSnapshot {
   return {
     id: state.id,
     code: state.code,
@@ -44,7 +44,10 @@ export function stateToSnapshot<T extends SnapshotDrivenState>(state: T): RoomSn
   }
 }
 
-export function mergeSnapshotIntoState<T extends SnapshotDrivenState>(state: T, snapshot: RoomSnapshot): T {
+export function mergeSnapshotIntoState<TState extends SnapshotDrivenState>(
+  state: TState,
+  snapshot: RoomSnapshot,
+): TState {
   const players = snapshot.players.map((player) => {
     const existing = state.players.find((candidate) => candidate.id === player.id)
     return {
@@ -54,12 +57,12 @@ export function mergeSnapshotIntoState<T extends SnapshotDrivenState>(state: T, 
       isReady: player.isReady,
       isHost: player.isHost,
       joinedAt: existing?.joinedAt ?? new Date().toISOString(),
-    }
-  })
+    } as TState["players"][number]
+  }) as TState["players"]
 
   const hostId = players.find((player) => player.isHost)?.id ?? state.hostId
 
-  const nextState: SnapshotDrivenState = {
+  const nextState: SnapshotDrivenState<TState["players"][number]> = {
     ...state,
     status: snapshot.status,
     hostId,
@@ -68,14 +71,15 @@ export function mergeSnapshotIntoState<T extends SnapshotDrivenState>(state: T, 
   }
 
   if (Object.prototype.hasOwnProperty.call(state, "currentPhase")) {
-    ;(nextState as SnapshotDrivenState & { currentPhase: CreationPhase | null }).currentPhase =
+    ;(nextState as SnapshotDrivenState<TState["players"][number]> & { currentPhase: CreationPhase | null }).currentPhase =
       snapshot.currentPhase ?? null
   }
 
   if (Object.prototype.hasOwnProperty.call(state, "phaseStartTime")) {
-    ;(nextState as SnapshotDrivenState & { phaseStartTime: string | null }).phaseStartTime =
-      snapshot.phaseStartTime ?? null
+    ;(
+      nextState as SnapshotDrivenState<TState["players"][number]> & { phaseStartTime: string | null }
+    ).phaseStartTime = snapshot.phaseStartTime ?? null
   }
 
-  return nextState as T
+  return nextState as TState
 }

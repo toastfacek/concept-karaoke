@@ -41,8 +41,7 @@ type PitchAdlob = {
   pitchCompletedAt: string | null
 }
 
-type PitchGameState = SnapshotDrivenState & {
-  players: GamePlayer[]
+type PitchGameState = SnapshotDrivenState<GamePlayer> & {
   currentPitchIndex: number | null
   pitchSequence: string[]
   adlobs: PitchAdlob[]

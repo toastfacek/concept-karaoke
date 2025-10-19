@@ -49,11 +49,11 @@ export function requireClientEnv<K extends keyof ClientEnv>(key: K): ClientEnv[K
   return value
 }
 
-export function requireServerEnv<K extends keyof ServerEnv>(key: K): ServerEnv[K] {
+export function requireServerEnv<K extends keyof ServerEnv>(key: K): NonNullable<ServerEnv[K]> {
   const value = env.server[key]
   if (!value) {
     throw new Error(`Missing server environment variable: ${key as string}`)
   }
 
-  return value
+  return value as NonNullable<ServerEnv[K]>
 }
