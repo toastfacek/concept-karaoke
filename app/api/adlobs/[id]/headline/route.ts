@@ -8,11 +8,12 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 const canvasPayloadSchema = canvasStateSchema.superRefine((value, ctx) => {
   const strokeCount = value.strokes.length
   const textBlocks = value.textBlocks?.length ?? 0
+  const imageCount = value.images?.length ?? 0
 
-  if (strokeCount === 0 && textBlocks === 0) {
+  if (strokeCount === 0 && textBlocks === 0 && imageCount === 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Headline canvas needs either drawn layout or a text block",
+      message: "Headline canvas needs a layout — add a sketch, text block, or generated image",
     })
   }
 })

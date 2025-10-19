@@ -18,7 +18,7 @@ const briefSchema = z.object({
 })
 
 const GEMINI_GENERATE_URL =
-  "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent"
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
 export async function POST(request: Request) {
   try {

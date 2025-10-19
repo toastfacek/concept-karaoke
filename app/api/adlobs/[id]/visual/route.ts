@@ -8,11 +8,12 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 const canvasPayloadSchema = canvasStateSchema.superRefine((value, ctx) => {
   const strokeCount = value.strokes.length
   const textCount = value.textBlocks?.length ?? 0
+  const imageCount = value.images?.length ?? 0
 
-  if (strokeCount === 0 && textCount === 0) {
+  if (strokeCount === 0 && textCount === 0 && imageCount === 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Canvas is empty — add at least one sketch or text element",
+      message: "Canvas is empty — add at least one sketch, text block, or generated image",
     })
   }
 })

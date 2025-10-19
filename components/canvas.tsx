@@ -18,18 +18,18 @@ interface CanvasProps {
   className?: string
 }
 
-type Tool = "pen" | "eraser" | "text"
+type Tool = "pen" | "eraser" | "text" | "image"
 
 const DEFAULT_SIZE = { width: 1600, height: 900 }
 const DEFAULT_STROKE_COLOR = "#111827"
 const DEFAULT_STROKE_WIDTH = 6
 const DEFAULT_TEXT_COLOR = "#111827"
-const DEFAULT_TEXT_FONT = "Inter"
+const DEFAULT_TEXT_FONT: CanvasTextBlock["fontFamily"] = "Inter"
 const DEFAULT_TEXT_SIZE = 40
 
 const COLOR_SWATCHES = ["#111827", "#1d4ed8", "#ea580c", "#ca8a04", "#16a34a", "#db2777", "#6b21a8"]
 const STROKE_WIDTHS = [3, 6, 10, 16]
-const TEXT_FONT_OPTIONS = [
+const TEXT_FONT_OPTIONS: Array<{ label: string; value: CanvasTextBlock["fontFamily"] }> = [
   { label: "Sans", value: "Inter" },
   { label: "Serif", value: "Georgia" },
   { label: "Mono", value: "Space Mono" },
@@ -59,6 +59,7 @@ function cloneState(state: CanvasState): CanvasState {
     ...state,
     strokes: state.strokes.map(cloneStroke),
     textBlocks: state.textBlocks?.map((block) => ({ ...block })) ?? [],
+    images: state.images?.map((image) => ({ ...image })) ?? [],
   }
 }
 
@@ -249,7 +250,7 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
   const [strokeWidth, setStrokeWidth] = useState(DEFAULT_STROKE_WIDTH)
   const [canvasState, setCanvasState] = useState<CanvasState>(() => parseInitialState(initialData))
   const [textColor, setTextColor] = useState(DEFAULT_TEXT_COLOR)
-  const [textFontFamily, setTextFontFamily] = useState(DEFAULT_TEXT_FONT)
+  const [textFontFamily, setTextFontFamily] = useState<CanvasTextBlock["fontFamily"]>(DEFAULT_TEXT_FONT)
   const [textFontSize, setTextFontSize] = useState(DEFAULT_TEXT_SIZE)
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null)
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null)
