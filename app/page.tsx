@@ -67,13 +67,13 @@ export default function Home() {
           <h1 className="text-6xl font-bold uppercase leading-tight tracking-tight">
             Badlobs
           </h1>
-          <p className="font-mono text-lg text-muted-foreground">The Group Ad Concept Game</p>
+          <p className="font-mono text-lg text-muted-foreground">The game where you build bad ad concepts with friends</p>
         </div>
 
         <div className="space-y-6 pt-8 text-left">
           <h2 className="text-2xl font-bold uppercase">Create a Lobby</h2>
           <p className="font-mono text-sm text-muted-foreground">
-            No accounts required—pick a name and emoji, then invite friends with the code you&apos;ll get instantly.
+            Pick a name and emoji, then invite friends with the code you&apos;ll get instantly.
           </p>
 
           <div className="space-y-4">
