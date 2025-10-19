@@ -136,7 +136,7 @@ export default function Home() {
               </div>
               <div className="mb-2 flex items-center gap-2">
                 <span className="text-4xl font-bold text-primary">4</span>
-                <h3 className="text-xl font-bold uppercase">The Pitch</h3>
+                <h3 className="text-xl font-bold uppercase">Pitch</h3>
               </div>
               <p className="font-mono text-sm leading-relaxed text-muted-foreground">
                 Write the elevator pitch. The tagline. The closer. Make it sing!

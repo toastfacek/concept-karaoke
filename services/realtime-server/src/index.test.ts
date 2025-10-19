@@ -4,15 +4,14 @@ import WebSocket from "ws"
 import type { RawData } from "ws"
 
 import { signRealtimeToken, type PlayerSummary, type RoomSnapshot, type ServerToClientEvent } from "@concept-karaoke/realtime-shared"
-
-type IndexModule = typeof import("./index.js")
+import type { StartRealtimeServerOptions } from "./index.js"
 
 const TEST_SECRET = "test-secret"
 const ROOM_CODE = "ROOM123"
 
-let startRealtimeServer: IndexModule["startRealtimeServer"]
-let stopRealtimeServer: IndexModule["stopRealtimeServer"]
-let getRealtimeServerPort: IndexModule["getRealtimeServerPort"]
+let startRealtimeServer: (options?: StartRealtimeServerOptions) => Promise<{ port: number | null }>
+let stopRealtimeServer: () => Promise<void>
+let getRealtimeServerPort: () => number
 
 let persistRoomSnapshotMock: Mock<[RoomSnapshot], Promise<void>>
 let recordRoomEventMock: Mock<
@@ -111,7 +110,7 @@ describe("realtime server integration", () => {
       ],
     })
 
-    const joinBroadcast = waitForMessage(hostClient.socket, (msg): msg is Extract<ServerToClientEvent, { type: "player_joined" }> => {
+    const joinBroadcast = waitForMessage<Extract<ServerToClientEvent, { type: "player_joined" }>>(hostClient.socket, (msg): msg is Extract<ServerToClientEvent, { type: "player_joined" }> => {
       return msg.type === "player_joined" && msg.player.id === "player-2"
     })
 
@@ -128,7 +127,7 @@ describe("realtime server integration", () => {
     expect(joined.player.id).toBe("player-2")
     expect(joined.version).toBeGreaterThanOrEqual(secondSnapshot.version)
 
-    const readyUpdatePromise = waitForMessage(hostClient.socket, (msg): msg is Extract<ServerToClientEvent, { type: "ready_update" }> => {
+    const readyUpdatePromise = waitForMessage<Extract<ServerToClientEvent, { type: "ready_update" }>>(hostClient.socket, (msg): msg is Extract<ServerToClientEvent, { type: "ready_update" }> => {
       return msg.type === "ready_update" && msg.playerId === "player-2" && msg.isReady
     })
 
@@ -179,7 +178,7 @@ describe("realtime server integration", () => {
     assertHelloAck(hostAck)
     expect(hostAck.snapshot.currentPhase).toBeNull()
 
-    const phaseChangedPromise = waitForMessage(
+    const phaseChangedPromise = waitForMessage<Extract<ServerToClientEvent, { type: "phase_changed" }>>(
       hostClient.socket,
       (msg): msg is Extract<ServerToClientEvent, { type: "phase_changed" }> => msg.type === "phase_changed",
     )
@@ -217,7 +216,7 @@ async function connectClient(options: { port: number; playerId: string; snapshot
     socket.once("error", (error) => reject(error))
   })
 
-  const ackPromise = waitForMessage(
+  const ackPromise = waitForMessage<Extract<ServerToClientEvent, { type: "hello_ack" }>>(
     socket,
     (msg): msg is Extract<ServerToClientEvent, { type: "hello_ack" }> => msg.type === "hello_ack",
   )
@@ -245,22 +244,16 @@ async function connectClient(options: { port: number; playerId: string; snapshot
   return { socket, ack: ackPromise }
 }
 
-function waitForMessage<T extends ServerToClientEvent>(
+type MessagePredicate<T extends ServerToClientEvent> =
+  | ((msg: ServerToClientEvent) => msg is T)
+  | ((msg: ServerToClientEvent) => boolean)
+
+function waitForMessage<T extends ServerToClientEvent = ServerToClientEvent>(
   socket: WebSocket,
-  predicate: (msg: ServerToClientEvent) => msg is T,
-  timeout?: number,
-): Promise<T>
-function waitForMessage(
-  socket: WebSocket,
-  predicate: (msg: ServerToClientEvent) => boolean,
-  timeout?: number,
-): Promise<ServerToClientEvent>
-function waitForMessage(
-  socket: WebSocket,
-  predicate: (msg: ServerToClientEvent) => boolean,
+  predicate: MessagePredicate<T>,
   timeout = 2000,
-) {
-  return new Promise<ServerToClientEvent>((resolve, reject) => {
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
     const handler = (raw: RawData) => {
       let message: ServerToClientEvent
       try {
@@ -271,7 +264,7 @@ function waitForMessage(
 
       if (predicate(message)) {
         cleanup()
-        resolve(message)
+        resolve(message as T)
       }
     }
 
