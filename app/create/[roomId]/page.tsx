@@ -306,8 +306,9 @@ export default function CreatePage() {
                       emoji: player.emoji,
                       isReady: player.isReady,
                       isHost: player.isHost,
+                      joinedAt: existing.joinedAt ?? new Date().toISOString(),
                     }
-                  : existing,
+                  : { ...existing, joinedAt: existing.joinedAt ?? new Date().toISOString() },
               )
               const hostId = updatedPlayers.find((candidate) => candidate.isHost)?.id ?? previous.hostId
               return {
