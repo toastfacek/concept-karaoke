@@ -19,6 +19,9 @@ interface CanvasProps {
 }
 
 type Tool = "pen" | "eraser" | "text" | "image"
+type ResizeHandle = "top-left" | "top-right" | "bottom-left" | "bottom-right"
+type ImageResizeHandle = ResizeHandle
+type TextResizeHandle = ResizeHandle
 
 const DEFAULT_SIZE = { width: 1600, height: 900 }
 const DEFAULT_STROKE_COLOR = "#111827"
@@ -26,6 +29,12 @@ const DEFAULT_STROKE_WIDTH = 6
 const DEFAULT_TEXT_COLOR = "#111827"
 const DEFAULT_TEXT_FONT: CanvasTextBlock["fontFamily"] = "Inter"
 const DEFAULT_TEXT_SIZE = 40
+const IMAGE_HANDLE_SIZE = 12
+const MIN_IMAGE_SIZE = 48
+const TEXT_HANDLE_SIZE = 12
+const MIN_TEXT_BOX_SIZE = 32
+const MIN_TEXT_FONT_SIZE = 12
+const MAX_TEXT_FONT_SIZE = 96
 
 const COLOR_SWATCHES = ["#111827", "#1d4ed8", "#ea580c", "#ca8a04", "#16a34a", "#db2777", "#6b21a8"]
 const STROKE_WIDTHS = [3, 6, 10, 16]
@@ -235,6 +244,133 @@ function pointInBounds(point: { x: number; y: number }, bounds: { x: number; y: 
   return point.x >= bounds.x && point.x <= bounds.x + bounds.width && point.y >= bounds.y && point.y <= bounds.y + bounds.height
 }
 
+function getImageHandlePositions(image: CanvasImage) {
+  const left = image.x - HIGHLIGHT_PADDING
+  const right = image.x + image.width + HIGHLIGHT_PADDING
+  const top = image.y - HIGHLIGHT_PADDING
+  const bottom = image.y + image.height + HIGHLIGHT_PADDING
+
+  return [
+    { handle: "top-left" as const, x: left, y: top },
+    { handle: "top-right" as const, x: right, y: top },
+    { handle: "bottom-left" as const, x: left, y: bottom },
+    { handle: "bottom-right" as const, x: right, y: bottom },
+  ]
+}
+
+function getHandleBounds(x: number, y: number, size = IMAGE_HANDLE_SIZE) {
+  return {
+    x: x - size / 2,
+    y: y - size / 2,
+    width: size,
+    height: size,
+  }
+}
+
+function getHandleAtPoint(image: CanvasImage, point: { x: number; y: number }): ImageResizeHandle | null {
+  for (const position of getImageHandlePositions(image)) {
+    const bounds = getHandleBounds(position.x, position.y)
+    if (pointInBounds(point, bounds)) {
+      return position.handle
+    }
+  }
+  return null
+}
+
+function getTextHandlePositions(bounds: { x: number; y: number; width: number; height: number }) {
+  const left = bounds.x - HIGHLIGHT_PADDING
+  const right = bounds.x + bounds.width + HIGHLIGHT_PADDING
+  const top = bounds.y - HIGHLIGHT_PADDING
+  const bottom = bounds.y + bounds.height + HIGHLIGHT_PADDING
+
+  return [
+    { handle: "top-left" as const, x: left, y: top },
+    { handle: "top-right" as const, x: right, y: top },
+    { handle: "bottom-left" as const, x: left, y: bottom },
+    { handle: "bottom-right" as const, x: right, y: bottom },
+  ]
+}
+
+function getTextHandleAtPoint(
+  bounds: { x: number; y: number; width: number; height: number },
+  point: { x: number; y: number },
+): TextResizeHandle | null {
+  for (const position of getTextHandlePositions(bounds)) {
+    const handleBounds = getHandleBounds(position.x, position.y, TEXT_HANDLE_SIZE)
+    if (pointInBounds(point, handleBounds)) {
+      return position.handle
+    }
+  }
+  return null
+}
+
+function getResizedRect(
+  meta: {
+    handle: ResizeHandle
+    originX: number
+    originY: number
+    startX: number
+    startY: number
+    startWidth: number
+    startHeight: number
+  },
+  point: { x: number; y: number },
+  { minWidth = 0, minHeight = 0 }: { minWidth?: number; minHeight?: number } = {},
+) {
+  const dx = point.x - meta.originX
+  const dy = point.y - meta.originY
+
+  let x = meta.startX
+  let y = meta.startY
+  let width = meta.startWidth
+  let height = meta.startHeight
+
+  switch (meta.handle) {
+    case "top-left":
+      width = meta.startWidth - dx
+      height = meta.startHeight - dy
+      x = meta.startX + dx
+      y = meta.startY + dy
+      break
+    case "top-right":
+      width = meta.startWidth + dx
+      height = meta.startHeight - dy
+      y = meta.startY + dy
+      break
+    case "bottom-left":
+      width = meta.startWidth - dx
+      height = meta.startHeight + dy
+      x = meta.startX + dx
+      break
+    case "bottom-right":
+      width = meta.startWidth + dx
+      height = meta.startHeight + dy
+      break
+    default:
+      break
+  }
+
+  if (width < minWidth) {
+    width = minWidth
+    if (meta.handle === "top-left" || meta.handle === "bottom-left") {
+      x = meta.startX + (meta.startWidth - width)
+    } else {
+      x = meta.startX
+    }
+  }
+
+  if (height < minHeight) {
+    height = minHeight
+    if (meta.handle === "top-left" || meta.handle === "top-right") {
+      y = meta.startY + (meta.startHeight - height)
+    } else {
+      y = meta.startY
+    }
+  }
+
+  return { x, y, width, height }
+}
+
 function loadImageElement(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image()
@@ -268,6 +404,28 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
   const canvasSizeRef = useRef(DEFAULT_SIZE)
   const isDraggingImageRef = useRef(false)
   const imageDragRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null)
+  const imageResizeRef = useRef<{
+    id: string
+    handle: ImageResizeHandle
+    originX: number
+    originY: number
+    startX: number
+    startY: number
+    startWidth: number
+    startHeight: number
+  } | null>(null)
+  const textResizeRef = useRef<{
+    id: string
+    handle: TextResizeHandle
+    originX: number
+    originY: number
+    startX: number
+    startY: number
+    startWidth: number
+    startHeight: number
+    startFontSize: number
+    align: CanvasTextBlock["align"]
+  } | null>(null)
   const imageCacheRef = useRef<Record<string, HTMLImageElement>>({})
 
   const strokeCount = canvasState.strokes.length
@@ -537,6 +695,16 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
             image.width + HIGHLIGHT_PADDING * 2,
             image.height + HIGHLIGHT_PADDING * 2,
           )
+          context.setLineDash([])
+          context.lineWidth = 1
+          context.fillStyle = "#ffffff"
+          const handles = getImageHandlePositions(image)
+          for (const handle of handles) {
+            const bounds = getHandleBounds(handle.x, handle.y)
+            context.fillRect(bounds.x, bounds.y, bounds.width, bounds.height)
+            context.strokeStyle = "#0ea5e9"
+            context.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height)
+          }
           context.restore()
         }
       }
@@ -565,6 +733,15 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
             bounds.width + HIGHLIGHT_PADDING * 2,
             bounds.height + HIGHLIGHT_PADDING * 2,
           )
+          context.setLineDash([])
+          context.fillStyle = "#ffffff"
+          const handles = getTextHandlePositions(bounds)
+          for (const handle of handles) {
+            const handleBounds = getHandleBounds(handle.x, handle.y, TEXT_HANDLE_SIZE)
+            context.fillRect(handleBounds.x, handleBounds.y, handleBounds.width, handleBounds.height)
+            context.strokeStyle = "#6366f1"
+            context.strokeRect(handleBounds.x, handleBounds.y, handleBounds.width, handleBounds.height)
+          }
         }
 
         context.restore()
@@ -600,6 +777,29 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
         setSelectedTextId(null)
         setImageError(null)
 
+        if (selectedImage) {
+          const handle = getHandleAtPoint(selectedImage, coordinates)
+          if (handle) {
+            setSelectedImageId(selectedImage.id)
+            imageDragRef.current = null
+            isDraggingImageRef.current = false
+            imageResizeRef.current = {
+              id: selectedImage.id,
+              handle,
+              originX: coordinates.x,
+              originY: coordinates.y,
+              startX: selectedImage.x,
+              startY: selectedImage.y,
+              startWidth: selectedImage.width,
+              startHeight: selectedImage.height,
+            }
+            activePointerRef.current = event.pointerId
+            canvas.setPointerCapture(event.pointerId)
+            setPendingImagePosition(null)
+            return
+          }
+        }
+
         for (let index = images.length - 1; index >= 0; index -= 1) {
           const image = images[index]
           const bounds = { x: image.x, y: image.y, width: image.width, height: image.height }
@@ -627,6 +827,33 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
       if (tool === "text") {
         const context = canvas.getContext("2d")
         if (!context) return
+
+        if (selectedTextBlock) {
+          const bounds = getTextBounds(context, selectedTextBlock)
+          const handle = getTextHandleAtPoint(bounds, coordinates)
+          if (handle) {
+            setSelectedTextId(selectedTextBlock.id)
+            setSelectedImageId(null)
+            textResizeRef.current = {
+              id: selectedTextBlock.id,
+              handle,
+              originX: coordinates.x,
+              originY: coordinates.y,
+              startX: bounds.x,
+              startY: bounds.y,
+              startWidth: bounds.width,
+              startHeight: bounds.height,
+              startFontSize: selectedTextBlock.fontSize,
+              align: selectedTextBlock.align,
+            }
+            textDragRef.current = null
+            isDraggingTextRef.current = false
+            activePointerRef.current = event.pointerId
+            canvas.setPointerCapture(event.pointerId)
+            setPendingImagePosition(null)
+            return
+          }
+        }
 
         for (let index = textBlocks.length - 1; index >= 0; index -= 1) {
           const block = textBlocks[index]
@@ -691,11 +918,116 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
       currentStrokeRef.current = nextStroke
       drawScene(nextStroke)
     },
-    [applyState, color, drawScene, images, readOnly, strokeWidth, textBlocks, textColor, textFontFamily, textFontSize, tool],
+    [
+      applyState,
+      color,
+      drawScene,
+      images,
+      readOnly,
+      selectedImage,
+      strokeWidth,
+      textBlocks,
+      selectedTextBlock,
+      textColor,
+      textFontFamily,
+      textFontSize,
+      tool,
+    ],
   )
 
   const handlePointerMove = useCallback(
     (event: PointerEvent) => {
+      if (readOnly) return
+
+      if (imageResizeRef.current) {
+        if (activePointerRef.current !== null && activePointerRef.current !== event.pointerId) {
+          return
+        }
+
+        const canvas = canvasRef.current
+        const resizeMeta = imageResizeRef.current
+        if (!canvas || !resizeMeta) return
+
+        const coordinates = getCanvasCoordinates(event, canvas, canvasSizeRef.current)
+        const dimensions = getResizedRect(resizeMeta, coordinates, {
+          minWidth: MIN_IMAGE_SIZE,
+          minHeight: MIN_IMAGE_SIZE,
+        })
+        applyState((previous) => {
+          const next = cloneState(previous)
+          next.images = (next.images ?? []).map((image) =>
+            image.id === resizeMeta.id
+              ? {
+                  ...image,
+                  x: dimensions.x,
+                  y: dimensions.y,
+                  width: dimensions.width,
+                  height: dimensions.height,
+                }
+              : image,
+          )
+          return next
+        })
+        return
+      }
+
+      if (textResizeRef.current) {
+        if (activePointerRef.current !== null && activePointerRef.current !== event.pointerId) {
+          return
+        }
+
+        const canvas = canvasRef.current
+        const resizeMeta = textResizeRef.current
+        if (!canvas || !resizeMeta) return
+
+        const coordinates = getCanvasCoordinates(event, canvas, canvasSizeRef.current)
+        const rect = getResizedRect(resizeMeta, coordinates, {
+          minWidth: MIN_TEXT_BOX_SIZE,
+          minHeight: MIN_TEXT_BOX_SIZE,
+        })
+
+        const baseWidth = Math.max(1, resizeMeta.startWidth)
+        const baseHeight = Math.max(1, resizeMeta.startHeight)
+        const widthScale = rect.width / baseWidth
+        const heightScale = rect.height / baseHeight
+        const scale = Math.max(widthScale, heightScale)
+        const nextFontSize = Math.min(
+          MAX_TEXT_FONT_SIZE,
+          Math.max(MIN_TEXT_FONT_SIZE, Math.round(resizeMeta.startFontSize * scale)),
+        )
+
+        const top = rect.y
+        const left = rect.x
+        const width = rect.width
+
+        applyState((previous) => {
+          const next = cloneState(previous)
+          next.textBlocks = (next.textBlocks ?? []).map((block) => {
+            if (block.id !== resizeMeta.id) {
+              return block
+            }
+
+            let nextX = left
+            if (resizeMeta.align === "center") {
+              nextX = left + width / 2
+            } else if (resizeMeta.align === "right") {
+              nextX = left + width
+            }
+
+            return {
+              ...block,
+              x: nextX,
+              y: top + nextFontSize,
+              fontSize: nextFontSize,
+            }
+          })
+          return next
+        })
+
+        setTextFontSize(nextFontSize)
+        return
+      }
+
       if (isDraggingImageRef.current) {
         if (activePointerRef.current !== null && activePointerRef.current !== event.pointerId) {
           return
@@ -761,11 +1093,31 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
       stroke.points.push(coordinates)
       drawScene(stroke)
     },
-    [applyState, drawScene],
+    [applyState, drawScene, readOnly],
   )
 
   const endStroke = useCallback(
     (event: PointerEvent) => {
+      if (textResizeRef.current) {
+        const canvas = canvasRef.current
+        if (canvas && canvas.hasPointerCapture(event.pointerId)) {
+          canvas.releasePointerCapture(event.pointerId)
+        }
+        textResizeRef.current = null
+        activePointerRef.current = null
+        return
+      }
+
+      if (imageResizeRef.current) {
+        const canvas = canvasRef.current
+        if (canvas && canvas.hasPointerCapture(event.pointerId)) {
+          canvas.releasePointerCapture(event.pointerId)
+        }
+        imageResizeRef.current = null
+        activePointerRef.current = null
+        return
+      }
+
       if (isDraggingImageRef.current) {
         const canvas = canvasRef.current
         if (canvas && canvas.hasPointerCapture(event.pointerId)) {
