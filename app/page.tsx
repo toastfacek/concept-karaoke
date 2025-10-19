@@ -19,9 +19,8 @@ export default function Home() {
           </div>
 
           <h1 className="mb-8 text-7xl font-bold uppercase leading-none tracking-tighter md:text-9xl">
-            Concept
-            <br />
-            <span className="text-primary">Karaoke</span>
+            Bad
+            <span className="text-primary">Lobs</span>
           </h1>
 
           <p className="mx-auto mb-12 max-w-2xl text-balance text-xl leading-relaxed text-muted-foreground md:text-2xl">
