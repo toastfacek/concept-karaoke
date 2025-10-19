@@ -225,6 +225,17 @@ export default function BriefPage() {
       if (!response.ok || !payload.success) {
         throw new Error(payload.error ?? "Failed to lock brief")
       }
+
+      setGame((previous) =>
+        previous
+          ? {
+              ...previous,
+              players: previous.players.map((player) =>
+                player.id === currentPlayer.id ? { ...player, isReady: true } : player,
+              ),
+            }
+          : previous,
+      )
     } catch (lockError) {
       console.error(lockError)
       setError(lockError instanceof Error ? lockError.message : "Failed to lock brief.")
@@ -250,6 +261,17 @@ export default function BriefPage() {
       if (!response.ok || !payload.success) {
         throw new Error(payload.error ?? "Unable to update ready state.")
       }
+
+      setGame((previous) =>
+        previous
+          ? {
+              ...previous,
+              players: previous.players.map((player) =>
+                player.id === currentPlayer.id ? { ...player, isReady: !currentPlayer.isReady } : player,
+              ),
+            }
+          : previous,
+      )
     } catch (readyError) {
       console.error(readyError)
       setError(readyError instanceof Error ? readyError.message : "Unable to update ready state.")

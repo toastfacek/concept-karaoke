@@ -70,10 +70,7 @@ export async function POST(request: Request) {
       throw playersError
     }
 
-    const playerCount = players?.length ?? 0
-    if (playerCount < 3) {
-      return NextResponse.json({ success: false, error: "Need at least 3 players to start" }, { status: 409 })
-    }
+    // Temporarily allow hosts to start with a single player while testing.
 
     const allReady = players?.every((player) => player.is_ready) ?? false
     if (!allReady) {

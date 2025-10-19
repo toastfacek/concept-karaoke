@@ -556,7 +556,7 @@ export default function CreatePage() {
               rows={3}
               className="text-lg"
             />
-            <Canvas initialData={headlineCanvas ?? headlineCanvasData} onChange={setHeadlineCanvas} />
+            <Canvas initialData={headlineCanvas ?? headlineCanvasData ?? visualCanvasData ?? null} onChange={setHeadlineCanvas} />
             <p className="font-mono text-xs text-muted-foreground">
               Map the headline placement and note copy decisions so the final pitcher has a clear script.
             </p>

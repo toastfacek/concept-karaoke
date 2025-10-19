@@ -14,6 +14,18 @@ export const canvasStrokeSchema = z.object({
   createdAt: z.number().optional(),
 })
 
+export const canvasImageSchema = z.object({
+  id: z.string().min(1),
+  src: z.string().min(1),
+  x: z.number().finite(),
+  y: z.number().finite(),
+  width: z.number().positive(),
+  height: z.number().positive(),
+  rotation: z.number().optional(),
+})
+
+const FONT_FAMILIES = ["Inter", "Georgia", "Space Mono", "Bangers"] as const
+
 export const canvasTextBlockSchema = z.object({
   id: z.string().min(1),
   text: z.string().min(1).max(280),
@@ -22,6 +34,7 @@ export const canvasTextBlockSchema = z.object({
   color: z.string().min(1),
   fontSize: z.number().min(8).max(96),
   align: z.enum(["left", "center", "right"]).default("left"),
+  fontFamily: z.enum(FONT_FAMILIES).default("Inter"),
 })
 
 export const canvasStateSchema = z.object({
@@ -33,11 +46,13 @@ export const canvasStateSchema = z.object({
   background: z.string().optional(),
   strokes: z.array(canvasStrokeSchema),
   textBlocks: z.array(canvasTextBlockSchema).optional(),
+  images: z.array(canvasImageSchema).optional(),
   notes: z.string().max(2000).optional(),
 })
 
 export type CanvasPoint = z.infer<typeof canvasPointSchema>
 export type CanvasStroke = z.infer<typeof canvasStrokeSchema>
+export type CanvasImage = z.infer<typeof canvasImageSchema>
 export type CanvasTextBlock = z.infer<typeof canvasTextBlockSchema>
 export type CanvasState = z.infer<typeof canvasStateSchema>
 
@@ -49,6 +64,7 @@ export function cloneCanvasState(state: CanvasState): CanvasState {
       points: stroke.points.map((point) => ({ ...point })),
     })),
     textBlocks: state.textBlocks?.map((block) => ({ ...block })) ?? [],
+    images: state.images?.map((image) => ({ ...image })) ?? [],
   }
 }
 
@@ -56,5 +72,6 @@ export function canvasHasContent(state: CanvasState | null | undefined): boolean
   if (!state) return false
   const strokes = state.strokes.length
   const textBlocks = state.textBlocks?.length ?? 0
-  return strokes > 0 || textBlocks > 0
+  const images = state.images?.length ?? 0
+  return strokes > 0 || textBlocks > 0 || images > 0
 }

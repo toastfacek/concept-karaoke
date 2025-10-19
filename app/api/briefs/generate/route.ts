@@ -17,8 +17,8 @@ const briefSchema = z.object({
   objective: z.string().min(1),
 })
 
-const OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
-const OPENAI_MODEL = "gpt-4o-mini"
+const GEMINI_GENERATE_URL =
+  "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent"
 
 export async function POST(request: Request) {
   try {
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: message }, { status: 400 })
     }
 
-    const openAiKey = env.server.OPENAI_API_KEY ?? requireServerEnv("OPENAI_API_KEY")
+    const geminiKey = env.server.GEMINI_API_KEY ?? requireServerEnv("GEMINI_API_KEY")
 
     const supabase = getSupabaseAdminClient()
 
@@ -48,44 +48,51 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Room not found" }, { status: 404 })
     }
 
-    const prompt = `Generate a creative advertising brief for a fictional product as JSON with keys productName, productCategory, businessProblem, targetAudience, objective. Keep it punchy, witty, and grounded enough to be playable in an improv party game. Avoid quotes or Markdown.`
+    const prompt = [
+      "Generate a creative advertising brief for a fictional product.",
+      "Respond with valid JSON that matches this TypeScript interface:",
+      "{",
+      '  "productName": string,',
+      '  "productCategory": string,',
+      '  "businessProblem": string,',
+      '  "targetAudience": string,',
+      '  "objective": string',
+      "}",
+      "Keep it playful but useful for a collaborative improv game.",
+      "Do not wrap the JSON in markdown fences or add extra text.",
+    ].join("\n")
 
-    const completionResponse = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
+    const completionResponse = await fetch(`${GEMINI_GENERATE_URL}?key=${geminiKey}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${openAiKey}`,
       },
       body: JSON.stringify({
-        model: OPENAI_MODEL,
-        temperature: 0.7,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a mischievous ad creative generating campaign briefs that are weird, delightful, and playable in a party improv game.",
-          },
+        contents: [
           {
             role: "user",
-            content: prompt,
+            parts: [{ text: prompt }],
           },
         ],
+        generationConfig: {
+          temperature: 0.7,
+          responseMimeType: "application/json",
+        },
       }),
     })
 
     if (!completionResponse.ok) {
       const errorText = await completionResponse.text()
-      throw new Error(`OpenAI request failed: ${errorText}`)
+      throw new Error(`Gemini request failed: ${errorText}`)
     }
 
     const completionPayload = await completionResponse.json()
-    const content = completionPayload?.choices?.[0]?.message?.content
-    if (typeof content !== "string") {
-      throw new Error("Unexpected OpenAI response format")
+    const textContent = completionPayload?.candidates?.[0]?.content?.parts?.[0]?.text
+    if (typeof textContent !== "string") {
+      throw new Error("Unexpected Gemini response format")
     }
 
-    const parsedBrief = briefSchema.parse(JSON.parse(content))
+    const parsedBrief = briefSchema.parse(JSON.parse(textContent))
 
     const { data: existing, error: briefFetchError } = await supabase
       .from(TABLES.campaignBriefs)

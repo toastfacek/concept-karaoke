@@ -110,7 +110,7 @@ export default function LobbyPage() {
   const isHost = currentPlayer?.isHost ?? false
   const isReady = currentPlayer?.isReady ?? false
   const allReady = lobby?.players.every((player) => player.isReady) ?? false
-  const minPlayers = (lobby?.players.length ?? 0) >= 3
+  const minPlayers = (lobby?.players.length ?? 0) >= 1
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(roomCode)
@@ -301,6 +301,15 @@ export default function LobbyPage() {
             {currentPlayer && isHost && (
               <>
                 <Button
+                  onClick={handleToggleReady}
+                  size="lg"
+                  variant={isReady ? "secondary" : "default"}
+                  className="w-full"
+                  disabled={isUpdatingReady}
+                >
+                  {isUpdatingReady ? "Updating..." : isReady ? "Mark Not Ready" : "Ready Up"}
+                </Button>
+                <Button
                   onClick={handleStartGame}
                   disabled={!allReady || !minPlayers || isStarting}
                   size="lg"
@@ -310,7 +319,7 @@ export default function LobbyPage() {
                 </Button>
                 {!minPlayers && (
                   <p className="text-center font-mono text-sm text-muted-foreground">
-                    Need at least 3 players to start
+                    Need at least one player to start
                   </p>
                 )}
                 {minPlayers && !allReady && (
