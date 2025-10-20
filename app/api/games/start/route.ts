@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
     const { data: room, error: roomError } = await supabase
       .from(TABLES.gameRooms)
-      .select("id, code, status, current_phase")
+      .select("id, code, status, current_phase, product_category")
       .eq("code", code)
       .maybeSingle()
 
@@ -121,7 +121,7 @@ export async function POST(request: Request) {
       const { error: insertBriefError } = await supabase.from(TABLES.campaignBriefs).insert({
         room_id: room.id,
         product_name: "",
-        product_category: "",
+        product_category: room.product_category ?? "All",
         business_problem: "",
         target_audience: "",
         objective: "",

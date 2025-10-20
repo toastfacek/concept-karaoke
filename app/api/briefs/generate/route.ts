@@ -4,6 +4,7 @@ import { z } from "zod"
 import { TABLES } from "@/lib/db"
 import { env, requireServerEnv } from "@/lib/env"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
+import { SPECIFIC_PRODUCT_CATEGORIES } from "@/lib/types"
 
 const requestSchema = z.object({
   roomId: z.string().uuid("Invalid room identifier"),
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
 
     const { data: room, error: roomError } = await supabase
       .from(TABLES.gameRooms)
-      .select("id")
+      .select("id, product_category")
       .eq("id", parsed.data.roomId)
       .maybeSingle()
 
@@ -48,8 +49,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Room not found" }, { status: 404 })
     }
 
+    const selectedCategory = room.product_category ?? "All"
+
+    // If "All" is selected, randomly pick from specific categories
+    const productCategory = selectedCategory === "All"
+      ? SPECIFIC_PRODUCT_CATEGORIES[Math.floor(Math.random() * SPECIFIC_PRODUCT_CATEGORIES.length)]
+      : selectedCategory
+
     const prompt = [
-      "Generate a creative advertising brief for a fictional product.",
+      `Generate a creative advertising brief for a fictional product in the "${productCategory}" category.`,
       "Respond with valid JSON that matches this TypeScript interface:",
       "{",
       '  "productName": string,',
@@ -58,6 +66,8 @@ export async function POST(request: Request) {
       '  "targetAudience": string,',
       '  "objective": string',
       "}",
+      `The productCategory field MUST be exactly: "${productCategory}"`,
+      "Make the productName creative and fitting for this category.",
       "Keep it playful but useful for a collaborative improv game.",
       "Do not wrap the JSON in markdown fences or add extra text.",
     ].join("\n")

@@ -15,6 +15,7 @@ export const CREATION_PHASES = ["big_idea", "visual", "headline", "mantra"] as c
 export type CreationPhase = (typeof CREATION_PHASES)[number]
 
 export const PRODUCT_CATEGORIES = [
+  "All",
   "Consumer Electronics",
   "Food & Beverage",
   "Fashion & Apparel",
@@ -32,6 +33,8 @@ export const PRODUCT_CATEGORIES = [
   "Other",
 ] as const
 export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number]
+
+export const SPECIFIC_PRODUCT_CATEGORIES = PRODUCT_CATEGORIES.filter(cat => cat !== "All")
 
 export const PHASE_DURATIONS = [30, 60, 90, 120] as const
 export type PhaseDuration = (typeof PHASE_DURATIONS)[number]

@@ -89,7 +89,7 @@ export default function LobbyPage() {
           hostId: payload.game.hostId,
           players,
           version: typeof payload.game.version === "number" ? payload.game.version : 0,
-          productCategory: payload.game.productCategory ?? "Consumer Electronics",
+          productCategory: payload.game.productCategory ?? "All",
           phaseDurationSeconds: payload.game.phaseDurationSeconds ?? 60,
         })
 

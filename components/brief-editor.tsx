@@ -1,10 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { Pencil } from "lucide-react"
 
 import { Button } from "./ui/button"
 import { Input } from "./ui/input"
-import { Label } from "./ui/label"
 import { Textarea } from "./ui/textarea"
 
 interface CampaignBrief {
@@ -26,6 +26,8 @@ interface BriefEditorProps {
   isLocking?: boolean
 }
 
+type EditableField = "productName" | "businessProblem" | "targetAudience" | "objective"
+
 export function BriefEditor({
   initialBrief,
   onChange,
@@ -43,6 +45,8 @@ export function BriefEditor({
     targetAudience: "",
     objective: "",
   })
+  const [editingField, setEditingField] = useState<EditableField | null>(null)
+  const [editValue, setEditValue] = useState("")
 
   useEffect(() => {
     if (initialBrief) {
@@ -50,12 +54,86 @@ export function BriefEditor({
     }
   }, [initialBrief])
 
-  const updateField = (field: keyof CampaignBrief, value: string) => {
-    setBrief((previous) => {
-      const updated = { ...previous, [field]: value }
+  const startEditing = (field: EditableField) => {
+    if (isLocked) return
+    setEditingField(field)
+    setEditValue(brief[field])
+  }
+
+  const cancelEditing = () => {
+    setEditingField(null)
+    setEditValue("")
+  }
+
+  const saveField = () => {
+    if (editingField) {
+      const updated = { ...brief, [editingField]: editValue }
+      setBrief(updated)
       onChange?.(updated)
-      return updated
-    })
+      setEditingField(null)
+      setEditValue("")
+    }
+  }
+
+  const renderField = (
+    field: EditableField,
+    label: string,
+    value: string,
+    multiline: boolean = false,
+  ) => {
+    const isEditing = editingField === field
+
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h3 className="font-mono text-lg font-bold uppercase">{label}</h3>
+          {!isLocked && !isEditing && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => startEditing(field)}
+              className="gap-2"
+            >
+              <Pencil className="size-4" />
+              Edit
+            </Button>
+          )}
+        </div>
+        {isEditing ? (
+          <div className="space-y-2">
+            {multiline ? (
+              <Textarea
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                rows={3}
+                className="font-mono"
+                autoFocus
+              />
+            ) : (
+              <Input
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                className="font-mono"
+                autoFocus
+              />
+            )}
+            <div className="flex gap-2">
+              <Button type="button" size="sm" onClick={saveField}>
+                Save
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={cancelEditing}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="whitespace-pre-wrap font-mono text-sm leading-relaxed">
+            {value || <span className="text-muted-foreground">Not set</span>}
+          </p>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -69,63 +147,25 @@ export function BriefEditor({
         )}
       </div>
 
-      <div className="space-y-4">
-        <div>
-          <Label htmlFor="productName">Product Name</Label>
-          <Input
-            id="productName"
-            value={brief.productName}
-            onChange={(event) => updateField("productName", event.target.value)}
-            disabled={isLocked}
-            placeholder="e.g., SnoozeButton Pro"
-          />
+      <div className="space-y-6">
+        {renderField("productName", "Product Name", brief.productName)}
+
+        {/* Product Category is read-only and comes from game settings */}
+        <div className="space-y-2">
+          <h3 className="font-mono text-lg font-bold uppercase">Product Category</h3>
+          <p className="whitespace-pre-wrap font-mono text-sm leading-relaxed">
+            {brief.productCategory || <span className="text-muted-foreground">Not set</span>}
+          </p>
+          <p className="font-mono text-xs text-muted-foreground">
+            (Set from game settings)
+          </p>
         </div>
 
-        <div>
-          <Label htmlFor="productCategory">Product Category</Label>
-          <Input
-            id="productCategory"
-            value={brief.productCategory}
-            onChange={(event) => updateField("productCategory", event.target.value)}
-            disabled={isLocked}
-            placeholder="e.g., Smart Home Device"
-          />
-        </div>
+        {renderField("businessProblem", "Business Problem", brief.businessProblem, true)}
 
-        <div>
-          <Label htmlFor="businessProblem">Business Problem</Label>
-          <Textarea
-            id="businessProblem"
-            value={brief.businessProblem}
-            onChange={(event) => updateField("businessProblem", event.target.value)}
-            disabled={isLocked}
-            placeholder="What challenge does this product solve?"
-            rows={3}
-          />
-        </div>
+        {renderField("targetAudience", "Target Audience", brief.targetAudience)}
 
-        <div>
-          <Label htmlFor="targetAudience">Target Audience</Label>
-          <Input
-            id="targetAudience"
-            value={brief.targetAudience}
-            onChange={(event) => updateField("targetAudience", event.target.value)}
-            disabled={isLocked}
-            placeholder="e.g., Busy professionals aged 25-40"
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="objective">Campaign Objective</Label>
-          <Textarea
-            id="objective"
-            value={brief.objective}
-            onChange={(event) => updateField("objective", event.target.value)}
-            disabled={isLocked}
-            placeholder="What should this campaign achieve?"
-            rows={3}
-          />
-        </div>
+        {renderField("objective", "Campaign Objective", brief.objective, true)}
       </div>
 
       {!isLocked && (

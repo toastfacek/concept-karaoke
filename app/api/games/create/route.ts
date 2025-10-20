@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       current_phase: INITIAL_GAME_STATE.currentPhase,
       phase_start_time: null,
       host_id: playerId,
-      product_category: "Consumer Electronics",
+      product_category: "All",
       phase_duration_seconds: 60,
     })
 
