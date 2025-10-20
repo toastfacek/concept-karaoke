@@ -50,6 +50,7 @@ type GameState = SnapshotDrivenState<GamePlayer> & {
   currentPitchIndex: number | null
   pitchSequence: string[]
   adlobs: AdLobRecord[]
+  phaseDurationSeconds: number
 }
 
 const CREATION_SEQUENCE: CreationPhase[] = ["big_idea", "visual", "headline", "mantra"]
@@ -69,8 +70,6 @@ const PHASE_INSTRUCTIONS: Record<CreationPhase, string> = {
   mantra:
     "Write a 1-3 sentence mantra that sells the campaign with swagger (aim for 50-100 words). No edits to previous work—just riff.",
 }
-
-const PHASE_DURATION_MS = 60_000
 
 function getPhaseIndex(phase: CreationPhase | null): number {
   if (!phase) return -1
@@ -175,6 +174,7 @@ export default function CreatePage() {
           })),
           adlobs: gameData.adlobs,
           version: typeof gameData.version === "number" ? gameData.version : 0,
+          phaseDurationSeconds: gameData.phaseDurationSeconds ?? 60,
         })
 
         const localPlayer = loadPlayer(roomCode)
@@ -454,7 +454,8 @@ export default function CreatePage() {
   const totalPlayers = game?.players.length ?? 0
   const everyoneReady = totalPlayers > 0 && readyCount === totalPlayers
   const phaseStartTime = game?.phaseStartTime ? new Date(game.phaseStartTime).getTime() : Date.now()
-  const phaseEndTime = new Date(phaseStartTime + PHASE_DURATION_MS)
+  const phaseDurationMs = (game?.phaseDurationSeconds ?? 60) * 1000
+  const phaseEndTime = new Date(phaseStartTime + phaseDurationMs)
 
   const handleSubmitWork = async () => {
     if (!game || !currentPlayer || !currentAdlob || !game.currentPhase) return

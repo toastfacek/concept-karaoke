@@ -85,6 +85,8 @@ export const sampleGameRoom: GameRoom = {
   phaseStartTime: null,
   createdAt: new Date(),
   hostId: "1",
+  productCategory: "Consumer Electronics",
+  phaseDurationSeconds: 60,
 }
 
 export const emojis = [

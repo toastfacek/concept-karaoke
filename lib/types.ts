@@ -14,6 +14,28 @@ export type GameStatus = (typeof GAME_STATUSES)[number]
 export const CREATION_PHASES = ["big_idea", "visual", "headline", "mantra"] as const
 export type CreationPhase = (typeof CREATION_PHASES)[number]
 
+export const PRODUCT_CATEGORIES = [
+  "Consumer Electronics",
+  "Food & Beverage",
+  "Fashion & Apparel",
+  "Beauty & Cosmetics",
+  "Automotive",
+  "Sports & Fitness",
+  "Home & Garden",
+  "Travel & Hospitality",
+  "Entertainment & Media",
+  "Financial Services",
+  "Healthcare & Wellness",
+  "Technology & Software",
+  "Education",
+  "Real Estate",
+  "Other",
+] as const
+export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number]
+
+export const PHASE_DURATIONS = [30, 60, 90, 120] as const
+export type PhaseDuration = (typeof PHASE_DURATIONS)[number]
+
 export interface CampaignBrief {
   productName: string
   productCategory: string
@@ -59,4 +81,6 @@ export interface GameRoom {
   phaseStartTime: Date | null
   createdAt: Date
   hostId: string
+  productCategory: string
+  phaseDurationSeconds: number
 }

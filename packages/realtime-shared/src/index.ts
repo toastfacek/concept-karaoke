@@ -85,6 +85,13 @@ export type ServerToClientEvent =
       version: number
     }
   | {
+      type: "settings_changed"
+      roomCode: string
+      productCategory: string
+      phaseDurationSeconds: number
+      version: number
+    }
+  | {
       type: "heartbeat"
       roomCode: string
       timestamp: number

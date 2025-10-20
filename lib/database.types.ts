@@ -24,6 +24,8 @@ export type Database = {
           updated_at: string
           current_pitch_index: number | null
           pitch_sequence: string[] | null
+          product_category: string
+          phase_duration_seconds: number
         }
         Insert: {
           id?: string
@@ -36,6 +38,8 @@ export type Database = {
           updated_at?: string
           current_pitch_index?: number | null
           pitch_sequence?: string[] | null
+          product_category?: string
+          phase_duration_seconds?: number
         }
         Update: {
           id?: string
@@ -48,6 +52,8 @@ export type Database = {
           updated_at?: string
           current_pitch_index?: number | null
           pitch_sequence?: string[] | null
+          product_category?: string
+          phase_duration_seconds?: number
         }
         Relationships: []
       }

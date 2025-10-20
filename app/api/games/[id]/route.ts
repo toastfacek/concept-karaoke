@@ -18,7 +18,7 @@ async function resolveRoom(identifier: string) {
 
   const roomQuery = supabase
     .from(TABLES.gameRooms)
-    .select("id, code, status, current_phase, phase_start_time, host_id, current_pitch_index, pitch_sequence")
+    .select("id, code, status, current_phase, phase_start_time, host_id, current_pitch_index, pitch_sequence, product_category, phase_duration_seconds")
 
   const { data: room, error: roomError } = matchByCode
     ? await roomQuery.eq("code", identifier).maybeSingle()
@@ -87,6 +87,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         hostId: room.host_id,
         currentPitchIndex: room.current_pitch_index,
         pitchSequence: room.pitch_sequence ?? [],
+        productCategory: room.product_category,
+        phaseDurationSeconds: room.phase_duration_seconds,
         players: players?.map((player) => ({
           id: player.id,
           name: player.name,

@@ -64,6 +64,8 @@ export async function POST(request: Request) {
       current_phase: INITIAL_GAME_STATE.currentPhase,
       phase_start_time: null,
       host_id: playerId,
+      product_category: "Consumer Electronics",
+      phase_duration_seconds: 60,
     })
 
     if (roomError) {

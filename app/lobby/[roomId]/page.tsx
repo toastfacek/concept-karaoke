@@ -7,6 +7,7 @@ import { Copy, Check } from "lucide-react"
 import { useRealtime } from "@/components/realtime-provider"
 import { Button } from "@/components/ui/button"
 import { PlayerList } from "@/components/player-list"
+import { GameSettings } from "@/components/game-settings"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
 import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
@@ -22,7 +23,10 @@ type LobbyPlayer = {
   joinedAt: string
 }
 
-type LobbyState = SnapshotDrivenState<LobbyPlayer>
+type LobbyState = SnapshotDrivenState<LobbyPlayer> & {
+  productCategory: string
+  phaseDurationSeconds: number
+}
 
 export default function LobbyPage() {
   const router = useRouter()
@@ -85,6 +89,8 @@ export default function LobbyPage() {
           hostId: payload.game.hostId,
           players,
           version: typeof payload.game.version === "number" ? payload.game.version : 0,
+          productCategory: payload.game.productCategory ?? "Consumer Electronics",
+          phaseDurationSeconds: payload.game.phaseDurationSeconds ?? 60,
         })
 
         const localPlayer = loadPlayer(roomCode)
@@ -240,6 +246,18 @@ export default function LobbyPage() {
     }
   }
 
+  const handleSettingsChange = (settings: { productCategory: string; phaseDurationSeconds: number }) => {
+    setLobby((previous) =>
+      previous
+        ? {
+            ...previous,
+            productCategory: settings.productCategory,
+            phaseDurationSeconds: settings.phaseDurationSeconds,
+          }
+        : previous,
+    )
+  }
+
   useEffect(() => {
     const snapshotSource = latestLobbyRef.current
     const playerId = storedPlayer?.id
@@ -358,6 +376,22 @@ export default function LobbyPage() {
           })
         })
 
+        const unsubscribeSettingsChanged = addRealtimeListener(
+          "settings_changed",
+          ({ productCategory, phaseDurationSeconds, version }) => {
+            setLobby((previous) =>
+              previous
+                ? {
+                    ...previous,
+                    version,
+                    productCategory,
+                    phaseDurationSeconds,
+                  }
+                : previous,
+            )
+          },
+        )
+
         cleanupFns = [
           unsubscribeHello,
           unsubscribeRoomState,
@@ -365,6 +399,7 @@ export default function LobbyPage() {
           unsubscribePlayerJoined,
           unsubscribePlayerLeft,
           unsubscribePhaseChanged,
+          unsubscribeSettingsChanged,
         ]
       } catch (error) {
         console.error("Failed to initialize lobby realtime connection", error)
@@ -417,6 +452,17 @@ export default function LobbyPage() {
 
           <p className="mt-4 font-mono text-sm text-muted-foreground">Share this code with your friends to join</p>
         </div>
+
+        {lobby && currentPlayer && (
+          <GameSettings
+            productCategory={lobby.productCategory}
+            phaseDurationSeconds={lobby.phaseDurationSeconds}
+            isHost={isHost}
+            roomCode={roomCode}
+            playerId={currentPlayer.id}
+            onSettingsChange={handleSettingsChange}
+          />
+        )}
 
         <div className="retro-border bg-card p-8">
           <div className="mb-4 flex items-center justify-between">
