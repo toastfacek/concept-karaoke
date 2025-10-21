@@ -120,12 +120,9 @@ export async function POST(request: Request) {
 
     const geminiKey = env.server.GEMINI_API_KEY ?? requireServerEnv("GEMINI_API_KEY")
 
-    const promptText = [
-      "You are creating an advertising campaign image for a collaborative improv design game.",
-      "Keep the style bold, playful, and high-contrast so it reads well when sketched over.",
-      "Avoid adding logos or text in the artwork.",
-      `Prompt: ${parsed.data.prompt}`,
-    ].join("\n")
+    // Send the user's prompt directly without wrapper instructions
+    // This matches AI Studio behavior and produces higher quality, less "corny" images
+    const promptText = parsed.data.prompt
 
     const requestPayload = {
       contents: [
@@ -135,7 +132,9 @@ export async function POST(request: Request) {
       ],
       generationConfig: {
         responseModalities: ["Image"],
-        temperature: 0.7,
+        imageConfig: {
+          aspectRatio: "16:9", // Match canvas dimensions (1600x900)
+        },
       },
     }
 

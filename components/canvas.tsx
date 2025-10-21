@@ -45,6 +45,14 @@ const TEXT_FONT_OPTIONS: Array<{ label: string; value: CanvasTextBlock["fontFami
   { label: "Display", value: "Bangers" },
 ]
 
+const TEXT_SIZE_PRESETS = [
+  { label: "Tiny", value: 20 },
+  { label: "Small", value: 32 },
+  { label: "Medium", value: 48 },
+  { label: "Large", value: 64 },
+  { label: "Huge", value: 80 },
+]
+
 function createEmptyState(): CanvasState {
   return {
     version: 1,
@@ -198,6 +206,17 @@ function getCanvasCoordinates(event: PointerEvent, canvas: HTMLCanvasElement, si
     x: (event.clientX - rect.left) * scaleX,
     y: (event.clientY - rect.top) * scaleY,
   }
+}
+
+function getTextScreenPosition(textBlock: CanvasTextBlock, canvas: HTMLCanvasElement, canvasSize = DEFAULT_SIZE) {
+  const rect = canvas.getBoundingClientRect()
+  const scaleX = rect.width / canvasSize.width
+  const scaleY = rect.height / canvasSize.height
+
+  const screenX = rect.left + textBlock.x * scaleX
+  const screenY = rect.top + (textBlock.y - textBlock.fontSize) * scaleY
+
+  return { screenX, screenY }
 }
 
 const LINE_HEIGHT_MULTIPLIER = 1.2
@@ -392,6 +411,7 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null)
   const [imagePrompt, setImagePrompt] = useState("")
   const [pendingImagePosition, setPendingImagePosition] = useState<{ x: number; y: number } | null>(null)
+  const [promptBoxPosition, setPromptBoxPosition] = useState<{ x: number; y: number } | null>(null)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   const [imageError, setImageError] = useState<string | null>(null)
 
@@ -541,6 +561,7 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
   const handleCancelPendingImage = useCallback(() => {
     if (isGeneratingImage) return
     setPendingImagePosition(null)
+    setPromptBoxPosition(null)
     setImagePrompt("")
     setImageError(null)
   }, [isGeneratingImage])
@@ -604,6 +625,7 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
         imageCacheRef.current[newImage.id] = loadedImage
         setSelectedImageId(newImage.id)
         setPendingImagePosition(null)
+        setPromptBoxPosition(null)
         setImagePrompt("")
       } catch (generationError) {
         console.error(generationError)
@@ -821,6 +843,12 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
 
         setSelectedImageId(null)
         setPendingImagePosition({ x: coordinates.x, y: coordinates.y })
+
+        // Calculate screen position for prompt box (relative to canvas container)
+        const rect = canvas.getBoundingClientRect()
+        const screenX = event.clientX - rect.left
+        const screenY = event.clientY - rect.top
+        setPromptBoxPosition({ x: screenX, y: screenY })
         return
       }
 
@@ -1351,70 +1379,99 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
         )}
       </div>
 
-      {!readOnly && pendingImagePosition && (
-        <div className="border-b border-dashed border-border bg-muted/40 p-4 space-y-4">
-          <form className="space-y-3" onSubmit={(event) => handleGenerateImage(event)}>
-            <div className="space-y-2">
-              <Label htmlFor="canvas-image-prompt">Image Prompt</Label>
-              <Textarea
-                id="canvas-image-prompt"
-                value={imagePrompt}
-                onChange={(event) => setImagePrompt(event.target.value)}
-                rows={2}
-                placeholder="Describe the visual you want Gemini to generate..."
-              />
-              <p className="text-xs text-muted-foreground">
-                Placing image near ({Math.round(pendingImagePosition.x)}, {Math.round(pendingImagePosition.y)})
-              </p>
-              {imageError && <p className="text-xs font-medium text-destructive">{imageError}</p>}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="submit" size="sm" disabled={isGeneratingImage}>
-                {isGeneratingImage ? "Generating..." : "Generate Image"}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={handleCancelPendingImage}
-                disabled={isGeneratingImage}
-              >
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </div>
-      )}
 
-      {!readOnly && selectedTextBlock && (
-        <div className="border-b border-dashed border-border bg-muted/40 p-4 space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="canvas-text-content">Text Content</Label>
-              <Textarea
-                id="canvas-text-content"
-                value={selectedTextBlock.text}
-                onChange={(event) => {
-                  const value = event.target.value.slice(0, 280)
-                  updateSelectedTextBlock({ text: value })
-                }}
-                rows={3}
-                className="font-mono"
+
+
+      <div className="relative aspect-video w-full bg-white">
+        <canvas
+          ref={canvasRef}
+          width={canvasState.size.width}
+          height={canvasState.size.height}
+          className={cn(
+            "h-full w-full touch-none",
+            readOnly && "pointer-events-none",
+            tool === "image" && !pendingImagePosition && !selectedImageId && "cursor-crosshair",
+          )}
+        />
+
+        {/* Inline prompt box for image generation */}
+        {!readOnly && promptBoxPosition && (
+          <div
+            className="retro-border absolute z-10 w-80 bg-background p-3 shadow-lg"
+            style={{
+              left: `${Math.min(promptBoxPosition.x, canvasRef.current ? canvasRef.current.offsetWidth - 330 : promptBoxPosition.x)}px`,
+              top: `${Math.min(promptBoxPosition.y, canvasRef.current ? canvasRef.current.offsetHeight - 120 : promptBoxPosition.y)}px`,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <form className="space-y-2" onSubmit={(event) => handleGenerateImage(event)}>
+              <input
+                type="text"
+                value={imagePrompt}
+                onChange={(e) => setImagePrompt(e.target.value)}
+                placeholder="Describe the image..."
+                autoFocus
+                disabled={isGeneratingImage}
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-foreground"
               />
-              <p className="text-xs text-muted-foreground">{selectedTextBlock.text.length}/280 characters</p>
-            </div>
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <Label htmlFor="canvas-text-font">Font</Label>
+              {imageError && <p className="text-xs text-destructive">{imageError}</p>}
+              <div className="flex gap-2">
+                <Button type="submit" size="sm" disabled={isGeneratingImage} className="flex-1">
+                  {isGeneratingImage ? "Generating..." : "✓ Generate"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={handleCancelPendingImage}
+                  disabled={isGeneratingImage}
+                >
+                  × Cancel
+                </Button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Inline delete button for selected image */}
+        {!readOnly && selectedImage && canvasRef.current && (
+          <button
+            onClick={handleDeleteSelectedImage}
+            className="absolute z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 border-destructive bg-background text-destructive hover:bg-destructive hover:text-background transition"
+            style={{
+              left: `${((selectedImage.x + selectedImage.width) / canvasState.size.width) * canvasRef.current.offsetWidth}px`,
+              top: `${(selectedImage.y / canvasState.size.height) * canvasRef.current.offsetHeight - 12}px`,
+            }}
+            title="Delete image"
+          >
+            ×
+          </button>
+        )}
+
+        {/* Inline text editing overlay and toolbar */}
+        {!readOnly && selectedTextBlock && canvasRef.current && (() => {
+          const { screenX, screenY } = getTextScreenPosition(selectedTextBlock, canvasRef.current, canvasState.size)
+          const rect = canvasRef.current.getBoundingClientRect()
+          const scaleX = rect.width / canvasState.size.width
+          const scaleY = rect.height / canvasState.size.height
+
+          return (
+            <>
+              {/* Compact icon toolbar */}
+              <div
+                className="retro-border absolute z-20 flex items-center gap-1 bg-background p-1.5 shadow-lg"
+                style={{
+                  left: `${Math.max(0, Math.min(screenX - rect.left, rect.width - 300))}px`,
+                  top: `${Math.max(0, screenY - rect.top - 40)}px`,
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Font dropdown */}
                 <select
-                  id="canvas-text-font"
-                  value={textFontFamily}
-                  onChange={(event) => {
-                    const font = event.target.value as CanvasTextBlock["fontFamily"]
-                    setTextFontFamily(font)
-                    updateSelectedTextBlock({ fontFamily: font })
-                  }}
-                  className="w-full rounded border border-border bg-background px-2 py-2 text-sm"
+                  value={selectedTextBlock.fontFamily}
+                  onChange={(e) => updateSelectedTextBlock({ fontFamily: e.target.value as CanvasTextBlock["fontFamily"] })}
+                  className="h-7 rounded border border-border bg-background px-2 text-xs"
+                  title="Font"
                 >
                   {TEXT_FONT_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -1422,129 +1479,110 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
                     </option>
                   ))}
                 </select>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="canvas-text-size">Size</Label>
-                <div className="flex items-center gap-3">
-                  <input
-                    id="canvas-text-size"
-                    type="range"
-                    min={12}
-                    max={96}
-                    value={textFontSize}
-                    onChange={(event) => {
-                      const size = Number(event.target.value)
-                      setTextFontSize(size)
-                      updateSelectedTextBlock({ fontSize: size })
-                    }}
-                    className="flex-1"
-                  />
-                  <span className="w-12 text-right text-xs font-mono">{textFontSize}px</span>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label>Alignment</Label>
-                <div className="flex gap-2">
-                  {(["left", "center", "right"] as const).map((alignment) => (
-                    <Button
-                      key={alignment}
-                      size="sm"
-                      variant={selectedTextBlock.align === alignment ? "default" : "outline"}
-                      onClick={() => updateSelectedTextBlock({ align: alignment })}
-                    >
-                      {alignment === "left" ? "Left" : alignment === "center" ? "Center" : "Right"}
-                    </Button>
+
+                {/* Size dropdown */}
+                <select
+                  value={TEXT_SIZE_PRESETS.find((p) => p.value === selectedTextBlock.fontSize)?.value ?? 48}
+                  onChange={(e) => {
+                    const size = Number(e.target.value)
+                    setTextFontSize(size)
+                    updateSelectedTextBlock({ fontSize: size })
+                  }}
+                  className="h-7 rounded border border-border bg-background px-2 text-xs"
+                  title="Size"
+                >
+                  {TEXT_SIZE_PRESETS.map((preset) => (
+                    <option key={preset.value} value={preset.value}>
+                      {preset.label}
+                    </option>
                   ))}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Label className="text-xs uppercase text-muted-foreground">Text Color</Label>
-              <div className="flex items-center gap-1">
+                </select>
+
+                {/* Alignment buttons */}
+                <button
+                  onClick={() => updateSelectedTextBlock({ align: "left" })}
+                  className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded border border-border text-sm transition",
+                    selectedTextBlock.align === "left" ? "bg-foreground text-background" : "bg-background hover:bg-muted"
+                  )}
+                  title="Align left"
+                >
+                  ⬅
+                </button>
+                <button
+                  onClick={() => updateSelectedTextBlock({ align: "center" })}
+                  className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded border border-border text-sm transition",
+                    selectedTextBlock.align === "center" ? "bg-foreground text-background" : "bg-background hover:bg-muted"
+                  )}
+                  title="Align center"
+                >
+                  ⎯
+                </button>
+                <button
+                  onClick={() => updateSelectedTextBlock({ align: "right" })}
+                  className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded border border-border text-sm transition",
+                    selectedTextBlock.align === "right" ? "bg-foreground text-background" : "bg-background hover:bg-muted"
+                  )}
+                  title="Align right"
+                >
+                  ➡
+                </button>
+
+                {/* Color swatches */}
                 {COLOR_SWATCHES.map((swatch) => (
                   <button
                     key={swatch}
-                    type="button"
                     onClick={() => {
                       setTextColor(swatch)
                       updateSelectedTextBlock({ color: swatch })
                     }}
                     className={cn(
-                      "size-6 rounded-full border border-border transition",
-                      selectedTextBlock.color === swatch ? "ring-2 ring-offset-2 ring-offset-background" : "",
+                      "h-5 w-5 rounded-full border border-border transition",
+                      selectedTextBlock.color === swatch ? "ring-2 ring-offset-1" : ""
                     )}
                     style={{ backgroundColor: swatch }}
-                    aria-label={`Change text color to ${swatch}`}
+                    title={`Color ${swatch}`}
                   />
                 ))}
-              </div>
-            </div>
-            <Button type="button" size="sm" variant="destructive" onClick={handleDeleteSelectedText}>
-              Delete Text
-            </Button>
-          </div>
-        </div>
-      )}
 
-      {!readOnly && selectedImage && (
-        <div className="border-b border-dashed border-border bg-muted/40 p-4 space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Image Details</Label>
-              <div className="rounded border border-border bg-background px-3 py-2 text-xs font-mono text-muted-foreground">
-                <div>
-                  Position: ({Math.round(selectedImage.x)}, {Math.round(selectedImage.y)})
-                </div>
-                <div>
-                  Size: {Math.round(selectedImage.width)} × {Math.round(selectedImage.height)} px
-                </div>
+                {/* Delete button */}
+                <button
+                  onClick={handleDeleteSelectedText}
+                  className="ml-1 flex h-7 w-7 items-center justify-center rounded border-2 border-destructive bg-background text-destructive hover:bg-destructive hover:text-background transition"
+                  title="Delete text"
+                >
+                  ×
+                </button>
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="canvas-image-width">Width</Label>
-                <input
-                  id="canvas-image-width"
-                  type="number"
-                  min={40}
-                  max={canvasSizeRef.current.width}
-                  value={Math.round(selectedImage.width)}
-                  onChange={(event) => handleImageDimensionChange("width", Number(event.target.value))}
-                  className="w-full rounded border border-border bg-background px-2 py-1 text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="canvas-image-height">Height</Label>
-                <input
-                  id="canvas-image-height"
-                  type="number"
-                  min={40}
-                  max={canvasSizeRef.current.height}
-                  value={Math.round(selectedImage.height)}
-                  onChange={(event) => handleImageDimensionChange("height", Number(event.target.value))}
-                  className="w-full rounded border border-border bg-background px-2 py-1 text-sm"
-                />
-              </div>
-            </div>
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Drag directly on the canvas to move the image. Adjust width and height to resize as needed.
-              </p>
-              <Button type="button" variant="destructive" size="sm" onClick={handleDeleteSelectedImage}>
-                Delete Image
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      <div className="relative aspect-video w-full bg-white">
-        <canvas
-          ref={canvasRef}
-          width={canvasState.size.width}
-          height={canvasState.size.height}
-          className={cn("h-full w-full touch-none", readOnly && "pointer-events-none")}
-        />
+              {/* Text editing overlay */}
+              <textarea
+                value={selectedTextBlock.text}
+                onChange={(e) => {
+                  const value = e.target.value.slice(0, 280)
+                  updateSelectedTextBlock({ text: value })
+                }}
+                autoFocus
+                className="absolute z-10 resize-none overflow-hidden border-2 border-dashed border-primary bg-transparent p-1 outline-none"
+                style={{
+                  left: `${screenX - rect.left - (selectedTextBlock.align === "center" ? 100 : selectedTextBlock.align === "right" ? 200 : 0)}px`,
+                  top: `${screenY - rect.top}px`,
+                  font: `${selectedTextBlock.fontSize * scaleY}px ${selectedTextBlock.fontFamily}`,
+                  color: selectedTextBlock.color,
+                  textAlign: selectedTextBlock.align,
+                  width: selectedTextBlock.align === "center" ? "200px" : selectedTextBlock.align === "right" ? "200px" : "auto",
+                  minWidth: "50px",
+                  lineHeight: `${selectedTextBlock.fontSize * scaleY * LINE_HEIGHT_MULTIPLIER}px`,
+                }}
+                rows={selectedTextBlock.text.split("\n").length}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </>
+          )
+        })()}
+
         {!readOnly && !hasContent && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <p className="font-mono text-sm uppercase tracking-widest text-muted-foreground">
