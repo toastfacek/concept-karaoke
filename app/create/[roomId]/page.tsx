@@ -469,8 +469,8 @@ export default function CreatePage() {
 
       if (game.currentPhase === "big_idea") {
         const text = bigIdeaInput.trim()
-        if (text.length < 20) {
-          setError("Big ideas need at least 20 characters to give others something to work with.")
+        if (text.length === 0) {
+          setError("Give your other players something to work with!")
           setIsSubmitting(false)
           return
         }

@@ -8,7 +8,7 @@ const requestSchema = z.object({
   text: z
     .string()
     .transform((value) => value.trim())
-    .pipe(z.string().min(20, "Big idea must be at least 20 characters").max(800, "Big idea is too long")),
+    .pipe(z.string().min(1, "Give your other players something to work with!").max(800, "Big idea is too long")),
   createdBy: z.string().uuid("Invalid player identifier"),
 })
 
