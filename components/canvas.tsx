@@ -27,7 +27,7 @@ const DEFAULT_SIZE = { width: 1600, height: 900 }
 const DEFAULT_STROKE_COLOR = "#111827"
 const DEFAULT_STROKE_WIDTH = 6
 const DEFAULT_TEXT_COLOR = "#111827"
-const DEFAULT_TEXT_FONT: CanvasTextBlock["fontFamily"] = "Inter"
+const DEFAULT_TEXT_FONT: CanvasTextBlock["fontFamily"] = "Space Grotesk"
 const DEFAULT_TEXT_SIZE = 40
 const IMAGE_HANDLE_SIZE = 12
 const MIN_IMAGE_SIZE = 48
@@ -36,13 +36,17 @@ const MIN_TEXT_BOX_SIZE = 32
 const MIN_TEXT_FONT_SIZE = 12
 const MAX_TEXT_FONT_SIZE = 96
 
-const COLOR_SWATCHES = ["#111827", "#1d4ed8", "#ea580c", "#ca8a04", "#16a34a", "#db2777", "#6b21a8"]
-const STROKE_WIDTHS = [3, 6, 10, 16]
+const COLOR_SWATCHES = ["#111827", "#ffffff", "#1d4ed8", "#ea580c", "#ca8a04", "#16a34a", "#db2777", "#6b21a8"]
+const STROKE_WIDTHS = [
+  { label: "Small", value: 6 },
+  { label: "Medium", value: 12 },
+  { label: "Large", value: 24 },
+]
 const TEXT_FONT_OPTIONS: Array<{ label: string; value: CanvasTextBlock["fontFamily"] }> = [
-  { label: "Sans", value: "Inter" },
+  { label: "Sans", value: "Space Grotesk" },
   { label: "Serif", value: "Georgia" },
-  { label: "Mono", value: "Space Mono" },
-  { label: "Display", value: "Bangers" },
+  { label: "Mono", value: "IBM Plex Mono" },
+  { label: "Display", value: "Impact" },
 ]
 
 const TEXT_SIZE_PRESETS = [
@@ -223,7 +227,9 @@ const LINE_HEIGHT_MULTIPLIER = 1.2
 const HIGHLIGHT_PADDING = 6
 
 function configureTextContext(context: CanvasRenderingContext2D, block: CanvasTextBlock) {
-  context.font = `${block.fontSize}px ${block.fontFamily}, sans-serif`
+  // Quote font family names that contain spaces for canvas compatibility
+  const fontFamily = block.fontFamily.includes(' ') ? `"${block.fontFamily}"` : block.fontFamily
+  context.font = `${block.fontSize}px ${fontFamily}, sans-serif`
   context.textAlign = block.align as CanvasTextAlign
   context.textBaseline = "alphabetic"
 }
@@ -236,7 +242,9 @@ function getTextBounds(context: CanvasRenderingContext2D, block: CanvasTextBlock
 
   for (const line of lines) {
     const metrics = context.measureText(line || " ")
-    maxWidth = Math.max(maxWidth, metrics.width)
+    // Ensure we get a valid width, even if measureText fails
+    const width = isNaN(metrics.width) || metrics.width === 0 ? block.fontSize * (line || " ").length * 0.6 : metrics.width
+    maxWidth = Math.max(maxWidth, width)
   }
 
   const totalHeight = Math.max(block.fontSize, lineHeight * lines.length)
@@ -334,7 +342,7 @@ function getResizedRect(
     startHeight: number
   },
   point: { x: number; y: number },
-  { minWidth = 0, minHeight = 0 }: { minWidth?: number; minHeight?: number } = {},
+  { minWidth = 0, minHeight = 0, preserveAspectRatio = false }: { minWidth?: number; minHeight?: number; preserveAspectRatio?: boolean } = {},
 ) {
   const dx = point.x - meta.originX
   const dy = point.y - meta.originY
@@ -344,33 +352,70 @@ function getResizedRect(
   let width = meta.startWidth
   let height = meta.startHeight
 
-  switch (meta.handle) {
-    case "top-left":
-      width = meta.startWidth - dx
-      height = meta.startHeight - dy
-      x = meta.startX + dx
-      y = meta.startY + dy
-      break
-    case "top-right":
-      width = meta.startWidth + dx
-      height = meta.startHeight - dy
-      y = meta.startY + dy
-      break
-    case "bottom-left":
-      width = meta.startWidth - dx
-      height = meta.startHeight + dy
-      x = meta.startX + dx
-      break
-    case "bottom-right":
-      width = meta.startWidth + dx
-      height = meta.startHeight + dy
-      break
-    default:
-      break
+  if (preserveAspectRatio) {
+    // Calculate aspect ratio from original dimensions
+    const aspectRatio = meta.startWidth / meta.startHeight
+
+    // Use the largest dimension change to maintain proportions
+    const distance = Math.sqrt(dx * dx + dy * dy)
+    const direction = dx + dy >= 0 ? 1 : -1
+
+    switch (meta.handle) {
+      case "top-left":
+        width = meta.startWidth - direction * distance / Math.sqrt(1 + 1 / (aspectRatio * aspectRatio))
+        height = width / aspectRatio
+        x = meta.startX + (meta.startWidth - width)
+        y = meta.startY + (meta.startHeight - height)
+        break
+      case "top-right":
+        width = meta.startWidth + direction * distance / Math.sqrt(1 + 1 / (aspectRatio * aspectRatio))
+        height = width / aspectRatio
+        y = meta.startY + (meta.startHeight - height)
+        break
+      case "bottom-left":
+        width = meta.startWidth - direction * distance / Math.sqrt(1 + 1 / (aspectRatio * aspectRatio))
+        height = width / aspectRatio
+        x = meta.startX + (meta.startWidth - width)
+        break
+      case "bottom-right":
+        width = meta.startWidth + direction * distance / Math.sqrt(1 + 1 / (aspectRatio * aspectRatio))
+        height = width / aspectRatio
+        break
+      default:
+        break
+    }
+  } else {
+    switch (meta.handle) {
+      case "top-left":
+        width = meta.startWidth - dx
+        height = meta.startHeight - dy
+        x = meta.startX + dx
+        y = meta.startY + dy
+        break
+      case "top-right":
+        width = meta.startWidth + dx
+        height = meta.startHeight - dy
+        y = meta.startY + dy
+        break
+      case "bottom-left":
+        width = meta.startWidth - dx
+        height = meta.startHeight + dy
+        x = meta.startX + dx
+        break
+      case "bottom-right":
+        width = meta.startWidth + dx
+        height = meta.startHeight + dy
+        break
+      default:
+        break
+    }
   }
 
   if (width < minWidth) {
     width = minWidth
+    if (preserveAspectRatio) {
+      height = width / (meta.startWidth / meta.startHeight)
+    }
     if (meta.handle === "top-left" || meta.handle === "bottom-left") {
       x = meta.startX + (meta.startWidth - width)
     } else {
@@ -380,6 +425,9 @@ function getResizedRect(
 
   if (height < minHeight) {
     height = minHeight
+    if (preserveAspectRatio) {
+      width = height * (meta.startWidth / meta.startHeight)
+    }
     if (meta.handle === "top-left" || meta.handle === "top-right") {
       y = meta.startY + (meta.startHeight - height)
     } else {
@@ -414,6 +462,9 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
   const [promptBoxPosition, setPromptBoxPosition] = useState<{ x: number; y: number } | null>(null)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   const [imageError, setImageError] = useState<string | null>(null)
+  const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number } | null>(null)
+  const [showColorPicker, setShowColorPicker] = useState(false)
+  const colorPickerRef = useRef<HTMLDivElement | null>(null)
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const isDrawingRef = useRef(false)
@@ -464,10 +515,16 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
     canvasSizeRef.current = canvasState.size
   }, [canvasState.size])
 
-  const selectedTextBlock = useMemo(
-    () => textBlocks.find((block) => block.id === selectedTextId) ?? null,
-    [selectedTextId, textBlocks],
-  )
+  const selectedTextBlock = useMemo(() => {
+    console.log('[TEXT-DEBUG] selectedTextBlock useMemo calculating', {
+      selectedTextId,
+      textBlocksCount: textBlocks.length,
+      textBlockIds: textBlocks.map(b => b.id)
+    })
+    const result = textBlocks.find((block) => block.id === selectedTextId) ?? null
+    console.log('[TEXT-DEBUG] selectedTextBlock result:', result ? result.id : 'null')
+    return result
+  }, [selectedTextId, textBlocks])
 
   const selectedImage = useMemo(
     () => images.find((image) => image.id === selectedImageId) ?? null,
@@ -483,6 +540,38 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
       setTextFontSize(selectedTextBlock.fontSize)
     }
   }, [selectedTextBlock])
+
+  // Auto-select newly created text blocks
+  const prevTextBlockCountRef = useRef(textBlockCount)
+  useEffect(() => {
+    console.log('[TEXT-DEBUG] Auto-select useEffect running', {
+      tool,
+      textBlockCount,
+      prevCount: prevTextBlockCountRef.current,
+      willSelect: tool === "text" && textBlockCount > prevTextBlockCountRef.current && textBlocks.length > 0
+    })
+    // If a new text block was just added and we're using the text tool, select the last block
+    if (tool === "text" && textBlockCount > prevTextBlockCountRef.current && textBlocks.length > 0) {
+      const lastBlock = textBlocks[textBlocks.length - 1]
+      console.log('[TEXT-DEBUG] Auto-selecting last block:', lastBlock.id)
+      setSelectedTextId(lastBlock.id)
+    }
+    prevTextBlockCountRef.current = textBlockCount
+  }, [textBlockCount, textBlocks, tool])
+
+  // Close color picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (colorPickerRef.current && !colorPickerRef.current.contains(event.target as Node)) {
+        setShowColorPicker(false)
+      }
+    }
+
+    if (showColorPicker) {
+      document.addEventListener("mousedown", handleClickOutside)
+      return () => document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [showColorPicker])
 
   const applyState = useCallback(
     (updater: CanvasState | ((previous: CanvasState) => CanvasState)) => {
@@ -512,6 +601,45 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
     [applyState, selectedTextId],
   )
 
+  const handleColorPickerClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const x = event.clientX - rect.left
+    const width = rect.width
+
+    // Create a gradient from black through rainbow to white
+    const hue = (x / width) * 360
+
+    // Convert HSL to hex
+    const h = hue / 60
+    const c = 1
+    const xVal = c * (1 - Math.abs((h % 2) - 1))
+    const m = 0
+
+    let r = 0, g = 0, b = 0
+    if (h >= 0 && h < 1) { r = c; g = xVal; b = 0 }
+    else if (h >= 1 && h < 2) { r = xVal; g = c; b = 0 }
+    else if (h >= 2 && h < 3) { r = 0; g = c; b = xVal }
+    else if (h >= 3 && h < 4) { r = 0; g = xVal; b = c }
+    else if (h >= 4 && h < 5) { r = xVal; g = 0; b = c }
+    else if (h >= 5 && h < 6) { r = c; g = 0; b = xVal }
+
+    r = Math.round((r + m) * 255)
+    g = Math.round((g + m) * 255)
+    b = Math.round((b + m) * 255)
+
+    const hexColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+
+    if (selectedTextBlock) {
+      setTextColor(hexColor)
+      updateSelectedTextBlock({ color: hexColor })
+    } else if (tool === "text") {
+      setTextColor(hexColor)
+    } else {
+      setTool("pen")
+      setColor(hexColor)
+    }
+  }, [selectedTextBlock, tool, updateSelectedTextBlock])
+
   const handleDeleteSelectedText = useCallback(() => {
     if (!selectedTextId) return
     applyState((previous) => {
@@ -519,6 +647,7 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
       next.textBlocks = (next.textBlocks ?? []).filter((block) => block.id !== selectedTextId)
       return next
     })
+    console.log('[TEXT-DEBUG] setSelectedTextId(null) - delete text handler')
     setSelectedTextId(null)
   }, [applyState, selectedTextId])
 
@@ -641,14 +770,28 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
 
   useEffect(() => {
     const parsed = parseInitialState(initialData)
-    if (!statesEqual(parsed, canvasState) && !isDrawingRef.current) {
+    // Skip updating if we're actively editing text or images (user-initiated changes in progress)
+    const isActivelyEditing = selectedTextId !== null || selectedImageId !== null
+    console.log('[TEXT-DEBUG] initialData effect check', {
+      statesEqual: statesEqual(parsed, canvasState),
+      isDrawing: isDrawingRef.current,
+      isActivelyEditing,
+      selectedTextId,
+      selectedImageId
+    })
+    if (!statesEqual(parsed, canvasState) && !isDrawingRef.current && !isActivelyEditing) {
+      console.log('[TEXT-DEBUG] Applying initialData update (no active editing)')
       setCanvasState(parsed)
       setSelectedTextId(null)
       setSelectedImageId(null)
       setPendingImagePosition(null)
       imageCacheRef.current = {}
+    } else if (isActivelyEditing) {
+      console.log('[TEXT-DEBUG] Skipping initialData update - actively editing')
     }
     // Only react when caller provides new data — ignore onChange dependency
+    // Note: We intentionally do NOT include selectedTextId/selectedImageId as dependencies
+    // because we only want this to fire when initialData changes from external sources
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialData])
 
@@ -737,14 +880,20 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
         configureTextContext(context, block)
         context.fillStyle = block.color
 
-        const lines = block.text.split(/\n/g)
-        const lineHeight = block.fontSize * LINE_HEIGHT_MULTIPLIER
-        lines.forEach((line, index) => {
-          const y = block.y + index * lineHeight
-          context.fillText(line, block.x, y)
-        })
+        // Skip rendering text content if it's selected (textarea overlay will show it)
+        // But still render selection box and handles
+        const isSelected = selectedTextId === block.id && !readOnly
 
-        if (selectedTextId === block.id && !readOnly) {
+        if (!isSelected) {
+          const lines = block.text.split(/\n/g)
+          const lineHeight = block.fontSize * LINE_HEIGHT_MULTIPLIER
+          lines.forEach((line, index) => {
+            const y = block.y + index * lineHeight
+            context.fillText(line, block.x, y)
+          })
+        }
+
+        if (isSelected) {
           const bounds = getTextBounds(context, block)
           context.strokeStyle = "#6366f1"
           context.lineWidth = 1
@@ -796,6 +945,7 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
       const coordinates = getCanvasCoordinates(event, canvas, canvasSizeRef.current)
 
       if (tool === "image") {
+        console.log('[TEXT-DEBUG] setSelectedTextId(null) - image tool pointerdown')
         setSelectedTextId(null)
         setImageError(null)
 
@@ -860,6 +1010,7 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
           const bounds = getTextBounds(context, selectedTextBlock)
           const handle = getTextHandleAtPoint(bounds, coordinates)
           if (handle) {
+            console.log('[TEXT-DEBUG] setSelectedTextId - text resize handle clicked:', selectedTextBlock.id)
             setSelectedTextId(selectedTextBlock.id)
             setSelectedImageId(null)
             textResizeRef.current = {
@@ -883,10 +1034,12 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
           }
         }
 
+        // Check if clicking on an existing text block
         for (let index = textBlocks.length - 1; index >= 0; index -= 1) {
           const block = textBlocks[index]
           const bounds = getTextBounds(context, block)
           if (pointInBounds(coordinates, bounds)) {
+            console.log('[TEXT-DEBUG] setSelectedTextId - existing text block clicked:', block.id)
             setSelectedTextId(block.id)
             setSelectedImageId(null)
             textDragRef.current = {
@@ -902,6 +1055,17 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
           }
         }
 
+        // If text is already selected, clicking empty space deselects (finalizes) it
+        if (selectedTextId !== null) {
+          console.log('[TEXT-DEBUG] setSelectedTextId(null) - clicking empty space to finalize text')
+          setSelectedTextId(null)
+          setSelectedImageId(null)
+          setPendingImagePosition(null)
+          return
+        }
+
+        // Create new text when clicking on empty space (only if no text is selected)
+        // The useEffect will auto-select it after it's added to the state
         const newBlock: CanvasTextBlock = {
           id: generateTextId(),
           text: "New text",
@@ -913,12 +1077,13 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
           align: "left",
         }
 
+        console.log('[TEXT-DEBUG] Creating new text block:', newBlock.id)
         applyState((previous) => {
           const next = cloneState(previous)
           next.textBlocks = [...(next.textBlocks ?? []), newBlock]
+          console.log('[TEXT-DEBUG] applyState - new textBlocks count:', next.textBlocks.length)
           return next
         })
-        setSelectedTextId(newBlock.id)
         setSelectedImageId(null)
         setPendingImagePosition(null)
         return
@@ -928,6 +1093,7 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
         return
       }
 
+      console.log('[TEXT-DEBUG] setSelectedTextId(null) - pen/eraser tool pointerdown')
       setSelectedTextId(null)
       setSelectedImageId(null)
       setPendingImagePosition(null)
@@ -967,6 +1133,18 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
     (event: PointerEvent) => {
       if (readOnly) return
 
+      // Update cursor position for eraser and pen cursor visualization
+      if (tool === "eraser" || tool === "pen") {
+        const canvas = canvasRef.current
+        if (canvas) {
+          const rect = canvas.getBoundingClientRect()
+          setCursorPosition({
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top,
+          })
+        }
+      }
+
       if (imageResizeRef.current) {
         if (activePointerRef.current !== null && activePointerRef.current !== event.pointerId) {
           return
@@ -980,6 +1158,7 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
         const dimensions = getResizedRect(resizeMeta, coordinates, {
           minWidth: MIN_IMAGE_SIZE,
           minHeight: MIN_IMAGE_SIZE,
+          preserveAspectRatio: event.shiftKey,
         })
         applyState((previous) => {
           const next = cloneState(previous)
@@ -1121,11 +1300,16 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
       stroke.points.push(coordinates)
       drawScene(stroke)
     },
-    [applyState, drawScene, readOnly],
+    [applyState, drawScene, readOnly, tool],
   )
 
   const endStroke = useCallback(
     (event: PointerEvent) => {
+      // Clear cursor position when pointer leaves canvas
+      if (event.type === "pointerleave" || event.type === "pointercancel") {
+        setCursorPosition(null)
+      }
+
       if (textResizeRef.current) {
         const canvas = canvasRef.current
         if (canvas && canvas.hasPointerCapture(event.pointerId)) {
@@ -1208,6 +1392,7 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
         textBlocks: updated,
       })
       if (selectedTextId && !updated.some((block) => block.id === selectedTextId)) {
+        console.log('[TEXT-DEBUG] setSelectedTextId(null) - undo removed selected text')
         setSelectedTextId(null)
       }
       return
@@ -1237,6 +1422,7 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
       textBlocks: [],
       images: [],
     })
+    console.log('[TEXT-DEBUG] setSelectedTextId(null) - clear canvas')
     setSelectedTextId(null)
     setSelectedImageId(null)
     setPendingImagePosition(null)
@@ -1274,6 +1460,13 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
     }
   }, [endStroke, handlePointerDown, handlePointerMove, readOnly])
 
+  // Clear cursor position when tool changes away from eraser or pen
+  useEffect(() => {
+    if (tool !== "eraser" && tool !== "pen") {
+      setCursorPosition(null)
+    }
+  }, [tool])
+
   return (
     <div className={cn("retro-border flex flex-col bg-background", className)}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b-4 border-foreground bg-muted p-4">
@@ -1285,78 +1478,202 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
                   size="sm"
                   variant={tool === "pen" ? "default" : "outline"}
                   onClick={() => setTool("pen")}
+                  title="Pen"
                 >
-                  Pen
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                  >
+                    <path
+                      d="M14 2 L18 6 L6 18 L2 18 L2 14 Z"
+                      fill="currentColor"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M2 14 L6 18"
+                      stroke="white"
+                      strokeWidth="1.5"
+                    />
+                  </svg>
                 </Button>
                 <Button
                   size="sm"
                   variant={tool === "eraser" ? "default" : "outline"}
                   onClick={() => setTool("eraser")}
+                  title="Eraser"
                 >
-                  Eraser
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
+                    <path d="M22 21H7" />
+                    <path d="m5 11 9 9" />
+                  </svg>
                 </Button>
                 <Button
                   size="sm"
                   variant={tool === "text" ? "default" : "outline"}
                   onClick={() => setTool("text")}
+                  title="Text"
                 >
-                  Text
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="4 7 4 4 20 4 20 7" />
+                    <line x1="9" y1="20" x2="15" y2="20" />
+                    <line x1="12" y1="4" x2="12" y2="20" />
+                  </svg>
                 </Button>
                 <Button
                   size="sm"
                   variant={tool === "image" ? "default" : "outline"}
                   onClick={() => {
                     setTool("image")
+                    console.log('[TEXT-DEBUG] setSelectedTextId(null) - image tool button clicked')
                     setSelectedTextId(null)
                   }}
+                  title="Image"
                 >
-                  Image
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                  </svg>
                 </Button>
               </div>
 
-              <div className="flex items-center gap-1">
-                {COLOR_SWATCHES.map((swatch) => (
-                  <button
-                    key={swatch}
-                    type="button"
-                    onClick={() => {
-                      if (selectedTextBlock) {
-                        setTextColor(swatch)
-                        updateSelectedTextBlock({ color: swatch })
-                        return
-                      }
-
-                      if (tool === "text") {
-                        setTextColor(swatch)
-                        return
-                      }
-
-                      setTool("pen")
-                      setColor(swatch)
-                    }}
-                    className={cn(
-                      "size-6 rounded-full border border-border transition",
-                      activeColor === swatch ? "ring-2 ring-offset-2 ring-offset-background" : "",
-                    )}
-                    style={{ backgroundColor: swatch }}
-                    aria-label={`Use ${swatch} ink`}
+              <div className="relative flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setShowColorPicker(!showColorPicker)}
+                  className="flex h-8 items-center gap-2 rounded border-2 border-border bg-background px-2 transition hover:bg-muted"
+                  aria-label="Color picker"
+                >
+                  <div
+                    className="size-5 rounded-full border-2 border-border"
+                    style={{ backgroundColor: activeColor }}
                   />
-                ))}
+                  <span className="text-xs font-semibold">Color</span>
+                </button>
+
+                {showColorPicker && (
+                  <div
+                    ref={colorPickerRef}
+                    className="retro-border absolute left-0 top-10 z-20 bg-background p-3 shadow-lg"
+                  >
+                    <div className="space-y-2">
+                      <div
+                        onClick={handleColorPickerClick}
+                        className="relative h-8 w-64 cursor-crosshair rounded border-2 border-border"
+                        style={{
+                          background: "linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)",
+                        }}
+                      >
+                        <div
+                          className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-lg"
+                          style={{
+                            backgroundColor: activeColor,
+                            left: `${(() => {
+                              // Calculate position based on current color
+                              const hex = activeColor.replace('#', '')
+                              const r = parseInt(hex.substring(0, 2), 16) / 255
+                              const g = parseInt(hex.substring(2, 4), 16) / 255
+                              const b = parseInt(hex.substring(4, 6), 16) / 255
+                              const max = Math.max(r, g, b)
+                              const min = Math.min(r, g, b)
+                              const delta = max - min
+                              if (delta === 0) return 0
+                              let hue = 0
+                              if (max === r) hue = ((g - b) / delta) % 6
+                              else if (max === g) hue = (b - r) / delta + 2
+                              else hue = (r - g) / delta + 4
+                              hue = Math.round(hue * 60)
+                              if (hue < 0) hue += 360
+                              return (hue / 360) * 100
+                            })()}%`,
+                          }}
+                        />
+                      </div>
+                      <div className="grid grid-cols-8 gap-1.5">
+                        {COLOR_SWATCHES.map((swatch) => (
+                          <button
+                            key={swatch}
+                            type="button"
+                            onClick={() => {
+                              if (selectedTextBlock) {
+                                setTextColor(swatch)
+                                updateSelectedTextBlock({ color: swatch })
+                              } else if (tool === "text") {
+                                setTextColor(swatch)
+                              } else {
+                                setTool("pen")
+                                setColor(swatch)
+                              }
+                            }}
+                            className={cn(
+                              "size-6 rounded border border-border transition hover:scale-110",
+                              activeColor === swatch ? "ring-2 ring-foreground" : "",
+                            )}
+                            style={{ backgroundColor: swatch }}
+                            aria-label={`Use ${swatch} ink`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-center gap-1">
-                {STROKE_WIDTHS.map((width) => (
+              <div className="flex items-center gap-2">
+                {STROKE_WIDTHS.map((preset) => (
                   <button
-                    key={width}
+                    key={preset.value}
                     type="button"
-                    onClick={() => setStrokeWidth(width)}
+                    onClick={() => setStrokeWidth(preset.value)}
                     className={cn(
-                      "flex h-6 items-center rounded border border-border px-2 text-xs font-semibold uppercase",
-                      strokeWidth === width ? "bg-foreground text-background" : "bg-background",
+                      "flex h-8 w-8 items-center justify-center rounded border-2 border-border bg-background transition hover:bg-muted",
+                      strokeWidth === preset.value ? "border-foreground ring-2 ring-foreground ring-offset-2" : "",
                     )}
-                    aria-label={`Brush width ${width}px`}
+                    aria-label={`Brush width ${preset.value}px`}
                   >
-                    {width}px
+                    <div
+                      className="rounded-full bg-foreground"
+                      style={{
+                        width: `${preset.value}px`,
+                        height: `${preset.value}px`,
+                      }}
+                    />
                   </button>
                 ))}
               </div>
@@ -1391,8 +1708,69 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
             "h-full w-full touch-none",
             readOnly && "pointer-events-none",
             tool === "image" && !pendingImagePosition && !selectedImageId && "cursor-crosshair",
+            tool === "eraser" && "cursor-none",
+            tool === "pen" && "cursor-none",
           )}
         />
+
+        {/* Custom eraser cursor */}
+        {!readOnly && tool === "eraser" && cursorPosition && canvasRef.current && (
+          <div
+            className="pointer-events-none absolute z-30 rounded-full border-2 border-foreground"
+            style={{
+              left: `${cursorPosition.x}px`,
+              top: `${cursorPosition.y}px`,
+              width: `${strokeWidth}px`,
+              height: `${strokeWidth}px`,
+              transform: "translate(-50%, -50%)",
+              backgroundColor: "rgba(255, 255, 255, 0.5)",
+            }}
+          />
+        )}
+
+        {/* Custom pen cursor */}
+        {!readOnly && tool === "pen" && cursorPosition && canvasRef.current && (
+          <div
+            className="pointer-events-none absolute z-30"
+            style={{
+              left: `${cursorPosition.x - 2}px`,
+              top: `${cursorPosition.y - 18}px`,
+            }}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 20 20"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              style={{
+                filter: "drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))",
+              }}
+            >
+              {/* Pencil body */}
+              <path
+                d="M14 2 L18 6 L6 18 L2 18 L2 14 Z"
+                fill={color}
+                stroke="white"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+              {/* Pencil tip */}
+              <path
+                d="M2 14 L6 18"
+                stroke="white"
+                strokeWidth="1.5"
+              />
+              {/* Pencil diagonal line */}
+              <path
+                d="M14 2 L2 14"
+                stroke="white"
+                strokeWidth="0.5"
+                opacity="0.5"
+              />
+            </svg>
+          </div>
+        )}
 
         {/* Inline prompt box for image generation */}
         {!readOnly && promptBoxPosition && (
@@ -1450,6 +1828,7 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
 
         {/* Inline text editing overlay and toolbar */}
         {!readOnly && selectedTextBlock && canvasRef.current && (() => {
+          console.log('[TEXT-DEBUG] Text overlay rendering for block:', selectedTextBlock.id)
           const { screenX, screenY } = getTextScreenPosition(selectedTextBlock, canvasRef.current, canvasState.size)
           const rect = canvasRef.current.getBoundingClientRect()
           const scaleX = rect.width / canvasState.size.width
