@@ -24,6 +24,7 @@ interface BriefEditorProps {
   isLocked?: boolean
   isSaving?: boolean
   isLocking?: boolean
+  showReveal?: boolean
 }
 
 type EditableField = "productName" | "businessProblem" | "targetAudience" | "objective"
@@ -37,6 +38,7 @@ export function BriefEditor({
   isLocked = false,
   isSaving = false,
   isLocking = false,
+  showReveal = false,
 }: BriefEditorProps) {
   const [brief, setBrief] = useState<CampaignBrief>({
     productName: "",
@@ -137,7 +139,13 @@ export function BriefEditor({
   }
 
   return (
-    <div className="retro-border space-y-6 bg-card p-8">
+    <div
+      className={`retro-border space-y-6 bg-card p-8 transition-all duration-700 ${
+        showReveal
+          ? "animate-in fade-in slide-in-from-bottom-4 zoom-in-95"
+          : ""
+      }`}
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-3xl font-bold">Campaign Brief</h2>
         {!isLocked && (

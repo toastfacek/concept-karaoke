@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 
+import { FileText } from "lucide-react"
+
 import { Canvas } from "@/components/canvas"
+import { BriefViewDialog } from "@/components/brief-view-dialog"
 import { useRealtime } from "@/components/realtime-provider"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -45,6 +48,14 @@ type AdLobRecord = {
   presentCompletedAt: string | null
 }
 
+type CampaignBrief = {
+  productName: string
+  productCategory: string
+  businessProblem: string
+  targetAudience: string
+  objective: string
+}
+
 type GameState = SnapshotDrivenState<GamePlayer> & {
   currentPhase: CreationPhase | null
   phaseStartTime: string | null
@@ -52,6 +63,7 @@ type GameState = SnapshotDrivenState<GamePlayer> & {
   presentSequence: string[]
   adlobs: AdLobRecord[]
   phaseDurationSeconds: number
+  brief: CampaignBrief | null
 }
 
 const CREATION_SEQUENCE: CreationPhase[] = ["big_idea", "visual", "headline", "pitch"]
@@ -116,6 +128,7 @@ export default function CreatePage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isTogglingReady, setIsTogglingReady] = useState(false)
   const [isAdvancingPhase, setIsAdvancingPhase] = useState(false)
+  const [isBriefDialogOpen, setIsBriefDialogOpen] = useState(false)
 
   const [bigIdeaInput, setBigIdeaInput] = useState("")
   const [visualNotes, setVisualNotes] = useState("")
@@ -168,6 +181,15 @@ export default function CreatePage() {
           adlobs: gameData.adlobs,
           version: typeof gameData.version === "number" ? gameData.version : 0,
           phaseDurationSeconds: gameData.phaseDurationSeconds ?? 60,
+          brief: gameData.brief
+            ? {
+                productName: gameData.brief.productName,
+                productCategory: gameData.brief.productCategory,
+                businessProblem: gameData.brief.businessProblem,
+                targetAudience: gameData.brief.targetAudience,
+                objective: gameData.brief.objective,
+              }
+            : null,
         })
 
         const localPlayer = loadPlayer(roomCode)
@@ -794,7 +816,18 @@ export default function CreatePage() {
               {game?.currentPhase ? PHASE_LABELS[game.currentPhase] : "Creation Rounds"}
             </h1>
           </div>
-          <Timer endTime={phaseEndTime} />
+          <div className="flex flex-col items-end gap-2">
+            <Timer endTime={phaseEndTime} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsBriefDialogOpen(true)}
+              className="gap-2"
+            >
+              <FileText className="size-4" />
+              View Brief
+            </Button>
+          </div>
         </header>
 
         {error && <p className="font-mono text-sm font-medium text-destructive">{error}</p>}
@@ -862,6 +895,12 @@ export default function CreatePage() {
           )}
         </section>
       </div>
+
+      <BriefViewDialog
+        brief={game?.brief ?? null}
+        isOpen={isBriefDialogOpen}
+        onOpenChange={setIsBriefDialogOpen}
+      />
     </main>
   )
 }

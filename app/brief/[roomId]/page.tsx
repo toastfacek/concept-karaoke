@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 
 import { BriefEditor } from "@/components/brief-editor"
+import { BriefLoadingModal } from "@/components/brief-loading-modal"
 import { Button } from "@/components/ui/button"
 import { PlayerList } from "@/components/player-list"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
@@ -67,10 +68,13 @@ export default function BriefPage() {
   const [isLockingBrief, setIsLockingBrief] = useState(false)
   const [isUpdatingReady, setIsUpdatingReady] = useState(false)
   const [isAdvancing, setIsAdvancing] = useState(false)
+  const [showLoadingModal, setShowLoadingModal] = useState(false)
+  const [showBriefReveal, setShowBriefReveal] = useState(false)
   const realtimeConnectionKeyRef = useRef<string | null>(null)
   const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
   const tokenRef = useRef<RealtimeToken | null>(null)
   const latestGameRef = useRef<BriefGameState | null>(null)
+  const initialLoadRef = useRef(true)
 
   useEffect(() => {
     setStoredPlayer(loadPlayer(roomCode))
@@ -83,6 +87,11 @@ export default function BriefPage() {
         setError(null)
       }
 
+      // Show loading modal on initial load
+      if (initialLoadRef.current && !silent) {
+        setShowLoadingModal(true)
+      }
+
       try {
         const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
         const payload = await response.json()
@@ -90,6 +99,7 @@ export default function BriefPage() {
         if (!response.ok || !payload.success) {
           setError(payload.error ?? "Unable to load briefing room.")
           setGame(null)
+          setShowLoadingModal(false)
           return
         }
 
@@ -125,6 +135,20 @@ export default function BriefPage() {
 
         setBriefDraft(briefResponse ?? EMPTY_BRIEF)
 
+        // If this is initial load and brief has content, trigger reveal animation
+        if (initialLoadRef.current && briefResponse && briefResponse.productName) {
+          setTimeout(() => {
+            setShowLoadingModal(false)
+            setTimeout(() => {
+              setShowBriefReveal(true)
+            }, 200)
+          }, 1500) // Keep modal visible for a minimum time for better UX
+          initialLoadRef.current = false
+        } else if (initialLoadRef.current) {
+          setShowLoadingModal(false)
+          initialLoadRef.current = false
+        }
+
         const localPlayer = loadPlayer(roomCode)
         if (localPlayer) {
           const latest = payload.game.players.find((player: GamePlayer) => player.id === localPlayer.id)
@@ -143,6 +167,7 @@ export default function BriefPage() {
         console.error(fetchError)
         setError("Unable to load briefing room.")
         setGame(null)
+        setShowLoadingModal(false)
       } finally {
         if (!silent) {
           setLoading(false)
@@ -583,6 +608,11 @@ export default function BriefPage() {
 
   return (
     <main className="min-h-screen bg-background p-8">
+      <BriefLoadingModal
+        isOpen={showLoadingModal}
+        category={game?.brief?.productCategory ?? "All"}
+      />
+
       <div className="mx-auto max-w-5xl space-y-8">
         <div className="retro-border bg-card p-6 text-center">
           <h1 className="text-4xl font-bold uppercase">Brief Generation</h1>
@@ -602,6 +632,7 @@ export default function BriefPage() {
           isLocked={!isBriefing || loading}
           isSaving={isSavingBrief}
           isLocking={isLockingBrief}
+          showReveal={showBriefReveal}
         />
 
         <div className="retro-border bg-card p-8">

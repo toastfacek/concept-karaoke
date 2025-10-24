@@ -5,6 +5,8 @@ import { TABLES } from "@/lib/db"
 import { transitionGameState } from "@/lib/game-state-machine"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 import type { CreationPhase, GameStatus } from "@/lib/types"
+import { env, requireServerEnv } from "@/lib/env"
+import { SPECIFIC_PRODUCT_CATEGORIES } from "@/lib/types"
 
 const requestSchema = z.object({
   code: z
@@ -14,6 +16,74 @@ const requestSchema = z.object({
     .transform((value) => value.toUpperCase()),
   playerId: z.string().uuid("Invalid player identifier"),
 })
+
+const briefSchema = z.object({
+  productName: z.string().min(1),
+  productCategory: z.string().min(1),
+  businessProblem: z.string().min(1),
+  targetAudience: z.string().min(1),
+  objective: z.string().min(1),
+})
+
+const GEMINI_GENERATE_URL =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+
+async function generateBrief(productCategory: string) {
+  const geminiKey = env.server.GEMINI_API_KEY ?? requireServerEnv("GEMINI_API_KEY")
+
+  // If "All" is selected, randomly pick from specific categories
+  const category = productCategory === "All"
+    ? SPECIFIC_PRODUCT_CATEGORIES[Math.floor(Math.random() * SPECIFIC_PRODUCT_CATEGORIES.length)]
+    : productCategory
+
+  const prompt = [
+    `Generate a creative advertising brief for a fictional product in the "${category}" category.`,
+    "Respond with valid JSON that matches this TypeScript interface:",
+    "{",
+    '  "productName": string,',
+    '  "productCategory": string,',
+    '  "businessProblem": string,',
+    '  "targetAudience": string,',
+    '  "objective": string',
+    "}",
+    `The productCategory field MUST be exactly: "${category}"`,
+    "Make the productName creative and fitting for this category.",
+    "Keep it playful but useful for a collaborative improv game.",
+    "Do not wrap the JSON in markdown fences or add extra text.",
+  ].join("\n")
+
+  const completionResponse = await fetch(`${GEMINI_GENERATE_URL}?key=${geminiKey}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        responseMimeType: "application/json",
+      },
+    }),
+  })
+
+  if (!completionResponse.ok) {
+    const errorText = await completionResponse.text()
+    throw new Error(`Gemini request failed: ${errorText}`)
+  }
+
+  const completionPayload = await completionResponse.json()
+  const textContent = completionPayload?.candidates?.[0]?.content?.parts?.[0]?.text
+  if (typeof textContent !== "string") {
+    throw new Error("Unexpected Gemini response format")
+  }
+
+  return briefSchema.parse(JSON.parse(textContent))
+}
 
 export async function POST(request: Request) {
   try {
@@ -107,6 +177,22 @@ export async function POST(request: Request) {
       throw resetReadyError
     }
 
+    // Generate AI brief based on product category
+    let generatedBrief
+    try {
+      generatedBrief = await generateBrief(room.product_category ?? "All")
+    } catch (briefError) {
+      console.error("Failed to generate brief, using empty brief as fallback", briefError)
+      // Fallback to empty brief if generation fails
+      generatedBrief = {
+        productName: "",
+        productCategory: room.product_category ?? "All",
+        businessProblem: "",
+        targetAudience: "",
+        objective: "",
+      }
+    }
+
     const { data: existingBrief, error: briefSelectError } = await supabase
       .from(TABLES.campaignBriefs)
       .select("id")
@@ -117,14 +203,31 @@ export async function POST(request: Request) {
       throw briefSelectError
     }
 
-    if (!existingBrief) {
+    if (existingBrief) {
+      // Update existing brief with generated content
+      const { error: updateBriefError } = await supabase
+        .from(TABLES.campaignBriefs)
+        .update({
+          product_name: generatedBrief.productName,
+          product_category: generatedBrief.productCategory,
+          business_problem: generatedBrief.businessProblem,
+          target_audience: generatedBrief.targetAudience,
+          objective: generatedBrief.objective,
+        })
+        .eq("id", existingBrief.id)
+
+      if (updateBriefError) {
+        throw updateBriefError
+      }
+    } else {
+      // Create new brief with generated content
       const { error: insertBriefError } = await supabase.from(TABLES.campaignBriefs).insert({
         room_id: room.id,
-        product_name: "",
-        product_category: room.product_category ?? "All",
-        business_problem: "",
-        target_audience: "",
-        objective: "",
+        product_name: generatedBrief.productName,
+        product_category: generatedBrief.productCategory,
+        business_problem: generatedBrief.businessProblem,
+        target_audience: generatedBrief.targetAudience,
+        objective: generatedBrief.objective,
       })
 
       if (insertBriefError) {
@@ -135,6 +238,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       status: nextState.status,
+      brief: generatedBrief,
     })
   } catch (error) {
     console.error("Failed to start game", error)
