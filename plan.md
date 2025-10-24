@@ -1,8 +1,31 @@
 # Concept Karaoke Delivery Plan
 
-## Recent Work Summary (February 2025)
+## Recent Work Summary (October 2025)
 
-### Completed
+### Completed (Latest Session - October 24, 2025)
+- **Terminology Refactor - COMPLETE** ✅
+  - Applied database migrations via Supabase MCP (mantra→pitch, pitching→presenting)
+  - Regenerated `lib/database.types.ts` from updated schema
+  - Updated all 27 files with new terminology across codebase
+  - Fixed present API to handle room codes (was causing 500 error)
+  - All TypeScript compilation passing with zero errors
+
+- **Voting System Implementation - COMPLETE** ✅
+  - Implemented full `/api/votes` endpoint with validation:
+    - Prevents duplicate votes
+    - Prevents self-voting
+    - Auto-transitions game to "results" when all votes are in
+  - Updated vote page to fetch and display real game data
+  - Updated results page to show actual vote counts and winner
+  - Added loading states and error handling
+  - Data persistence verified in Supabase database
+
+- **Bug Fixes**:
+  - Fixed present API UUID/code handling issue (500 error)
+  - Fixed vote/results pages to use real data instead of samples
+  - Updated all navigation route mappings
+
+### Previous Completed Work
 - **Canvas WYSIWYG Improvements**: Migrated test page improvements to main game UI
   - Fixed canvas clearing circular state update issues
   - Fixed text tool double-click bug and improved editing UX
@@ -11,24 +34,22 @@
   - Removed 20-character minimum requirement for big idea phase
   - Updated brief generation flow
   - Added game settings selection interface
-- **Terminology Refactor (Partial)**:
-  - Renamed `/app/pitch` → `/app/present` route
-  - Updated core types: `CREATION_PHASES` now uses `"pitch"` instead of `"mantra"`
-  - Updated state machine: `creating` → `presenting` transition
-  - **⚠️ IN PROGRESS**: Database migrations written but not yet applied (see Terminology Refactor Project section below)
 
 ### Current State
-- **Unstaged Changes**: Multiple deleted files (`app/api/adlobs/[id]/mantra/route.ts`, `app/api/games/[id]/pitch/route.ts`, `app/pitch/[roomId]/page.tsx`)
-- **New Files**: Pitch API endpoint and present routes/pages ready to replace old structure
-- **Database Migrations Ready**: Two migration files waiting to be applied via Supabase dashboard
-- **Main Branch**: On `main`, ~1,000 lines removed, ~270 lines added in working tree
+- **Main Branch**: Commit `697c39c` - All changes committed and pushed ✅
+- **Database**: Migrations applied, schema updated with new terminology ✅
+- **Game Flow**: Fully functional from lobby → briefing → creating → presenting → voting → results ✅
+- **Data Persistence**: All game data properly saved and retrieved from Supabase ✅
 
 ### Next Session Priorities
-1. **Apply database migrations** through Supabase dashboard (blocking for deployment)
-2. Complete terminology refactor code updates (~180 references remaining across 23-25 files)
-3. Regenerate `lib/database.types.ts` after migrations
-4. Test complete game flow end-to-end
-5. Update documentation to reflect terminology changes
+1. ✅ ~~Apply database migrations~~ (COMPLETE)
+2. ✅ ~~Complete terminology refactor~~ (COMPLETE)
+3. ✅ ~~Regenerate database types~~ (COMPLETE)
+4. ✅ ~~Implement voting system~~ (COMPLETE)
+5. Multi-player testing and polish
+6. Canvas visual display improvements (show actual visuals in vote/results pages)
+7. Realtime vote updates via websocket
+8. End-to-end playtesting with multiple players
 
 ---
 
@@ -146,69 +167,120 @@
 
 ---
 
-## Terminology Refactor Project (October 2025)
+## Terminology Refactor Project - ✅ COMPLETE (October 24, 2025)
 
 ### Background & Motivation
 Renamed `/app/pitch` → `/app/present` to distinguish between:
 - **"Pitch"** (Creation Phase Round 4): Writing the pitch/rationale during creation
 - **"Presenting"** (Game Phase): Sharing completed campaigns with others
 
-However, legacy terminology (e.g., "mantra", "pitching", "pitcher") remained in database and code, creating confusion for:
-- Future development and LLM-assisted coding
-- New developers understanding the codebase
-- Code consistency and maintainability
+Legacy terminology (e.g., "mantra", "pitching", "pitcher") was causing confusion for development and code maintainability.
 
-### Terminology Schema (Confirmed)
+### Terminology Schema
 | Concept | Old Name | New Name | Scope |
 |---------|----------|----------|-------|
 | Creation Round 4 | `mantra` | `pitch` | DB columns, API, UI labels |
 | Presentation Phase | `pitching` | `presenting` | DB status, state machine |
 | Person Presenting | `pitcher` | `presenter` | DB columns, code refs |
 
-### Completed Work ✅
+### Completed Work Summary ✅
 
-#### 1. Database Migrations Created
+#### 1. Database Migrations - ✅ APPLIED
 **Files:**
 - `supabase/migrations/20250206_rename_mantra_to_pitch.sql`
 - `supabase/migrations/20250207_rename_pitching_to_presenting.sql`
 
-**Changes:**
-- `mantra_text` → `pitch_text`
-- `mantra_created_by` → `pitch_created_by`
-- Game phase enum: `"mantra"` → `"pitch"`
-- Game status enum: `"pitching"` → `"presenting"`
-- `assigned_pitcher` → `assigned_presenter`
-- `current_pitch_index` → `current_present_index`
-- `pitch_sequence` → `present_sequence`
-- `pitch_order` → `present_order`
-- `pitch_started_at` → `present_started_at`
-- `pitch_completed_at` → `present_completed_at`
+**Database Changes Applied:**
+- ✅ `mantra_text` → `pitch_text`
+- ✅ `mantra_created_by` → `pitch_created_by`
+- ✅ Game phase enum: `"mantra"` → `"pitch"`
+- ✅ Game status enum: `"pitching"` → `"presenting"`
+- ✅ `assigned_pitcher` → `assigned_presenter`
+- ✅ `current_pitch_index` → `current_present_index`
+- ✅ `pitch_sequence` → `present_sequence`
+- ✅ `pitch_order` → `present_order`
+- ✅ `pitch_started_at` → `present_started_at`
+- ✅ `pitch_completed_at` → `present_completed_at`
 
-**Status:** ⚠️ **PENDING MANUAL APPLICATION**
-- Migrations are written but need to be applied via Supabase dashboard
-- Must be applied before code changes are deployed
+**Status:** ✅ **APPLIED VIA SUPABASE MCP**
 
-#### 2. Core TypeScript Types Updated
+#### 2. Core TypeScript Types - ✅ UPDATED
 **Files:**
-- `lib/types.ts`: Updated `GAME_STATUSES`, `CREATION_PHASES`, `AdLob` interface
-- `lib/game-state-machine.ts`: Updated status transitions (`creating` → `presenting`)
+- ✅ `lib/types.ts`: Updated `GAME_STATUSES`, `CREATION_PHASES`, `AdLob` interface
+- ✅ `lib/game-state-machine.ts`: Updated status transitions (`creating` → `presenting`)
+- ✅ `lib/database.types.ts`: Regenerated from updated schema
+- ✅ `packages/realtime-shared/src/index.ts`: Updated `CreationPhase` type
 
-**Changes:**
-```typescript
-// Before
-GAME_STATUSES = ["lobby", "briefing", "creating", "pitching", "voting", "results"]
-CREATION_PHASES = ["big_idea", "visual", "headline", "mantra"]
-creating: ["pitching"]
+#### 3. API Endpoints - ✅ UPDATED
+- ✅ `app/api/adlobs/[id]/pitch/route.ts` - Renamed from mantra, updated column names
+- ✅ `app/api/games/[id]/present/route.ts` - Renamed from pitch, updated all terminology
+- ✅ `app/api/games/[id]/phase/route.ts` - Updated presenting transition logic
+- ✅ `app/api/games/[id]/route.ts` - Updated GET/PATCH with new terminology
+- ✅ Fixed present API to handle room codes (was causing 500 error)
 
-// After
-GAME_STATUSES = ["lobby", "briefing", "creating", "presenting", "voting", "results"]
-CREATION_PHASES = ["big_idea", "visual", "headline", "pitch"]
-creating: ["presenting"]
-```
+#### 4. Frontend Pages - ✅ UPDATED
+- ✅ `app/create/[roomId]/page.tsx` - Using `pitch` for Round 4
+- ✅ `app/present/[roomId]/page.tsx` - Using `presenting` terminology
+- ✅ `app/lobby/[roomId]/page.tsx` - Updated navigation mappings
+- ✅ `app/brief/[roomId]/page.tsx` - Updated navigation mappings
+- ✅ `app/vote/[roomId]/page.tsx` - Updated to `presenter` and `pitch`
+- ✅ `app/results/[roomId]/page.tsx` - Updated to `presenter` and `pitch`
 
-### Remaining Work 🚧
+#### 5. Sample Data - ✅ UPDATED
+- ✅ `lib/sample-data.ts` - Updated to use `pitch` and `assignedPresenter`
 
-#### Estimated Scope
+### Outcome
+- ✅ All 27 files updated with consistent terminology
+- ✅ TypeScript compilation: Zero errors
+- ✅ Database schema aligned with code
+- ✅ Full game flow tested and working
+- ✅ Committed and pushed to main branch (commit `697c39c`)
+
+---
+
+## Voting System Implementation - ✅ COMPLETE (October 24, 2025)
+
+### Implementation Summary
+Built complete voting system with real data persistence and automatic game state transitions.
+
+### Completed Components
+
+#### 1. Vote API Endpoint - ✅ `/app/api/votes/route.ts`
+- ✅ Full request validation using Zod
+- ✅ Validates game is in voting phase
+- ✅ Prevents duplicate votes (checks existing votes)
+- ✅ Prevents self-voting (can't vote for own campaign)
+- ✅ Inserts vote into database
+- ✅ Increments vote_count on adlobs table
+- ✅ Checks if all players have voted
+- ✅ Auto-transitions game to "results" status when complete
+- ✅ Returns vote status and transition state
+
+#### 2. Vote Page - ✅ `/app/vote/[roomId]/page.tsx`
+- ✅ Fetches real game data from `/api/games/[roomId]`
+- ✅ Displays actual campaigns from current game
+- ✅ Uses player storage to identify current player
+- ✅ Prevents voting for own campaign (UI disabled)
+- ✅ Submits votes to `/api/votes` endpoint
+- ✅ Polls for game status changes
+- ✅ Auto-redirects to results when voting complete
+- ✅ Loading states and error handling
+
+#### 3. Results Page - ✅ `/app/results/[roomId]/page.tsx`
+- ✅ Fetches real game data with vote counts
+- ✅ Sorts campaigns by vote count descending
+- ✅ Displays actual winner with vote totals
+- ✅ Shows all campaigns ranked by votes
+- ✅ Displays presenter names and emojis
+- ✅ "Play Again" button to start new game
+
+### Data Verification
+- ✅ Vote data persists correctly in Supabase `votes` table
+- ✅ Vote counts update in `adlobs` table
+- ✅ Game status transitions to "results" automatically
+- ✅ All campaigns from game displayed correctly
+
+### Previous Implementation Details (Now Archived)
 - **Files to modify:** 23-25 files
 - **Code references:** ~180 remaining updates
 - **Time estimate:** 4-6 hours
