@@ -109,22 +109,16 @@ export async function POST(request: Request) {
       throw insertError
     }
 
-    // Increment the vote count on the adlob
-    const { error: updateError } = await supabase.rpc("increment_vote_count", { adlob_id: adlobId })
+    const currentVoteCount = Number(adlob?.vote_count ?? 0) || 0
+    const nextVoteCount = currentVoteCount + 1
 
-    // If the RPC doesn't exist, fall back to manual update
+    const { error: updateError } = await supabase
+      .from(TABLES.adLobs)
+      .update({ vote_count: nextVoteCount })
+      .eq("id", adlobId)
+
     if (updateError) {
-      const currentVoteCount = Number(adlob?.vote_count ?? 0) || 0
-      const nextVoteCount = currentVoteCount + 1
-
-      const { error: fallbackError } = await supabase
-        .from(TABLES.adLobs)
-        .update({ vote_count: nextVoteCount })
-        .eq("id", adlobId)
-
-      if (fallbackError) {
-        throw fallbackError
-      }
+      throw updateError
     }
 
     // Check if all players have voted

@@ -10,7 +10,7 @@ import { PlayerStatus } from "@/components/player-status"
 import { canvasHasContent, type CanvasState } from "@/lib/canvas"
 import { cn } from "@/lib/utils"
 
-type Phase = "big_idea" | "visual" | "headline" | "mantra"
+type Phase = "big_idea" | "visual" | "headline" | "pitch"
 
 interface TestAdLob {
   bigIdea: string
@@ -22,7 +22,7 @@ interface TestAdLob {
     canvasData: CanvasState | null
     notes: string
   }
-  mantra: string
+  pitch: string
   brief: string
 }
 
@@ -63,7 +63,7 @@ function createEmptyAdLob(): TestAdLob {
       canvasData: null,
       notes: "",
     },
-    mantra: "",
+    pitch: "",
     brief: DEFAULT_BRIEF,
   }
 }
@@ -93,11 +93,13 @@ export default function CreateTestPage() {
     if (stored) {
       try {
         const parsed = JSON.parse(stored)
-        // Ensure brief exists for old data
-        if (!parsed.brief) {
-          parsed.brief = DEFAULT_BRIEF
+        const normalized: TestAdLob = {
+          ...createEmptyAdLob(),
+          ...parsed,
+          pitch: parsed.pitch ?? parsed.mantra ?? "",
+          brief: parsed.brief ?? DEFAULT_BRIEF,
         }
-        setAdlob(parsed)
+        setAdlob(normalized)
         setLastSaved(new Date())
       } catch (error) {
         console.error("Failed to load saved data:", error)
@@ -161,17 +163,17 @@ export default function CreateTestPage() {
     {
       id: "visual",
       label: "Visual",
-      completed: canvasHasContent(adlob.visual.canvasData) && adlob.visual.notes.trim().length >= 10
+      completed: canvasHasContent(adlob.visual.canvasData) && adlob.visual.notes.trim().length >= 10,
     },
     {
       id: "headline",
       label: "Headline",
-      completed: canvasHasContent(adlob.headline.canvasData) && adlob.headline.notes.trim().length >= 3
+      completed: canvasHasContent(adlob.headline.canvasData) && adlob.headline.notes.trim().length >= 3,
     },
-    { id: "mantra", label: "Mantra", completed: countWords(adlob.mantra) >= 3 },
+    { id: "pitch", label: "Pitch", completed: countWords(adlob.pitch) >= 3 },
   ]
 
-  const mantraWordCount = countWords(adlob.mantra)
+  const pitchWordCount = countWords(adlob.pitch)
   const completedPhases = phaseConfig.filter((p) => p.completed).map((p) => p.id)
 
   return (
@@ -446,12 +448,12 @@ export default function CreateTestPage() {
             </div>
           )}
 
-          {currentPhase === "mantra" && (
+          {currentPhase === "pitch" && (
             <div className="mx-auto max-w-3xl space-y-4">
               <div>
-                <h2 className="mb-2 text-2xl font-bold">Mantra</h2>
+                <h2 className="mb-2 text-2xl font-bold">Pitch</h2>
                 <p className="text-sm text-muted-foreground">
-                  Write the pitch. Synthesize everything into a compelling mantra (50-100 words target).
+                  Write the final pitch. Synthesize everything into a compelling summary (50-100 words target).
                 </p>
 
                 <div className="mt-3 space-y-2">
@@ -479,30 +481,30 @@ export default function CreateTestPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="mantra-input">Your Mantra</Label>
+                <Label htmlFor="pitch-input">Your Pitch</Label>
                 <Textarea
-                  id="mantra-input"
-                  value={adlob.mantra}
-                  onChange={(e) => updateAdlob((prev) => ({ ...prev, mantra: e.target.value }))}
-                  placeholder="Craft your pitch mantra here..."
+                  id="pitch-input"
+                  value={adlob.pitch}
+                  onChange={(e) => updateAdlob((prev) => ({ ...prev, pitch: e.target.value }))}
+                  placeholder="Craft your pitch here..."
                   rows={10}
                   className="text-base"
                 />
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <div className="space-x-4">
-                    <span>{mantraWordCount} words</span>
-                    <span>{adlob.mantra.length}/1200 characters</span>
+                    <span>{pitchWordCount} words</span>
+                    <span>{adlob.pitch.length}/1200 characters</span>
                   </div>
-                  {mantraWordCount < 3 && (
+                  {pitchWordCount < 3 && (
                     <span className="text-amber-600">Need at least 3 words</span>
                   )}
-                  {mantraWordCount >= 3 && mantraWordCount < 50 && (
+                  {pitchWordCount >= 3 && pitchWordCount < 50 && (
                     <span className="text-blue-600">Target: 50-100 words</span>
                   )}
-                  {mantraWordCount >= 50 && mantraWordCount <= 100 && (
+                  {pitchWordCount >= 50 && pitchWordCount <= 100 && (
                     <span className="text-green-600">Perfect length! ✓</span>
                   )}
-                  {mantraWordCount > 100 && (
+                  {pitchWordCount > 100 && (
                     <span className="text-amber-600">Over target (but okay!)</span>
                   )}
                 </div>

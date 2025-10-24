@@ -335,7 +335,7 @@ async function handleAdvancePhase(socket: WebSocket, payload: ClientToServerEven
 
   const updated = registry.updateRoom(roomCode, (state) => {
     const next = cloneSnapshot(state)
-    const phases: Array<RoomSnapshot["currentPhase"]> = [null, "big_idea", "visual", "headline", "mantra"]
+    const phases: Array<RoomSnapshot["currentPhase"]> = [null, "big_idea", "visual", "headline", "pitch"]
     const currentIndex = phases.indexOf(state.currentPhase ?? null)
     const nextPhase = phases[(currentIndex + 1) % phases.length]
     next.currentPhase = nextPhase

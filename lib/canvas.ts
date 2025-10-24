@@ -24,7 +24,7 @@ export const canvasImageSchema = z.object({
   rotation: z.number().optional(),
 })
 
-const FONT_FAMILIES = ["Inter", "Georgia", "Space Mono", "Bangers", "Space Grotesk"] as const
+const FONT_FAMILIES = ["Inter", "Georgia", "Space Mono", "Bangers", "Space Grotesk", "IBM Plex Mono", "Impact"] as const
 
 export const canvasTextBlockSchema = z.object({
   id: z.string().min(1),
