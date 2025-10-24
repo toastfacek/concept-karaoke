@@ -61,7 +61,7 @@ export default function CreateGamePage() {
         <div className="text-center">
           <h1 className="text-4xl font-bold uppercase">Create Game</h1>
           <p className="mt-2 font-mono text-sm text-muted-foreground">
-            Pick your name and emoji. We’ll handle the lobby code.
+            Pick your name and emoji!
           </p>
         </div>
 
@@ -99,7 +99,7 @@ export default function CreateGamePage() {
           {error && <p className="text-sm font-medium text-destructive">{error}</p>}
 
           <Button onClick={handleCreateGame} disabled={!name || isCreating} size="lg" className="w-full">
-            {isCreating ? "Creating..." : "Spin Up Lobby"}
+            {isCreating ? "Creating..." : "Create Game"}
           </Button>
 
           <Button variant="ghost" onClick={() => router.push("/")} className="w-full">
