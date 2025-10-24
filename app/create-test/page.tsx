@@ -5,6 +5,8 @@ import { Canvas } from "@/components/canvas"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { PhaseProgress } from "@/components/phase-progress"
+import { PlayerStatus } from "@/components/player-status"
 import { canvasHasContent, type CanvasState } from "@/lib/canvas"
 import { cn } from "@/lib/utils"
 
@@ -70,12 +72,20 @@ function countWords(text: string): number {
   return text.trim().split(/\s+/).filter((word) => word.length > 0).length
 }
 
+// Mock player data for testing multiplayer UI
+const MOCK_PLAYERS = [
+  { id: "1", name: "You", emoji: "🎨", isReady: false, isYou: true },
+  { id: "2", name: "Alex", emoji: "🚀", isReady: true, isYou: false },
+  { id: "3", name: "Jordan", emoji: "✨", isReady: false, isYou: false },
+]
+
 export default function CreateTestPage() {
   const [currentPhase, setCurrentPhase] = useState<Phase>("big_idea")
   const [adlob, setAdlob] = useState<TestAdLob>(createEmptyAdLob)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [saveTimer, setSaveTimer] = useState<NodeJS.Timeout | null>(null)
   const [showBrief, setShowBrief] = useState(false)
+  const [mockPlayers, setMockPlayers] = useState(MOCK_PLAYERS)
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -140,6 +150,12 @@ export default function CreateTestPage() {
     URL.revokeObjectURL(url)
   }, [adlob])
 
+  const toggleMockPlayerReady = useCallback((playerId: string) => {
+    setMockPlayers((prev) =>
+      prev.map((p) => (p.id === playerId ? { ...p, isReady: !p.isReady } : p))
+    )
+  }, [])
+
   const phaseConfig: Array<{ id: Phase; label: string; completed: boolean }> = [
     { id: "big_idea", label: "Big Idea", completed: adlob.bigIdea.trim().length >= 20 },
     {
@@ -156,6 +172,7 @@ export default function CreateTestPage() {
   ]
 
   const mantraWordCount = countWords(adlob.mantra)
+  const completedPhases = phaseConfig.filter((p) => p.completed).map((p) => p.id)
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -202,7 +219,7 @@ export default function CreateTestPage() {
             <div>
               <h1 className="text-2xl font-bold">Create Phase Test</h1>
               <p className="text-sm text-muted-foreground">
-                Solo iteration workspace - no database, no multiplayer
+                UI experiment - testing 2-column layout with player status
               </p>
             </div>
             <Button
@@ -267,106 +284,10 @@ export default function CreateTestPage() {
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Context Sidebar */}
-        <div className="w-80 overflow-y-auto border-r-4 border-foreground bg-muted p-4">
-          <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-muted-foreground">
-            Context
-          </h2>
-
-          <div className="space-y-4">
-            {/* Big Idea Summary */}
-            <button
-              onClick={() => setCurrentPhase("big_idea")}
-              className={cn(
-                "w-full rounded border-2 p-3 text-left transition",
-                currentPhase === "big_idea" ? "border-foreground bg-background" : "border-border bg-background/50 hover:bg-background",
-                !phaseConfig[0].completed && "opacity-50",
-              )}
-            >
-              <h3 className="mb-1 text-xs font-bold uppercase text-muted-foreground">Big Idea</h3>
-              {adlob.bigIdea ? (
-                <p className="line-clamp-3 text-sm">{adlob.bigIdea}</p>
-              ) : (
-                <p className="text-xs italic text-muted-foreground">Not started</p>
-              )}
-            </button>
-
-            {/* Visual Summary */}
-            <button
-              onClick={() => setCurrentPhase("visual")}
-              className={cn(
-                "w-full rounded border-2 p-3 text-left transition",
-                currentPhase === "visual" ? "border-foreground bg-background" : "border-border bg-background/50 hover:bg-background",
-                !phaseConfig[1].completed && "opacity-50",
-              )}
-            >
-              <h3 className="mb-1 text-xs font-bold uppercase text-muted-foreground">Visual</h3>
-              {canvasHasContent(adlob.visual.canvasData) ? (
-                <>
-                  <div className="mb-2 aspect-video w-full rounded border border-border bg-white">
-                    {/* Canvas thumbnail would go here - for now just placeholder */}
-                    <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                      Canvas preview
-                    </div>
-                  </div>
-                  {adlob.visual.notes && (
-                    <p className="line-clamp-2 text-xs text-muted-foreground">{adlob.visual.notes}</p>
-                  )}
-                </>
-              ) : (
-                <p className="text-xs italic text-muted-foreground">Not started</p>
-              )}
-            </button>
-
-            {/* Headline Summary */}
-            <button
-              onClick={() => setCurrentPhase("headline")}
-              className={cn(
-                "w-full rounded border-2 p-3 text-left transition",
-                currentPhase === "headline" ? "border-foreground bg-background" : "border-border bg-background/50 hover:bg-background",
-                !phaseConfig[2].completed && "opacity-50",
-              )}
-            >
-              <h3 className="mb-1 text-xs font-bold uppercase text-muted-foreground">Headline</h3>
-              {canvasHasContent(adlob.headline.canvasData) ? (
-                <>
-                  <div className="mb-2 aspect-video w-full rounded border border-border bg-white">
-                    <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                      Canvas preview
-                    </div>
-                  </div>
-                  {adlob.headline.notes && (
-                    <p className="line-clamp-2 text-xs text-muted-foreground">{adlob.headline.notes}</p>
-                  )}
-                </>
-              ) : (
-                <p className="text-xs italic text-muted-foreground">Not started</p>
-              )}
-            </button>
-
-            {/* Mantra Summary */}
-            <button
-              onClick={() => setCurrentPhase("mantra")}
-              className={cn(
-                "w-full rounded border-2 p-3 text-left transition",
-                currentPhase === "mantra" ? "border-foreground bg-background" : "border-border bg-background/50 hover:bg-background",
-                !phaseConfig[3].completed && "opacity-50",
-              )}
-            >
-              <h3 className="mb-1 text-xs font-bold uppercase text-muted-foreground">Mantra</h3>
-              {adlob.mantra ? (
-                <p className="line-clamp-3 text-sm">{adlob.mantra}</p>
-              ) : (
-                <p className="text-xs italic text-muted-foreground">Not started</p>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Workspace */}
-        <div className="flex-1 overflow-y-auto p-6">
+      {/* Main Content - 2 Column Layout */}
+      <div className="flex flex-1 overflow-hidden gap-6 p-6">
+        {/* Main Workspace - Left Side */}
+        <div className="flex-1 overflow-y-auto">
           {currentPhase === "big_idea" && (
             <div className="mx-auto max-w-3xl space-y-4">
               <div>
@@ -588,6 +509,38 @@ export default function CreateTestPage() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* Right Sidebar - Player Status & Progress */}
+        <div className="w-80 shrink-0 space-y-6">
+          {/* Phase Progress */}
+          <div className="retro-border bg-card p-4">
+            <PhaseProgress currentPhase={currentPhase} completedPhases={completedPhases} />
+          </div>
+
+          {/* Mock Timer Display */}
+          <div className="retro-border bg-card p-4">
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Time</h3>
+            <div className="text-center">
+              <div className="text-3xl font-bold font-mono">--:--</div>
+              <div className="text-xs text-muted-foreground mt-1">Test mode (no timer)</div>
+            </div>
+          </div>
+
+          {/* Player Status */}
+          <div className="retro-border bg-card p-4">
+            <PlayerStatus players={mockPlayers} />
+
+            {/* Quick toggle for testing */}
+            <div className="mt-4 pt-4 border-t-2 border-border">
+              <button
+                onClick={() => toggleMockPlayerReady("1")}
+                className="w-full rounded border-2 border-border bg-background px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"
+              >
+                Toggle Your Ready Status
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

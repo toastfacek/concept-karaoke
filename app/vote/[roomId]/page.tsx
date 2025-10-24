@@ -3,8 +3,11 @@
 import { useState, useEffect, useCallback } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { Canvas } from "@/components/canvas"
 import { loadPlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
+import { canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/canvas"
+import { cn } from "@/lib/utils"
 
 interface GamePlayer {
   id: string
@@ -24,6 +27,9 @@ interface AdLob {
     text: string
     createdBy: string
   }
+  visualNotes: string
+  visualCanvas: CanvasState | null
+  headlineCanvas: CanvasState | null
   assignedPresenterId: string | null
   voteCount: number
 }
@@ -34,6 +40,25 @@ interface VoteGameState {
   status: string
   players: GamePlayer[]
   adlobs: AdLob[]
+}
+
+function extractCanvasNotes(data: unknown): string {
+  if (!data || typeof data !== "object") return ""
+  if ("notes" in data && typeof (data as { notes?: unknown }).notes === "string") {
+    return (data as { notes?: string }).notes ?? ""
+  }
+  if ("text" in data && typeof (data as { text?: unknown }).text === "string") {
+    return (data as { text?: string }).text ?? ""
+  }
+  return ""
+}
+
+function parseCanvasData(data: unknown): CanvasState | null {
+  const parsed = canvasStateSchema.safeParse(data)
+  if (!parsed.success) {
+    return null
+  }
+  return cloneCanvasState(parsed.data)
 }
 
 export default function VotePage() {
@@ -77,6 +102,9 @@ export default function VotePage() {
           text: adlob.pitch ?? "",
           createdBy: adlob.pitchAuthorId ?? "",
         },
+        visualNotes: extractCanvasNotes(adlob.visualCanvasData),
+        visualCanvas: parseCanvasData(adlob.visualCanvasData),
+        headlineCanvas: parseCanvasData(adlob.headlineCanvasData),
         assignedPresenterId: adlob.assignedPresenterId ?? null,
         voteCount: adlob.voteCount ?? 0,
       }))
@@ -190,7 +218,7 @@ export default function VotePage() {
     )
   }
 
-  if (error || !game || !storedPlayer) {
+  if (!game || !storedPlayer) {
     return (
       <main className="min-h-screen bg-background p-8">
         <div className="mx-auto max-w-6xl">
@@ -214,40 +242,71 @@ export default function VotePage() {
 
         <div className="grid gap-6 md:grid-cols-2">
           {game.adlobs.map((adlob) => {
-            const canVote = adlob.assignedPresenterId !== storedPlayer.id
+            const isOwnCampaign = adlob.assignedPresenterId === storedPlayer.id
             const isSelected = selectedAdLob === adlob.id
+            const campaignCanvas = adlob.headlineCanvas ?? adlob.visualCanvas
 
             return (
               <button
                 key={adlob.id}
-                onClick={() => !hasVoted && canVote && setSelectedAdLob(adlob.id)}
-                disabled={!canVote || hasVoted}
-                className={`retro-border text-left transition-all ${
+                type="button"
+                onClick={() => {
+                  if (hasVoted) return
+                  setError(null)
+                  setSelectedAdLob(adlob.id)
+                }}
+                disabled={hasVoted}
+                aria-pressed={isSelected}
+                className={cn(
+                  "retro-border flex h-full flex-col gap-4 text-left transition-all p-6",
                   isSelected
-                    ? "bg-primary text-primary-foreground"
-                    : canVote && !hasVoted
-                      ? "bg-card hover:bg-muted"
-                      : "bg-muted opacity-50"
-                } p-6`}
+                    ? "bg-primary text-primary-foreground shadow-lg"
+                    : hasVoted
+                      ? "bg-muted text-muted-foreground opacity-80"
+                      : "bg-card hover:-translate-y-0.5 hover:bg-muted hover:shadow-md",
+                  hasVoted ? "cursor-default" : "cursor-pointer",
+                )}
               >
-                <div className="mb-4 flex items-center justify-between">
-                  <p className="font-mono text-xs uppercase tracking-wider">
-                    Presented by {getPresenterName(adlob.assignedPresenterId)}
-                  </p>
-                  {!canVote && (
-                    <span className="rounded bg-accent px-2 py-1 text-xs font-bold text-accent-foreground">
-                      YOUR CAMPAIGN
-                    </span>
+                <p className="font-mono text-xs uppercase tracking-wider">
+                  Presented by {getPresenterName(adlob.assignedPresenterId)}
+                </p>
+
+                <div className="space-y-3">
+                  <p className="text-xl font-bold leading-tight">{adlob.bigIdea.text}</p>
+
+                  {adlob.visualNotes && (
+                    <div
+                      className={cn(
+                        "rounded border border-border bg-muted/40 p-3",
+                        isSelected ? "text-primary-foreground/80" : "text-foreground",
+                      )}
+                    >
+                      <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+                        Visual Notes
+                      </p>
+                      <p className="mt-1 text-sm leading-relaxed">{adlob.visualNotes}</p>
+                    </div>
                   )}
+
+                  <div>
+                    {campaignCanvas ? (
+                      <Canvas
+                        initialData={campaignCanvas}
+                        readOnly
+                        className={cn("bg-white", "[&>div:first-child]:hidden")}
+                      />
+                    ) : (
+                      <div className="retro-border flex aspect-video items-center justify-center bg-white text-muted-foreground">
+                        <p className="font-mono text-xs uppercase tracking-widest">No visual submitted</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Campaign Pitch</p>
+                    <p className="mt-2 text-sm leading-relaxed">{adlob.pitch.text || "No pitch submitted."}</p>
+                  </div>
                 </div>
-
-                <p className="mb-4 text-xl font-bold">{adlob.bigIdea.text}</p>
-
-                <div className="retro-border aspect-video bg-white p-4">
-                  <p className="font-mono text-xs text-muted-foreground">[Campaign Visual]</p>
-                </div>
-
-                <p className="mt-4 text-sm">{adlob.pitch.text}</p>
               </button>
             )
           })}

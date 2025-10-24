@@ -6,7 +6,7 @@ import { Copy, Check } from "lucide-react"
 
 import { useRealtime } from "@/components/realtime-provider"
 import { Button } from "@/components/ui/button"
-import { PlayerList } from "@/components/player-list"
+import { PlayerStatus } from "@/components/player-status"
 import { GameSettings } from "@/components/game-settings"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
@@ -150,6 +150,19 @@ export default function LobbyPage() {
   const isReady = currentPlayer?.isReady ?? false
   const allReady = lobby?.players.every((player) => player.isReady) ?? false
   const minPlayers = (lobby?.players.length ?? 0) >= 1
+
+  const playerStatusData = useMemo(() => {
+    return (lobby?.players ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      emoji: p.emoji,
+      isReady: p.isReady,
+      isYou: p.id === currentPlayer?.id,
+    }))
+  }, [lobby?.players, currentPlayer?.id])
+
+  const readyCount = useMemo(() => lobby?.players.filter((p) => p.isReady).length ?? 0, [lobby?.players])
+  const totalPlayers = lobby?.players.length ?? 0
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(roomCode)
@@ -435,8 +448,10 @@ export default function LobbyPage() {
   }, [lobby, router, roomCode])
 
   return (
-    <main className="min-h-screen bg-background p-8">
-      <div className="mx-auto max-w-4xl space-y-8">
+    <main className="min-h-screen bg-background p-6">
+      {/* Main Container */}
+      <div className="mx-auto max-w-7xl space-y-6">
+        {/* Header with Game Code */}
         <div className="retro-border bg-card p-8 text-center">
           <h1 className="mb-4 text-5xl font-bold uppercase">Game Lobby</h1>
 
@@ -453,93 +468,81 @@ export default function LobbyPage() {
           <p className="mt-4 font-mono text-sm text-muted-foreground">Share this code with your friends to join</p>
         </div>
 
-        {lobby && currentPlayer && (
-          <GameSettings
-            productCategory={lobby.productCategory}
-            phaseDurationSeconds={lobby.phaseDurationSeconds}
-            isHost={isHost}
-            roomCode={roomCode}
-            playerId={currentPlayer.id}
-            onSettingsChange={handleSettingsChange}
-          />
-        )}
+        {/* 2-Column Layout */}
+        <div className="flex gap-6">
+          {/* Left Column - Main Content */}
+          <div className="flex-1 space-y-6">
+            {/* Game Settings */}
+            {lobby && currentPlayer && (
+              <GameSettings
+                productCategory={lobby.productCategory}
+                phaseDurationSeconds={lobby.phaseDurationSeconds}
+                isHost={isHost}
+                roomCode={roomCode}
+                playerId={currentPlayer.id}
+                onSettingsChange={handleSettingsChange}
+              />
+            )}
 
-        <div className="retro-border bg-card p-8">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-2xl font-bold uppercase">
-              Players ({lobby?.players.length ?? 0}/8)
-            </h2>
-            <Button variant="ghost" size="sm" onClick={() => fetchLobby()} disabled={loading}>
-              Refresh
-            </Button>
+            {/* Info/Instructions */}
+            {!currentPlayer && !loading && (
+              <div className="retro-border bg-card p-8">
+                <p className="text-center font-mono text-sm text-muted-foreground">
+                  We couldn&apos;t find your player in this lobby. Join again with the code to participate.
+                </p>
+              </div>
+            )}
+
+            {error && (
+              <div className="retro-border bg-card p-8">
+                <p className="text-sm font-medium text-destructive">{error}</p>
+              </div>
+            )}
           </div>
 
-          {error && <p className="mb-4 text-sm font-medium text-destructive">{error}</p>}
+          {/* Right Sidebar - Player Status & Actions */}
+          <div className="w-80 shrink-0 space-y-6 sticky top-6 self-start">
+            <div className="retro-border bg-card p-4">
+              <PlayerStatus players={playerStatusData} />
 
-          {loading && <p className="font-mono text-sm text-muted-foreground">Loading lobby...</p>}
+              {/* Ready Actions */}
+              {currentPlayer && (
+                <div className="mt-4 pt-4 border-t-2 border-border space-y-3">
+                  <Button
+                    onClick={handleToggleReady}
+                    size="lg"
+                    variant={isReady ? "secondary" : "default"}
+                    className="w-full"
+                    disabled={isUpdatingReady}
+                  >
+                    {isUpdatingReady ? "Updating..." : isReady ? "Not Ready" : "Ready Up"}
+                  </Button>
 
-          {!loading && lobby && lobby.players.length > 0 && <PlayerList players={lobby.players} showReady />}
-
-          {!loading && lobby && lobby.players.length === 0 && (
-            <p className="font-mono text-sm text-muted-foreground">No players in the lobby yet.</p>
-          )}
-
-          {!loading && !lobby && !error && (
-            <p className="font-mono text-sm text-muted-foreground">Lobby unavailable. Try rejoining.</p>
-          )}
-        </div>
-
-        <div className="retro-border bg-card p-8">
-          <div className="space-y-4">
-            {!currentPlayer && (
-              <p className="text-center font-mono text-sm text-muted-foreground">
-                We couldn&apos;t find your player in this lobby. Join again with the code to participate.
-              </p>
-            )}
-
-            {currentPlayer && !isHost && (
-              <Button
-                onClick={handleToggleReady}
-                size="lg"
-                variant={isReady ? "secondary" : "default"}
-                className="w-full"
-                disabled={isUpdatingReady}
-              >
-                {isUpdatingReady ? "Updating..." : isReady ? "Not Ready" : "Ready Up"}
-              </Button>
-            )}
-
-            {currentPlayer && isHost && (
-              <>
-                <Button
-                  onClick={handleToggleReady}
-                  size="lg"
-                  variant={isReady ? "secondary" : "default"}
-                  className="w-full"
-                  disabled={isUpdatingReady}
-                >
-                  {isUpdatingReady ? "Updating..." : isReady ? "Mark Not Ready" : "Ready Up"}
-                </Button>
-                <Button
-                  onClick={handleStartGame}
-                  disabled={!allReady || !minPlayers || isStarting}
-                  size="lg"
-                  className="w-full"
-                >
-                  {isStarting ? "Starting..." : "Start Game"}
-                </Button>
-                {!minPlayers && (
-                  <p className="text-center font-mono text-sm text-muted-foreground">
-                    Need at least one player to start
-                  </p>
-                )}
-                {minPlayers && !allReady && (
-                  <p className="text-center font-mono text-sm text-muted-foreground">
-                    Waiting for all players to ready up...
-                  </p>
-                )}
-              </>
-            )}
+                  {isHost && (
+                    <>
+                      <Button
+                        onClick={handleStartGame}
+                        disabled={!allReady || !minPlayers || isStarting}
+                        size="lg"
+                        className="w-full"
+                      >
+                        {isStarting ? "Starting..." : "Start Game"}
+                      </Button>
+                      {!minPlayers && (
+                        <p className="text-center text-xs text-muted-foreground">
+                          Need at least one player to start
+                        </p>
+                      )}
+                      {minPlayers && !allReady && (
+                        <p className="text-center text-xs text-muted-foreground">
+                          Waiting for all players to ready up...
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

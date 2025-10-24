@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Timer } from "@/components/timer"
-import { PlayerList } from "@/components/player-list"
+import { PhaseProgress } from "@/components/phase-progress"
+import { PlayerStatus } from "@/components/player-status"
 import { canvasHasContent, canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/canvas"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
@@ -468,6 +469,28 @@ export default function CreatePage() {
   const phaseDurationMs = (game?.phaseDurationSeconds ?? 60) * 1000
   const phaseEndTime = new Date(phaseStartTime + phaseDurationMs)
 
+  // Computed values for sidebar components
+  const completedPhases = useMemo((): CreationPhase[] => {
+    const phases: CreationPhase[] = []
+    if (currentAdlob) {
+      if (currentAdlob.bigIdea) phases.push("big_idea")
+      if (currentAdlob.visualCanvasData) phases.push("visual")
+      if (currentAdlob.headlineCanvasData) phases.push("headline")
+      if (currentAdlob.pitch) phases.push("pitch")
+    }
+    return phases
+  }, [currentAdlob])
+
+  const playerStatusData = useMemo(() => {
+    return (game?.players ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      emoji: p.emoji,
+      isReady: p.isReady,
+      isYou: p.id === currentPlayer?.id,
+    }))
+  }, [game?.players, currentPlayer?.id])
+
   const handleSubmitWork = async () => {
     if (!game || !currentPlayer || !currentAdlob || !game.currentPhase) return
 
@@ -808,92 +831,105 @@ export default function CreatePage() {
   }
 
   return (
-    <main className="min-h-screen bg-background p-8">
-      <div className="mx-auto flex max-w-6xl flex-col gap-8">
-        <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="retro-border bg-card px-6 py-3">
+    <main className="min-h-screen bg-background">
+      {/* Simplified Header */}
+      <header className="bg-muted py-4">
+        <div className="mx-auto max-w-7xl px-6">
+          <div className="retro-border border-b-4 bg-muted p-4">
             <h1 className="text-2xl font-bold uppercase">
               {game?.currentPhase ? PHASE_LABELS[game.currentPhase] : "Creation Rounds"}
             </h1>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <Timer endTime={phaseEndTime} />
+        </div>
+      </header>
+
+      {/* Main 2-Column Layout */}
+      <div className="mx-auto max-w-7xl p-6">
+        {error && <p className="mb-4 font-mono text-sm font-medium text-destructive">{error}</p>}
+
+        <div className="flex gap-6">
+          {/* Left Column - Main Workspace */}
+          <div className="flex-1 space-y-6">
+            <section className="retro-border bg-card p-6 space-y-6">
+              <p className="text-center font-mono text-lg">
+                {game?.currentPhase
+                  ? PHASE_INSTRUCTIONS[game.currentPhase]
+                  : "Waiting for the host to kick off the round."}
+              </p>
+
+              {renderPhaseContent()}
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Button
+                  type="button"
+                  size="lg"
+                  className="w-full sm:w-auto"
+                  onClick={handleSubmitWork}
+                  disabled={isSubmitting || !currentPlayer || !game?.currentPhase}
+                >
+                  {isSubmitting ? "Submitting..." : "Submit Work & Ready Up"}
+                </Button>
+                <Button
+                  type="button"
+                  size="lg"
+                  variant="secondary"
+                  className="w-full sm:w-auto"
+                  onClick={handleToggleReady}
+                  disabled={isTogglingReady || !currentPlayer}
+                >
+                  {isTogglingReady ? "Updating..." : currentPlayer?.isReady ? "Mark Not Ready" : "Ready Up"}
+                </Button>
+                {currentPlayer?.isHost && (
+                  <Button
+                    type="button"
+                    size="lg"
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    onClick={handleAdvancePhase}
+                    disabled={!everyoneReady || isAdvancingPhase || !game?.currentPhase}
+                  >
+                    {isAdvancingPhase
+                      ? "Advancing..."
+                      : game?.currentPhase === "pitch"
+                        ? "Move to Present"
+                        : "Start Next Round"}
+                  </Button>
+                )}
+              </div>
+            </section>
+          </div>
+
+          {/* Right Sidebar - Status & Progress */}
+          <div className="w-80 shrink-0 space-y-6 sticky top-6 self-start">
+            {/* View Brief Button */}
             <Button
               variant="outline"
-              size="sm"
+              className="w-full gap-2"
               onClick={() => setIsBriefDialogOpen(true)}
-              className="gap-2"
             >
               <FileText className="size-4" />
               View Brief
             </Button>
-          </div>
-        </header>
 
-        {error && <p className="font-mono text-sm font-medium text-destructive">{error}</p>}
+            {/* Timer */}
+            <div className="retro-border bg-card p-4">
+              <Timer endTime={phaseEndTime} className="w-full" />
+            </div>
 
-        <section className="retro-border bg-card p-6 space-y-6">
-          <p className="text-center font-mono text-lg">
-            {game?.currentPhase ? PHASE_INSTRUCTIONS[game.currentPhase] : "Waiting for the host to kick off the round."}
-          </p>
+            {/* Phase Progress */}
+            <div className="retro-border bg-card p-4">
+              <PhaseProgress
+                currentPhase={game?.currentPhase ?? "big_idea"}
+                completedPhases={completedPhases}
+              />
+            </div>
 
-          {renderPhaseContent()}
-
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Button
-              type="button"
-              size="lg"
-              className="w-full sm:w-auto"
-              onClick={handleSubmitWork}
-              disabled={isSubmitting || !currentPlayer || !game?.currentPhase}
-            >
-              {isSubmitting ? "Submitting..." : "Submit Work & Ready Up"}
-            </Button>
-            <Button
-              type="button"
-              size="lg"
-              variant="secondary"
-              className="w-full sm:w-auto"
-              onClick={handleToggleReady}
-              disabled={isTogglingReady || !currentPlayer}
-            >
-              {isTogglingReady ? "Updating..." : currentPlayer?.isReady ? "Mark Not Ready" : "Ready Up"}
-            </Button>
-            {currentPlayer?.isHost && (
-              <Button
-                type="button"
-                size="lg"
-                variant="outline"
-                className="w-full sm:w-auto"
-                onClick={handleAdvancePhase}
-                disabled={!everyoneReady || isAdvancingPhase || !game?.currentPhase}
-              >
-                {isAdvancingPhase
-                  ? "Advancing..."
-                  : game?.currentPhase === "pitch"
-                    ? "Move to Present"
-                    : "Start Next Round"}
-              </Button>
-            )}
-          </div>
-        </section>
-
-        <section className="retro-border bg-card p-6 space-y-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-2xl font-bold uppercase">Players ({totalPlayers}/8)</h2>
-            <div className="text-center font-mono text-sm text-muted-foreground sm:text-right">
-              Ready: {readyCount}/{totalPlayers}
+            {/* Player Status */}
+            <div className="retro-border bg-card p-4">
+              <PlayerStatus players={playerStatusData} />
             </div>
           </div>
-
-          {loading ? (
-            <p className="font-mono text-sm text-muted-foreground">Loading players...</p>
-          ) : game && game.players.length > 0 ? (
-            <PlayerList players={game.players} showReady />
-          ) : (
-            <p className="font-mono text-sm text-muted-foreground">No players are connected right now.</p>
-          )}
-        </section>
+        </div>
       </div>
 
       <BriefViewDialog

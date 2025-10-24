@@ -5,6 +5,8 @@ import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Trophy } from "lucide-react"
 import { routes } from "@/lib/routes"
+import { Canvas } from "@/components/canvas"
+import { canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/canvas"
 
 interface GamePlayer {
   id: string
@@ -24,6 +26,9 @@ interface AdLob {
     text: string
     createdBy: string
   }
+  visualNotes: string
+  visualCanvas: CanvasState | null
+  headlineCanvas: CanvasState | null
   assignedPresenterId: string | null
   voteCount: number
 }
@@ -34,6 +39,25 @@ interface ResultsGameState {
   status: string
   players: GamePlayer[]
   adlobs: AdLob[]
+}
+
+function extractCanvasNotes(data: unknown): string {
+  if (!data || typeof data !== "object") return ""
+  if ("notes" in data && typeof (data as { notes?: unknown }).notes === "string") {
+    return (data as { notes?: string }).notes ?? ""
+  }
+  if ("text" in data && typeof (data as { text?: unknown }).text === "string") {
+    return (data as { text?: string }).text ?? ""
+  }
+  return ""
+}
+
+function parseCanvasData(data: unknown): CanvasState | null {
+  const parsed = canvasStateSchema.safeParse(data)
+  if (!parsed.success) {
+    return null
+  }
+  return cloneCanvasState(parsed.data)
 }
 
 export default function ResultsPage() {
@@ -69,6 +93,9 @@ export default function ResultsPage() {
           text: adlob.pitch ?? "",
           createdBy: adlob.pitchAuthorId ?? "",
         },
+        visualNotes: extractCanvasNotes(adlob.visualCanvasData),
+        visualCanvas: parseCanvasData(adlob.visualCanvasData),
+        headlineCanvas: parseCanvasData(adlob.headlineCanvasData),
         assignedPresenterId: adlob.assignedPresenterId ?? null,
         voteCount: adlob.voteCount ?? 0,
       }))
@@ -139,6 +166,7 @@ export default function ResultsPage() {
   const sortedAdLobs = [...game.adlobs].sort((a, b) => b.voteCount - a.voteCount)
   const winner = sortedAdLobs[0]
   const winnerPresenter = winner ? getPresenter(winner.assignedPresenterId) : null
+  const winnerCanvas = winner ? winner.headlineCanvas ?? winner.visualCanvas : null
 
   return (
     <main className="min-h-screen bg-background p-8">
@@ -164,8 +192,27 @@ export default function ResultsPage() {
                   <p className="text-2xl font-bold">{winner.bigIdea.text}</p>
                 </div>
 
-                <div className="retro-border aspect-video bg-white p-8">
-                  <p className="font-mono text-muted-foreground">[Winning Visual + Headline]</p>
+                {winner.visualNotes && (
+                  <div className="rounded border border-border bg-muted/40 p-4">
+                    <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Visual Notes</p>
+                    <p className="mt-1 text-sm leading-relaxed">{winner.visualNotes}</p>
+                  </div>
+                )}
+
+                <div>
+                  {winnerCanvas ? (
+                    <Canvas
+                      initialData={winnerCanvas}
+                      readOnly
+                      className="bg-white [&>div:first-child]:hidden"
+                    />
+                  ) : (
+                    <div className="retro-border flex aspect-video items-center justify-center bg-white">
+                      <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+                        No visual submitted
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -189,6 +236,9 @@ export default function ResultsPage() {
                     <p className="font-mono text-xs text-muted-foreground">
                       Presented by {getPresenterName(adlob.assignedPresenterId)}
                     </p>
+                    {adlob.visualNotes && (
+                      <p className="mt-1 text-xs italic text-muted-foreground/70">"{adlob.visualNotes}"</p>
+                    )}
                   </div>
                 </div>
                 <div className="retro-border bg-primary px-4 py-2 text-primary-foreground">

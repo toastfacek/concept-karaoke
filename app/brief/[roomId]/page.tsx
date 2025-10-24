@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation"
 import { BriefEditor } from "@/components/brief-editor"
 import { BriefLoadingModal } from "@/components/brief-loading-modal"
 import { Button } from "@/components/ui/button"
-import { PlayerList } from "@/components/player-list"
+import { PlayerStatus } from "@/components/player-status"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
 import { useRealtime } from "@/components/realtime-provider"
@@ -203,6 +203,16 @@ export default function BriefPage() {
   const totalPlayers = game?.players.length ?? 0
   const everyoneReady = totalPlayers > 0 && readyCount === totalPlayers
   const isBriefing = game?.status === "briefing"
+
+  const playerStatusData = useMemo(() => {
+    return (game?.players ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      emoji: p.emoji,
+      isReady: p.isReady,
+      isYou: p.id === currentPlayer?.id,
+    }))
+  }, [game?.players, currentPlayer?.id])
 
   const persistBrief = useCallback(
     async (draft: CampaignBrief) => {
@@ -607,96 +617,90 @@ export default function BriefPage() {
   }, [game, router, roomCode])
 
   return (
-    <main className="min-h-screen bg-background p-8">
+    <main className="min-h-screen bg-background">
       <BriefLoadingModal
         isOpen={showLoadingModal}
         category={game?.brief?.productCategory ?? "All"}
       />
 
-      <div className="mx-auto max-w-5xl space-y-8">
-        <div className="retro-border bg-card p-6 text-center">
-          <h1 className="text-4xl font-bold uppercase">Brief Generation</h1>
-          <p className="mt-2 font-mono text-sm text-muted-foreground">
-            Collaborate on the campaign brief, ready up, and let the host launch the creation rounds.
-          </p>
-        </div>
+      {/* Header */}
+      <header className="retro-border border-b-4 bg-card p-6 text-center">
+        <h1 className="text-4xl font-bold uppercase">Brief Generation</h1>
+        <p className="mt-2 font-mono text-sm text-muted-foreground">
+          Collaborate on the campaign brief, ready up, and let the host launch the creation rounds.
+        </p>
+      </header>
 
-        {error && <p className="font-mono text-sm font-medium text-destructive">{error}</p>}
+      {/* Main 2-Column Layout */}
+      <div className="mx-auto max-w-7xl p-6">
+        {error && <p className="mb-4 font-mono text-sm font-medium text-destructive">{error}</p>}
 
-        <BriefEditor
-          initialBrief={briefDraft}
-          onChange={setBriefDraft}
-          onSave={handleSaveBrief}
-          onLock={currentPlayer?.isHost ? handleLockBrief : undefined}
-          onRegenerate={handleRegenerate}
-          isLocked={!isBriefing || loading}
-          isSaving={isSavingBrief}
-          isLocking={isLockingBrief}
-          showReveal={showBriefReveal}
-        />
+        <div className="flex gap-6">
+          {/* Left Column - Brief Editor & Actions */}
+          <div className="flex-1 space-y-6">
+            <BriefEditor
+              initialBrief={briefDraft}
+              onChange={setBriefDraft}
+              onSave={handleSaveBrief}
+              onLock={currentPlayer?.isHost ? handleLockBrief : undefined}
+              onRegenerate={handleRegenerate}
+              isLocked={!isBriefing || loading}
+              isSaving={isSavingBrief}
+              isLocking={isLockingBrief}
+              showReveal={showBriefReveal}
+            />
 
-        <div className="retro-border bg-card p-8">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-2xl font-bold uppercase">Players ({totalPlayers}/8)</h2>
-            <Button variant="ghost" size="sm" onClick={() => fetchGame()} disabled={loading}>
-              Refresh
-            </Button>
+            {/* Info/Instructions */}
+            {!currentPlayer && (
+              <div className="retro-border bg-card p-8">
+                <p className="text-center font-mono text-sm text-muted-foreground">
+                  Join this lobby again to participate in the briefing.
+                </p>
+              </div>
+            )}
           </div>
 
-          {loading && <p className="font-mono text-sm text-muted-foreground">Loading players...</p>}
+          {/* Right Sidebar - Player Status & Actions */}
+          <div className="w-80 shrink-0 space-y-6 sticky top-6 self-start">
+            <div className="retro-border bg-card p-4">
+              <PlayerStatus players={playerStatusData} />
 
-          {!loading && game && game.players.length > 0 && <PlayerList players={game.players} showReady />}
+              {/* Ready Check & Actions */}
+              {currentPlayer && (
+                <div className="mt-4 pt-4 border-t-2 border-border space-y-3">
+                  <Button
+                    type="button"
+                    onClick={handleToggleReady}
+                    size="lg"
+                    variant={currentPlayer.isReady ? "secondary" : "default"}
+                    className="w-full"
+                    disabled={isUpdatingReady || !isBriefing}
+                  >
+                    {isUpdatingReady ? "Updating..." : currentPlayer.isReady ? "Not Ready" : "Ready Up"}
+                  </Button>
 
-          {!loading && game && game.players.length === 0 && (
-            <p className="font-mono text-sm text-muted-foreground">No players are connected right now.</p>
-          )}
-        </div>
-
-        <div className="retro-border bg-card p-8 space-y-6">
-          <div className="text-center">
-            <p className="mb-2 text-lg font-bold">
-              Ready Check ({readyCount}/{totalPlayers})
-            </p>
-            <div className="flex justify-center gap-2">
-              {Array.from({ length: totalPlayers }).map((_, index) => (
-                <div
-                  key={index}
-                  className={`size-4 rounded-full ${index < readyCount ? "bg-primary" : "bg-muted"}`}
-                />
-              ))}
-            </div>
-          </div>
-
-          {currentPlayer ? (
-            <div className="space-y-3">
-              <Button
-                type="button"
-                onClick={handleToggleReady}
-                size="lg"
-                variant={currentPlayer.isReady ? "secondary" : "default"}
-                className="w-full"
-                disabled={isUpdatingReady || !isBriefing}
-              >
-                {isUpdatingReady ? "Updating..." : currentPlayer.isReady ? "Not Ready" : "Ready Up"}
-              </Button>
-
-              {currentPlayer.isHost && (
-                <Button
-                  type="button"
-                  onClick={handleAdvanceToCreation}
-                  size="lg"
-                  className="w-full"
-                  disabled={!everyoneReady || isAdvancing || !isBriefing}
-                >
-                  {isAdvancing ? "Starting..." : "Start Creation Rounds"}
-                </Button>
+                  {currentPlayer.isHost && (
+                    <>
+                      <Button
+                        type="button"
+                        onClick={handleAdvanceToCreation}
+                        size="lg"
+                        className="w-full"
+                        disabled={!everyoneReady || isAdvancing || !isBriefing}
+                      >
+                        {isAdvancing ? "Starting..." : "Start Creation Rounds"}
+                      </Button>
+                      {!everyoneReady && (
+                        <p className="text-center text-xs text-muted-foreground">
+                          Waiting for all players to ready up...
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
               )}
             </div>
-          ) : (
-            <p className="text-center font-mono text-sm text-muted-foreground">
-              Join this lobby again to participate in the briefing.
-            </p>
-          )}
+          </div>
         </div>
       </div>
     </main>

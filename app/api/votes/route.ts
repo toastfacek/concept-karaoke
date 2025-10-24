@@ -23,12 +23,22 @@ export async function POST(request: Request) {
     const { roomId, voterId, adlobId } = parsed.data
     const supabase = getSupabaseAdminClient()
 
+    const normalizedRoomId = (() => {
+      const trimmed = roomId.trim()
+      if (trimmed.length === 6) {
+        return trimmed.toUpperCase()
+      }
+      return trimmed
+    })()
+
     // Validate the game exists and is in voting phase
-    const { data: room, error: roomError } = await supabase
-      .from(TABLES.gameRooms)
-      .select("id, status")
-      .or(`code.eq.${roomId},id.eq.${roomId}`)
-      .maybeSingle()
+    const roomQuery = supabase.from(TABLES.gameRooms).select("id, status, code")
+
+    const isCodeLookup = /^[A-Z0-9]{6}$/.test(normalizedRoomId)
+
+    const { data: room, error: roomError } = isCodeLookup
+      ? await roomQuery.eq("code", normalizedRoomId).maybeSingle()
+      : await roomQuery.eq("id", normalizedRoomId).maybeSingle()
 
     if (roomError) {
       throw roomError
@@ -76,7 +86,7 @@ export async function POST(request: Request) {
     // Validate the adlob exists and get the presenter
     const { data: adlob, error: adlobError } = await supabase
       .from(TABLES.adLobs)
-      .select("id, room_id, assigned_presenter")
+      .select("id, room_id, assigned_presenter, vote_count")
       .eq("id", adlobId)
       .maybeSingle()
 
@@ -86,11 +96,6 @@ export async function POST(request: Request) {
 
     if (!adlob || adlob.room_id !== room.id) {
       return NextResponse.json({ success: false, error: "Campaign not found in this game" }, { status: 404 })
-    }
-
-    // Check if voter is trying to vote for their own campaign
-    if (adlob.assigned_presenter === voterId) {
-      return NextResponse.json({ success: false, error: "You cannot vote for your own campaign" }, { status: 409 })
     }
 
     // Insert the vote
@@ -109,9 +114,12 @@ export async function POST(request: Request) {
 
     // If the RPC doesn't exist, fall back to manual update
     if (updateError) {
+      const currentVoteCount = Number(adlob?.vote_count ?? 0) || 0
+      const nextVoteCount = currentVoteCount + 1
+
       const { error: fallbackError } = await supabase
         .from(TABLES.adLobs)
-        .update({ vote_count: supabase.raw("vote_count + 1") })
+        .update({ vote_count: nextVoteCount })
         .eq("id", adlobId)
 
       if (fallbackError) {
