@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation"
 import { Canvas } from "@/components/canvas"
 import { useRealtime } from "@/components/realtime-provider"
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Timer } from "@/components/timer"
 import { PlayerList } from "@/components/player-list"
@@ -711,91 +712,134 @@ export default function CreatePage() {
       case "visual":
         return (
           <div className="space-y-4">
-            <div className="retro-border bg-muted p-4">
-              <p className="mb-2 font-mono text-xs uppercase text-muted-foreground">Previous: Big Idea</p>
-              <p className="font-bold">{currentAdlob.bigIdea ?? "Waiting for big idea..."}</p>
+            <div className="rounded border-2 border-border bg-muted/50 p-3">
+              <p className="text-xs font-bold uppercase text-muted-foreground">Big Idea Context:</p>
+              <p className="text-sm">{currentAdlob.bigIdea ?? "Waiting for big idea..."}</p>
             </div>
 
-            <Textarea
-              value={visualNotes}
-              onChange={(event) => setVisualNotes(event.target.value)}
-              placeholder="Describe the visual concept, layout notes, color ideas, or references..."
-              rows={4}
-              className="text-lg"
-            />
             <Canvas initialData={visualCanvas} onChange={setVisualCanvas} />
-            <p className="font-mono text-xs text-muted-foreground">
-              Sketch the layout and use the notes to tee up the next teammate.
-            </p>
+
+            <div className="space-y-2">
+              <Label htmlFor="visual-notes">Visual Notes</Label>
+              <Textarea
+                id="visual-notes"
+                value={visualNotes}
+                onChange={(event) => setVisualNotes(event.target.value)}
+                placeholder="Describe your visual concept, provide guidance for the next phase..."
+                rows={4}
+              />
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{visualNotes.length} characters</span>
+                {visualNotes.length < 10 && (
+                  <span className="text-amber-600">Add at least 10 characters for context</span>
+                )}
+                {visualNotes.length >= 10 && canvasHasContent(visualCanvas) && (
+                  <span className="text-green-600">Complete! ✓</span>
+                )}
+              </div>
+            </div>
           </div>
         )
       case "headline":
         return (
           <div className="space-y-4">
-            <div className="retro-border bg-muted p-4 space-y-2">
-              <div>
-                <p className="font-mono text-xs uppercase text-muted-foreground">Big Idea</p>
-                <p className="font-bold">{currentAdlob.bigIdea ?? "Waiting for big idea..."}</p>
-              </div>
-              <div>
-                <p className="font-mono text-xs uppercase text-muted-foreground">Visual Notes</p>
-                <p>{extractNotes(currentAdlob.visualCanvasData) || "Visual pending..."}</p>
-              </div>
+            <div className="space-y-2">
+              {currentAdlob.bigIdea && (
+                <div className="rounded border-2 border-border bg-muted/50 p-3">
+                  <p className="text-xs font-bold uppercase text-muted-foreground">Big Idea:</p>
+                  <p className="text-sm">{currentAdlob.bigIdea}</p>
+                </div>
+              )}
+
+              {extractNotes(currentAdlob.visualCanvasData) && (
+                <div className="rounded border-2 border-border bg-muted/50 p-3">
+                  <p className="text-xs font-bold uppercase text-muted-foreground">Visual Notes:</p>
+                  <p className="text-sm">{extractNotes(currentAdlob.visualCanvasData)}</p>
+                </div>
+              )}
+
+              {canvasHasContent(visualCanvasData) && !canvasHasContent(headlineCanvas) && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setHeadlineCanvas(visualCanvasData)
+                  }}
+                >
+                  Copy Visual Canvas as Starting Point
+                </Button>
+              )}
             </div>
 
-            <Textarea
-              value={headlineNotes}
-              onChange={(event) => setHeadlineNotes(event.target.value)}
-              placeholder="Add your headline text or placement notes..."
-              rows={3}
-              className="text-lg"
-            />
             <Canvas initialData={headlineCanvas ?? headlineCanvasData ?? visualCanvasData ?? null} onChange={setHeadlineCanvas} />
-            <p className="font-mono text-xs text-muted-foreground">
-              Map the headline placement and note copy decisions so the final pitcher has a clear script.
-            </p>
+
+            <div className="space-y-2">
+              <Label htmlFor="headline-notes">Headline Copy Notes</Label>
+              <Textarea
+                id="headline-notes"
+                value={headlineNotes}
+                onChange={(event) => setHeadlineNotes(event.target.value)}
+                placeholder="Add any copy, messaging notes, or guidance..."
+                rows={4}
+              />
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{headlineNotes.length} characters</span>
+                {headlineNotes.length < 3 && (
+                  <span className="text-amber-600">Add at least 3 characters</span>
+                )}
+                {headlineNotes.length >= 3 && canvasHasContent(headlineCanvas) && (
+                  <span className="text-green-600">Complete! ✓</span>
+                )}
+              </div>
+            </div>
           </div>
         )
       case "mantra":
         return (
           <div className="space-y-4">
-            <div className="retro-border bg-muted p-6 space-y-3">
-              <div>
-                <p className="font-mono text-xs uppercase text-muted-foreground">Big Idea</p>
-                <p className="font-bold">{currentAdlob.bigIdea ?? "Waiting for big idea..."}</p>
-              </div>
-              <div>
-                <p className="font-mono text-xs uppercase text-muted-foreground">Visual Notes</p>
-                <p>{extractNotes(currentAdlob.visualCanvasData) || "Visual pending..."}</p>
-              </div>
-              <div>
-                <p className="font-mono text-xs uppercase text-muted-foreground">Headline Notes</p>
-                <p>{extractNotes(currentAdlob.headlineCanvasData) || "Headline pending..."}</p>
-              </div>
-              <div>
-                <p className="font-mono text-xs uppercase text-muted-foreground">Visual Sketch</p>
-                {visualCanvasData ? (
+            <div className="space-y-2">
+              {currentAdlob.bigIdea && (
+                <div className="rounded border-2 border-border bg-muted/50 p-3">
+                  <p className="text-xs font-bold uppercase text-muted-foreground">Big Idea:</p>
+                  <p className="text-sm">{currentAdlob.bigIdea}</p>
+                </div>
+              )}
+
+              {extractNotes(currentAdlob.visualCanvasData) && (
+                <div className="rounded border-2 border-border bg-muted/50 p-3">
+                  <p className="text-xs font-bold uppercase text-muted-foreground">Visual Notes:</p>
+                  <p className="text-sm">{extractNotes(currentAdlob.visualCanvasData)}</p>
+                </div>
+              )}
+
+              {extractNotes(currentAdlob.headlineCanvasData) && (
+                <div className="rounded border-2 border-border bg-muted/50 p-3">
+                  <p className="text-xs font-bold uppercase text-muted-foreground">Headline Notes:</p>
+                  <p className="text-sm">{extractNotes(currentAdlob.headlineCanvasData)}</p>
+                </div>
+              )}
+
+              {visualCanvasData && (
+                <div className="rounded border-2 border-border bg-muted/50 p-3">
+                  <p className="mb-2 text-xs font-bold uppercase text-muted-foreground">Visual Sketch:</p>
                   <Canvas
                     initialData={visualCanvasData}
                     readOnly
-                    className="pointer-events-none bg-card sm:mx-auto sm:max-w-3xl"
+                    className="pointer-events-none bg-card"
                   />
-                ) : (
-                  <p className="text-sm text-muted-foreground">Visual canvas pending...</p>
-                )}
-              </div>
-              <div>
-                <p className="font-mono text-xs uppercase text-muted-foreground">Headline Layout</p>
-                {headlineCanvasData ? (
+                </div>
+              )}
+
+              {headlineCanvasData && (
+                <div className="rounded border-2 border-border bg-muted/50 p-3">
+                  <p className="mb-2 text-xs font-bold uppercase text-muted-foreground">Headline Layout:</p>
                   <Canvas
                     initialData={headlineCanvasData}
                     readOnly
-                    className="pointer-events-none bg-card sm:mx-auto sm:max-w-3xl"
+                    className="pointer-events-none bg-card"
                   />
-                ) : (
-                  <p className="text-sm text-muted-foreground">Headline canvas pending...</p>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             <Textarea
@@ -805,9 +849,24 @@ export default function CreatePage() {
               rows={4}
               className="text-lg"
             />
-            <p className="font-mono text-sm text-muted-foreground">
-              {countWords(mantraInput)} words (aim for 50-100)
-            </p>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <div className="space-x-4">
+                <span>{countWords(mantraInput)} words</span>
+                <span>{mantraInput.length} characters</span>
+              </div>
+              {countWords(mantraInput) < 3 && (
+                <span className="text-amber-600">Need at least 3 words</span>
+              )}
+              {countWords(mantraInput) >= 3 && countWords(mantraInput) < 50 && (
+                <span className="text-blue-600">Target: 50-100 words</span>
+              )}
+              {countWords(mantraInput) >= 50 && countWords(mantraInput) <= 100 && (
+                <span className="text-green-600">Perfect length! ✓</span>
+              )}
+              {countWords(mantraInput) > 100 && (
+                <span className="text-amber-600">Over target (but okay!)</span>
+              )}
+            </div>
           </div>
         )
       default:
