@@ -498,6 +498,8 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
     align: CanvasTextBlock["align"]
   } | null>(null)
   const imageCacheRef = useRef<Record<string, HTMLImageElement>>({})
+  const lastEmittedStateRef = useRef<CanvasState | null>(null)
+  const lastChangeTimeRef = useRef<number>(0)
 
   const strokeCount = canvasState.strokes.length
   const textBlocks = useMemo(() => canvasState.textBlocks ?? [], [canvasState.textBlocks])
@@ -578,6 +580,9 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
       setCanvasState((previous) => {
         const resolved = typeof updater === "function" ? (updater as (prev: CanvasState) => CanvasState)(previous) : updater
         const snapshot = cloneState(resolved)
+        // Track that we're emitting this state change - this helps us ignore it when it comes back via initialData
+        lastEmittedStateRef.current = snapshot
+        lastChangeTimeRef.current = Date.now()
         Promise.resolve().then(() => {
           onChange?.(snapshot)
         })
@@ -770,24 +775,55 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
 
   useEffect(() => {
     const parsed = parseInitialState(initialData)
+
+    // Skip updating if this is the same state we just emitted via onChange
+    // This prevents circular updates where our own changes come back via initialData
+    if (lastEmittedStateRef.current && statesEqual(parsed, lastEmittedStateRef.current)) {
+      console.log('[CANVAS-DEBUG] Ignoring initialData update - same as last emitted state')
+      return
+    }
+
+    // Skip updating if the parsed state is the same as current state
+    // This prevents unnecessary resets when parent passes back identical data
+    if (statesEqual(parsed, canvasState)) {
+      console.log('[CANVAS-DEBUG] Ignoring initialData update - same as current state')
+      return
+    }
+
+    // Skip updating if we recently made a change (within 100ms cooldown)
+    // This prevents resets during the brief window after drawing/editing finishes
+    const timeSinceLastChange = Date.now() - lastChangeTimeRef.current
+    if (timeSinceLastChange < 100) {
+      console.log('[CANVAS-DEBUG] Ignoring initialData update - within cooldown period', { timeSinceLastChange })
+      return
+    }
+
     // Skip updating if we're actively editing text or images (user-initiated changes in progress)
     const isActivelyEditing = selectedTextId !== null || selectedImageId !== null
-    console.log('[TEXT-DEBUG] initialData effect check', {
+
+    // Skip updating if we're drawing
+    const isDrawing = isDrawingRef.current
+
+    console.log('[CANVAS-DEBUG] initialData effect check', {
       statesEqual: statesEqual(parsed, canvasState),
-      isDrawing: isDrawingRef.current,
+      isDrawing,
       isActivelyEditing,
       selectedTextId,
-      selectedImageId
+      selectedImageId,
+      timeSinceLastChange
     })
-    if (!statesEqual(parsed, canvasState) && !isDrawingRef.current && !isActivelyEditing) {
-      console.log('[TEXT-DEBUG] Applying initialData update (no active editing)')
+
+    if (!isDrawing && !isActivelyEditing) {
+      console.log('[CANVAS-DEBUG] Applying initialData update (external change detected)')
       setCanvasState(parsed)
       setSelectedTextId(null)
       setSelectedImageId(null)
       setPendingImagePosition(null)
       imageCacheRef.current = {}
-    } else if (isActivelyEditing) {
-      console.log('[TEXT-DEBUG] Skipping initialData update - actively editing')
+      // Store this as the last emitted state to prevent circular updates
+      lastEmittedStateRef.current = parsed
+    } else {
+      console.log('[CANVAS-DEBUG] Skipping initialData update - user interaction in progress')
     }
     // Only react when caller provides new data — ignore onChange dependency
     // Note: We intentionally do NOT include selectedTextId/selectedImageId as dependencies
