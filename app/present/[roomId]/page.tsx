@@ -23,7 +23,7 @@ type GamePlayer = {
   joinedAt: string
 }
 
-type PitchAdlob = {
+type PresentAdlob = {
   id: string
   bigIdea: string | null
   bigIdeaAuthorId: string | null
@@ -32,19 +32,19 @@ type PitchAdlob = {
   visualAuthorId: string | null
   headlineCanvasData: unknown
   headlineAuthorId: string | null
-  mantra: string | null
-  mantraAuthorId: string | null
+  pitch: string | null
+  pitchAuthorId: string | null
   createdAt: string
-  assignedPitcherId: string | null
-  pitchOrder: number | null
-  pitchStartedAt: string | null
-  pitchCompletedAt: string | null
+  assignedPresenterId: string | null
+  presentOrder: number | null
+  presentStartedAt: string | null
+  presentCompletedAt: string | null
 }
 
-type PitchGameState = SnapshotDrivenState<GamePlayer> & {
-  currentPitchIndex: number | null
-  pitchSequence: string[]
-  adlobs: PitchAdlob[]
+type PresentGameState = SnapshotDrivenState<GamePlayer> & {
+  currentPresentIndex: number | null
+  presentSequence: string[]
+  adlobs: PresentAdlob[]
 }
 
 function extractNotes(data: unknown): string {
@@ -66,7 +66,7 @@ function parseCanvasData(data: unknown): CanvasState | null {
   return cloneCanvasState(parsed.data)
 }
 
-export default function PitchPage() {
+export default function PresentPage() {
   const router = useRouter()
   const params = useParams()
   const roomCode = (params.roomId as string).toUpperCase()
@@ -78,20 +78,20 @@ export default function PitchPage() {
   } = useRealtime()
 
   const [storedPlayer, setStoredPlayer] = useState<StoredPlayer | null>(null)
-  const [game, setGame] = useState<PitchGameState | null>(null)
+  const [game, setGame] = useState<PresentGameState | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isRevealing, setIsRevealing] = useState(false)
   const [isAdvancing, setIsAdvancing] = useState(false)
-  const [showMantra, setShowMantra] = useState(true)
+  const [showPitch, setShowPitch] = useState(true)
   const [showCampaign, setShowCampaign] = useState(false)
 
-  const lastPitchIdRef = useRef<string | null>(null)
+  const lastPresentIdRef = useRef<string | null>(null)
   const realtimeConnectionKeyRef = useRef<string | null>(null)
   const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
   const tokenRef = useRef<RealtimeToken | null>(null)
-  const latestGameRef = useRef<PitchGameState | null>(null)
+  const latestGameRef = useRef<PresentGameState | null>(null)
 
   useEffect(() => {
     setStoredPlayer(loadPlayer(roomCode))
@@ -109,7 +109,7 @@ export default function PitchPage() {
         const payload = await response.json()
 
         if (!response.ok || !payload.success) {
-          setError(payload.error ?? "Unable to load pitch flow.")
+          setError(payload.error ?? "Unable to load presentation flow.")
           setGame(null)
           return
         }
@@ -130,8 +130,8 @@ export default function PitchPage() {
           code: gameData.code,
           status: gameData.status,
           hostId: gameData.hostId,
-          currentPitchIndex: gameData.currentPitchIndex ?? 0,
-          pitchSequence: gameData.pitchSequence ?? [],
+          currentPresentIndex: gameData.currentPresentIndex ?? 0,
+          presentSequence: gameData.presentSequence ?? [],
           players,
           adlobs: gameData.adlobs,
           version: typeof gameData.version === "number" ? gameData.version : 0,
@@ -153,7 +153,7 @@ export default function PitchPage() {
         }
       } catch (fetchError) {
         console.error(fetchError)
-        setError("Unable to load pitch flow.")
+        setError("Unable to load presentation flow.")
         setGame(null)
       } finally {
         if (!silent) {
@@ -171,11 +171,11 @@ export default function PitchPage() {
   useEffect(() => {
     if (realtimeStatus === "disconnected") {
       fetchGame({ silent: true }).catch((error) => {
-        console.error("Failed to refresh pitch flow after disconnect", error)
+        console.error("Failed to refresh presentation flow after disconnect", error)
       })
     } else if (realtimeStatus === "connected" && lastRealtimeStatusRef.current === "disconnected") {
       fetchGame({ silent: true }).catch((error) => {
-        console.error("Failed to refresh pitch flow after reconnect", error)
+        console.error("Failed to refresh presentation flow after reconnect", error)
       })
     }
     lastRealtimeStatusRef.current = realtimeStatus
@@ -190,39 +190,39 @@ export default function PitchPage() {
     if (!game) return []
     const map = new Map(game.adlobs.map((adlob) => [adlob.id, adlob]))
 
-    if (game.pitchSequence.length > 0) {
-      return game.pitchSequence
+    if (game.presentSequence.length > 0) {
+      return game.presentSequence
         .map((id) => map.get(id))
-        .filter((value): value is PitchAdlob => Boolean(value))
+        .filter((value): value is PresentAdlob => Boolean(value))
     }
 
-    return [...game.adlobs].sort((a, b) => (a.pitchOrder ?? 0) - (b.pitchOrder ?? 0))
+    return [...game.adlobs].sort((a, b) => (a.presentOrder ?? 0) - (b.presentOrder ?? 0))
   }, [game])
 
-  const pitchCount = orderedAdlobs.length
-  const currentPitchIndex = Math.min(game?.currentPitchIndex ?? 0, Math.max(orderedAdlobs.length - 1, 0))
-  const currentAdlob = orderedAdlobs[currentPitchIndex] ?? null
+  const presentCount = orderedAdlobs.length
+  const currentPresentIndex = Math.min(game?.currentPresentIndex ?? 0, Math.max(orderedAdlobs.length - 1, 0))
+  const currentAdlob = orderedAdlobs[currentPresentIndex] ?? null
 
   useEffect(() => {
-    const activePitchId = currentAdlob?.id ?? null
-    if (lastPitchIdRef.current !== activePitchId) {
-      setShowMantra(true)
+    const activePresentId = currentAdlob?.id ?? null
+    if (lastPresentIdRef.current !== activePresentId) {
+      setShowPitch(true)
       setShowCampaign(false)
       setIsRevealing(false)
       setIsAdvancing(false)
-      lastPitchIdRef.current = activePitchId
+      lastPresentIdRef.current = activePresentId
     }
   }, [currentAdlob?.id])
 
-  const currentPitcher = useMemo(() => {
+  const currentPresenter = useMemo(() => {
     if (!game || !currentAdlob) return null
-    return game.players.find((player) => player.id === currentAdlob.assignedPitcherId) ?? null
+    return game.players.find((player) => player.id === currentAdlob.assignedPresenterId) ?? null
   }, [game, currentAdlob])
 
   const visualCanvas = useMemo(() => parseCanvasData(currentAdlob?.visualCanvasData), [currentAdlob])
   const headlineCanvas = useMemo(() => parseCanvasData(currentAdlob?.headlineCanvasData), [currentAdlob])
 
-  const canControlPitch = !!currentPlayer && (currentPlayer.isHost || currentPlayer.id === currentAdlob?.assignedPitcherId)
+  const canControlPresent = !!currentPlayer && (currentPlayer.isHost || currentPlayer.id === currentAdlob?.assignedPresenterId)
 
   const handleRevealCampaign = async () => {
     if (!game || !currentPlayer || !currentAdlob) return
@@ -232,7 +232,7 @@ export default function PitchPage() {
     setError(null)
 
     try {
-      await fetch(`/api/games/${roomCode}/pitch`, {
+      await fetch(`/api/games/${roomCode}/present`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -241,7 +241,7 @@ export default function PitchPage() {
         }),
       })
 
-      setShowMantra(false)
+      setShowPitch(false)
       setShowCampaign(true)
     } catch (revealError) {
       console.error(revealError)
@@ -251,14 +251,15 @@ export default function PitchPage() {
     }
   }
 
-  const handleAdvancePitch = async () => {
+  const handleAdvancePresent = async () => {
     if (!game || !currentPlayer || !currentAdlob) return
 
     setIsAdvancing(true)
     setError(null)
 
     try {
-      await fetch(`/api/games/${roomCode}/pitch`, {
+      console.log("[PRESENT DEBUG] Calling advance API...")
+      const response = await fetch(`/api/games/${roomCode}/present`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -267,10 +268,21 @@ export default function PitchPage() {
         }),
       })
 
+      const result = await response.json()
+      console.log("[PRESENT DEBUG] API response:", result)
+
+      // If we moved to voting, redirect immediately
+      if (result.success && result.status === "voting") {
+        console.log("[PRESENT DEBUG] Moving to voting, redirecting...")
+        router.push(routes.vote(roomCode))
+        return
+      }
+
+      console.log("[PRESENT DEBUG] Not moving to voting, refreshing game state...")
       await fetchGame({ silent: true })
     } catch (advanceError) {
-      console.error(advanceError)
-      setError(advanceError instanceof Error ? advanceError.message : "Failed to advance pitch.")
+      console.error("[PRESENT DEBUG] Error:", advanceError)
+      setError(advanceError instanceof Error ? advanceError.message : "Failed to advance presentation.")
     } finally {
       setIsAdvancing(false)
     }
@@ -311,11 +323,11 @@ export default function PitchPage() {
         realtimeConnectionKeyRef.current = connectionKey
 
         const unsubscribeHello = addRealtimeListener("hello_ack", ({ snapshot: incoming }) => {
-          setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as PitchGameState) : previous))
+          setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as PresentGameState) : previous))
         })
 
         const unsubscribeRoomState = addRealtimeListener("room_state", ({ snapshot: incoming }) => {
-          setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as PitchGameState) : previous))
+          setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as PresentGameState) : previous))
         })
 
         const unsubscribePlayerJoined = addRealtimeListener("player_joined", ({ player, version }) => {
@@ -389,12 +401,12 @@ export default function PitchPage() {
               ? {
                   ...previous,
                   version,
-                  status: previous.status === "pitching" ? previous.status : "pitching",
+                  status: previous.status === "presenting" ? previous.status : "presenting",
                 }
               : previous,
           )
           fetchGame({ silent: true }).catch((error) => {
-            console.error("Failed to refresh pitch flow after phase change", error)
+            console.error("Failed to refresh presentation flow after phase change", error)
           })
         })
 
@@ -407,7 +419,7 @@ export default function PitchPage() {
           unsubscribePhaseChanged,
         ]
       } catch (error) {
-        console.error("Failed to initialize pitch realtime connection", error)
+        console.error("Failed to initialize presentation realtime connection", error)
       }
     }
 
@@ -436,65 +448,39 @@ export default function PitchPage() {
     if (!currentAdlob) {
       return (
         <div className="retro-border bg-muted p-8 text-center font-mono text-sm text-muted-foreground">
-          Waiting for the host to queue up the next pitch...
+          Waiting for the host to queue up the next presentation...
         </div>
       )
     }
 
     return (
       <div className="retro-border bg-card p-8 space-y-8">
-        <div>
-          <p className="mb-2 font-mono text-xs uppercase tracking-widest text-muted-foreground">Big Idea</p>
-          <p className="text-2xl font-bold">{currentAdlob.bigIdea ?? "Big idea still cooking..."}</p>
-        </div>
+        {headlineCanvas ? (
+          <Canvas initialData={headlineCanvas} readOnly className="pointer-events-none bg-muted" />
+        ) : (
+          <div className="retro-border bg-muted p-6 text-center font-mono text-sm text-muted-foreground">
+            Headline layout pending...
+          </div>
+        )}
 
-        <div className="space-y-3">
-          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Visual Direction</p>
-          {visualCanvas ? (
-            <Canvas initialData={visualCanvas} readOnly className="pointer-events-none bg-muted" />
-          ) : (
-            <div className="retro-border bg-muted p-6 text-center font-mono text-sm text-muted-foreground">
-              Visual sketch pending...
-            </div>
-          )}
-          <p className="text-sm text-muted-foreground">{extractNotes(currentAdlob.visualCanvasData)}</p>
-        </div>
-
-        <div className="space-y-3">
-          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Headline Layout</p>
-          {headlineCanvas ? (
-            <Canvas initialData={headlineCanvas} readOnly className="pointer-events-none bg-muted" />
-          ) : (
-            <div className="retro-border bg-muted p-6 text-center font-mono text-sm text-muted-foreground">
-              Headline layout pending...
-            </div>
-          )}
-          <p className="text-sm text-muted-foreground">{extractNotes(currentAdlob.headlineCanvasData)}</p>
-        </div>
-
-        <div>
-          <p className="mb-2 font-mono text-xs uppercase tracking-widest text-muted-foreground">Campaign Mantra</p>
-          <p className="text-lg leading-relaxed">{currentAdlob.mantra ?? "Waiting on a closer..."}</p>
-        </div>
-
-        {canControlPitch && (
-          <Button onClick={handleAdvancePitch} size="lg" className="w-full" disabled={isAdvancing}>
+        {canControlPresent && (
+          <Button onClick={handleAdvancePresent} size="lg" className="w-full" disabled={isAdvancing}>
             {isAdvancing
               ? "Advancing..."
-              : currentPitchIndex + 1 >= pitchCount
+              : currentPresentIndex + 1 >= presentCount
                 ? "Send to Voting"
-                : "End Pitch"}
+                : "End Presentation"}
           </Button>
         )}
       </div>
     )
   }
 
-  const renderMantraIntro = () => {
+  const renderPitchIntro = () => {
     if (!currentAdlob) {
       return (
         <div className="retro-border bg-primary p-8 text-center text-primary-foreground">
-          <p className="text-2xl font-bold">Waiting for the next pitch...</p>
+          <p className="text-2xl font-bold">Waiting for the next presentation...</p>
         </div>
       )
     }
@@ -502,9 +488,9 @@ export default function PitchPage() {
     return (
       <div className="retro-border bg-primary p-12 text-center text-primary-foreground">
         <p className="text-3xl font-bold leading-relaxed">
-          {currentAdlob.mantra ?? "This campaign mantra is still being polished."}
+          {currentAdlob.pitch ?? "This pitch is still being polished."}
         </p>
-        {canControlPitch && (
+        {canControlPresent && (
           <Button
             onClick={handleRevealCampaign}
             size="lg"
@@ -519,12 +505,12 @@ export default function PitchPage() {
     )
   }
 
-  const currentPitchLabel = useMemo(() => {
+  const currentPresentLabel = useMemo(() => {
     if (!currentAdlob) {
-      return "Pitch deck loading..."
+      return "Presentation loading..."
     }
-    return `Pitch ${currentPitchIndex + 1} of ${pitchCount}`
-  }, [currentAdlob, currentPitchIndex, pitchCount])
+    return `Presentation ${currentPresentIndex + 1} of ${presentCount}`
+  }, [currentAdlob, currentPresentIndex, presentCount])
 
   return (
     <main className="min-h-screen bg-background p-8">
@@ -532,34 +518,34 @@ export default function PitchPage() {
         <header className="retro-border bg-card px-6 py-4 text-center">
           <p className="mb-2 font-mono text-sm uppercase tracking-wider text-muted-foreground">Up Next</p>
           <h1 className="text-4xl font-bold">
-            {currentPitcher ? (
+            {currentPresenter ? (
               <>
-                <span className="text-5xl">{currentPitcher.emoji}</span> {currentPitcher.name}
+                <span className="text-5xl">{currentPresenter.emoji}</span> {currentPresenter.name}
               </>
             ) : (
-              "Assigning pitcher..."
+              "Assigning presenter..."
             )}
           </h1>
-          <p className="mt-2 font-mono text-sm text-muted-foreground">{currentPitchLabel}</p>
+          <p className="mt-2 font-mono text-sm text-muted-foreground">{currentPresentLabel}</p>
         </header>
 
         {error && <p className="font-mono text-sm font-medium text-destructive">{error}</p>}
 
         {loading || !game ? (
           <div className="retro-border bg-muted p-8 text-center font-mono text-sm text-muted-foreground">
-            Loading pitch flow...
+            Loading presentation flow...
           </div>
         ) : (
           <>
-            {showMantra && renderMantraIntro()}
+            {showPitch && renderPitchIntro()}
             {showCampaign && renderCampaignSlide()}
 
-            {!canControlPitch && (
+            {!canControlPresent && (
               <div className="retro-border bg-muted p-6 text-center">
                 <p className="font-mono text-sm text-muted-foreground">
-                  {currentPitcher
-                    ? `Watching ${currentPitcher.name}'s pitch...`
-                    : "Waiting for the host to assign the next pitcher..."}
+                  {currentPresenter
+                    ? `Watching ${currentPresenter.name}'s presentation...`
+                    : "Waiting for the host to assign the next presenter..."}
                 </p>
               </div>
             )}

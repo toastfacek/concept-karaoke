@@ -1,36 +1,205 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { sampleAdLobs, samplePlayers } from "@/lib/sample-data"
+import { loadPlayer, type StoredPlayer } from "@/lib/player-storage"
+import { routes } from "@/lib/routes"
+
+interface GamePlayer {
+  id: string
+  name: string
+  emoji: string
+  isReady: boolean
+  isHost: boolean
+}
+
+interface AdLob {
+  id: string
+  bigIdea: {
+    text: string
+    createdBy: string
+  }
+  pitch: {
+    text: string
+    createdBy: string
+  }
+  assignedPresenterId: string | null
+  voteCount: number
+}
+
+interface VoteGameState {
+  id: string
+  code: string
+  status: string
+  players: GamePlayer[]
+  adlobs: AdLob[]
+}
 
 export default function VotePage() {
   const router = useRouter()
   const params = useParams()
-  const roomId = params.roomId as string
+  const roomCode = params.roomId as string
 
+  const [storedPlayer, setStoredPlayer] = useState<StoredPlayer | null>(null)
+  const [game, setGame] = useState<VoteGameState | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedAdLob, setSelectedAdLob] = useState<string | null>(null)
   const [hasVoted, setHasVoted] = useState(false)
+  const [isVoting, setIsVoting] = useState(false)
 
-  const adlobs = sampleAdLobs
-  const currentUserId = samplePlayers[0].id
+  useEffect(() => {
+    setStoredPlayer(loadPlayer(roomCode))
+  }, [roomCode])
 
-  const handleVote = () => {
-    if (!selectedAdLob) return
+  const fetchGame = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
+      const payload = await response.json()
 
-    // TODO: Submit vote to API
-    console.log("[v0] Voted for AdLob:", selectedAdLob)
-    setHasVoted(true)
+      if (!response.ok || !payload.success) {
+        setError(payload.error ?? "Unable to load voting data")
+        setGame(null)
+        return
+      }
 
-    // Simulate waiting for all votes
-    setTimeout(() => {
-      router.push(`/results/${roomId}`)
-    }, 2000)
+      const gameData = payload.game
+
+      // Map the API response to our game state format
+      const mappedAdlobs: AdLob[] = (gameData.adlobs ?? []).map((adlob: any) => ({
+        id: adlob.id,
+        bigIdea: {
+          text: adlob.bigIdea ?? "",
+          createdBy: adlob.bigIdeaAuthorId ?? "",
+        },
+        pitch: {
+          text: adlob.pitch ?? "",
+          createdBy: adlob.pitchAuthorId ?? "",
+        },
+        assignedPresenterId: adlob.assignedPresenterId ?? null,
+        voteCount: adlob.voteCount ?? 0,
+      }))
+
+      const mappedPlayers: GamePlayer[] = (gameData.players ?? []).map((player: any) => ({
+        id: player.id,
+        name: player.name,
+        emoji: player.emoji,
+        isReady: player.isReady ?? false,
+        isHost: player.isHost ?? false,
+      }))
+
+      setGame({
+        id: gameData.id,
+        code: gameData.code,
+        status: gameData.status,
+        players: mappedPlayers,
+        adlobs: mappedAdlobs,
+      })
+    } catch (fetchError) {
+      console.error("Failed to fetch voting data", fetchError)
+      setError("Unable to load voting data")
+      setGame(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [roomCode])
+
+  useEffect(() => {
+    fetchGame()
+  }, [fetchGame])
+
+  // Redirect if game status changes
+  useEffect(() => {
+    if (!game) return
+
+    if (game.status === "results") {
+      router.push(routes.results(roomCode))
+    } else if (game.status !== "voting") {
+      router.push(routes.lobby(roomCode))
+    }
+  }, [game, router, roomCode])
+
+  const handleVote = async () => {
+    if (!selectedAdLob || !storedPlayer || !game) return
+
+    setIsVoting(true)
+    setError(null)
+
+    try {
+      const response = await fetch("/api/votes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomId: roomCode,
+          voterId: storedPlayer.id,
+          adlobId: selectedAdLob,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        setError(result.error ?? "Failed to submit vote")
+        setIsVoting(false)
+        return
+      }
+
+      setHasVoted(true)
+
+      // If all votes are in, the API will have transitioned to results
+      // Poll to check if status has changed
+      if (result.allVotesIn) {
+        router.push(routes.results(roomCode))
+      } else {
+        // Poll for status changes
+        const pollInterval = setInterval(async () => {
+          const checkResponse = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
+          const checkPayload = await checkResponse.json()
+          if (checkPayload.success && checkPayload.game.status === "results") {
+            clearInterval(pollInterval)
+            router.push(routes.results(roomCode))
+          }
+        }, 2000)
+
+        // Clean up polling after 2 minutes
+        setTimeout(() => clearInterval(pollInterval), 120000)
+      }
+    } catch (voteError) {
+      console.error("Failed to submit vote", voteError)
+      setError("Failed to submit vote")
+    } finally {
+      setIsVoting(false)
+    }
   }
 
-  const getPitcherName = (pitcherId: string | null) => {
-    return samplePlayers.find((p) => p.id === pitcherId)?.name || "Unknown"
+  const getPresenterName = (presenterId: string | null) => {
+    if (!game) return "Unknown"
+    return game.players.find((p) => p.id === presenterId)?.name ?? "Unknown"
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-background p-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="retro-border bg-card p-12 text-center">
+            <p className="font-mono text-lg">Loading voting...</p>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
+  if (error || !game || !storedPlayer) {
+    return (
+      <main className="min-h-screen bg-background p-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="retro-border bg-destructive p-12 text-center text-destructive-foreground">
+            <p className="font-mono text-lg">{error ?? "Unable to load voting"}</p>
+          </div>
+        </div>
+      </main>
+    )
   }
 
   return (
@@ -44,8 +213,8 @@ export default function VotePage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          {adlobs.map((adlob) => {
-            const canVote = adlob.assignedPitcher !== currentUserId
+          {game.adlobs.map((adlob) => {
+            const canVote = adlob.assignedPresenterId !== storedPlayer.id
             const isSelected = selectedAdLob === adlob.id
 
             return (
@@ -63,11 +232,11 @@ export default function VotePage() {
               >
                 <div className="mb-4 flex items-center justify-between">
                   <p className="font-mono text-xs uppercase tracking-wider">
-                    Pitched by {getPitcherName(adlob.assignedPitcher)}
+                    Presented by {getPresenterName(adlob.assignedPresenterId)}
                   </p>
                   {!canVote && (
                     <span className="rounded bg-accent px-2 py-1 text-xs font-bold text-accent-foreground">
-                      YOUR PITCH
+                      YOUR CAMPAIGN
                     </span>
                   )}
                 </div>
@@ -78,7 +247,7 @@ export default function VotePage() {
                   <p className="font-mono text-xs text-muted-foreground">[Campaign Visual]</p>
                 </div>
 
-                <p className="mt-4 text-sm">{adlob.mantra.text}</p>
+                <p className="mt-4 text-sm">{adlob.pitch.text}</p>
               </button>
             )
           })}
@@ -86,8 +255,8 @@ export default function VotePage() {
 
         {!hasVoted && (
           <div className="flex justify-center">
-            <Button onClick={handleVote} disabled={!selectedAdLob} size="lg" className="px-12">
-              Cast Vote
+            <Button onClick={handleVote} disabled={!selectedAdLob || isVoting} size="lg" className="px-12">
+              {isVoting ? "Submitting..." : "Cast Vote"}
             </Button>
           </div>
         )}
@@ -95,6 +264,12 @@ export default function VotePage() {
         {hasVoted && (
           <div className="retro-border bg-card p-6 text-center">
             <p className="font-mono text-lg">Vote submitted! Waiting for other players...</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="retro-border bg-destructive p-4 text-center text-destructive-foreground">
+            <p className="font-mono">{error}</p>
           </div>
         )}
       </div>

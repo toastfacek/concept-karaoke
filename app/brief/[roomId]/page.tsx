@@ -570,7 +570,7 @@ export default function BriefPage() {
 
     const destinations: Partial<Record<string, string>> = {
       creating: routes.create(roomCode),
-      pitching: routes.pitch(roomCode),
+      presenting: routes.present(roomCode),
       voting: routes.vote(roomCode),
       results: routes.results(roomCode),
     }

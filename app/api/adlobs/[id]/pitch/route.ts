@@ -4,29 +4,15 @@ import { z } from "zod"
 import { TABLES } from "@/lib/db"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 
-const requestSchema = z
-  .object({
-    text: z
-      .string()
-      .transform((value) => value.trim())
-      .pipe(z.string().min(40, "Mantra must be at least 40 characters").max(1200, "Mantra is too long")),
-    createdBy: z.string().uuid("Invalid player identifier"),
-  })
-  .superRefine((value, ctx) => {
-    const wordCount = value.text
-      .split(/\s+/)
-      .map((word) => word.trim())
-      .filter(Boolean).length
+const requestSchema = z.object({
+  text: z
+    .string()
+    .transform((value) => value.trim())
+    .pipe(z.string().min(1, "Pitch cannot be empty").max(1200, "Pitch is too long")),
+  createdBy: z.string().uuid("Invalid player identifier"),
+})
 
-    if (wordCount < 50) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Mantra should be at least 50 words to feel like a pitch",
-      })
-    }
-  })
-
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const body = await request.json()
     const parsed = requestSchema.safeParse(body)
@@ -36,12 +22,13 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ success: false, error: message }, { status: 400 })
     }
 
-    const adlobId = params.id
+    const resolvedParams = await params
+    const adlobId = resolvedParams.id
     const supabase = getSupabaseAdminClient()
 
     const { data: adlob, error: adlobError } = await supabase
       .from(TABLES.adLobs)
-      .select("id, room_id, assigned_pitcher")
+      .select("id, room_id, assigned_presenter")
       .eq("id", adlobId)
       .maybeSingle()
 
@@ -70,9 +57,9 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const { error: updateError } = await supabase
       .from(TABLES.adLobs)
       .update({
-        mantra_text: parsed.data.text,
-        mantra_created_by: parsed.data.createdBy,
-        assigned_pitcher: adlob.assigned_pitcher ?? parsed.data.createdBy,
+        pitch_text: parsed.data.text,
+        pitch_created_by: parsed.data.createdBy,
+        assigned_presenter: adlob.assigned_presenter ?? parsed.data.createdBy,
       })
       .eq("id", adlobId)
 
@@ -82,7 +69,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Failed to update mantra", error)
-    return NextResponse.json({ success: false, error: "Failed to update mantra" }, { status: 500 })
+    console.error("Failed to update pitch", error)
+    return NextResponse.json({ success: false, error: "Failed to update pitch" }, { status: 500 })
   }
 }

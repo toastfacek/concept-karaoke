@@ -1725,9 +1725,6 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
             <Button size="sm" variant="secondary" onClick={handleClear} disabled={!hasContent}>
               Clear
             </Button>
-            <Button size="sm" onClick={handleSave} disabled={!hasContent}>
-              Save Snapshot
-            </Button>
           </div>
         )}
       </div>

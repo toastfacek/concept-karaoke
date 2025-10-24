@@ -67,11 +67,11 @@ export const sampleAdLobs: AdLob[] = [
       canvasData: {},
       createdBy: "3",
     },
-    mantra: {
+    pitch: {
       text: "SnoozeButton Pro doesn't just wake you up—it transforms your mornings. Using AI-powered sleep tracking and gradual light therapy, it ensures you rise naturally, refreshed, and ready to conquer the day. Say goodbye to jarring alarms and hello to your most productive self.",
       createdBy: "4",
     },
-    assignedPitcher: "2",
+    assignedPresenter: "2",
     voteCount: 0,
   },
 ]

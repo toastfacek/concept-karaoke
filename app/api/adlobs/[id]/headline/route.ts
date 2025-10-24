@@ -23,7 +23,7 @@ const requestSchema = z.object({
   createdBy: z.string().uuid("Invalid player identifier"),
 })
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const body = await request.json()
     const parsed = requestSchema.safeParse(body)
@@ -33,7 +33,8 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ success: false, error: message }, { status: 400 })
     }
 
-    const adlobId = params.id
+    const resolvedParams = await params
+    const adlobId = resolvedParams.id
     const supabase = getSupabaseAdminClient()
 
     const { data: adlob, error: adlobError } = await supabase

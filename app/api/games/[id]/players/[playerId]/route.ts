@@ -13,7 +13,7 @@ function normalizeId(id: string) {
   return trimmed.length === 6 ? trimmed.toUpperCase() : trimmed
 }
 
-export async function PATCH(request: Request, { params }: { params: { id: string; playerId: string } }) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string; playerId: string }> }) {
   try {
     const body = await request.json()
     const parsed = updateSchema.safeParse(body)
@@ -23,8 +23,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return NextResponse.json({ success: false, error: message }, { status: 400 })
     }
 
-    const identifier = normalizeId(params.id)
-    const playerId = params.playerId
+    const resolvedParams = await params
+    const identifier = normalizeId(resolvedParams.id)
+    const playerId = resolvedParams.playerId
     const supabase = getSupabaseAdminClient()
 
     const roomQuery = supabase.from(TABLES.gameRooms).select("id, code").limit(1)

@@ -36,31 +36,31 @@ type AdLobRecord = {
   visualAuthorId: string | null
   headlineCanvasData: unknown
   headlineAuthorId: string | null
-  mantra: string | null
-  mantraAuthorId: string | null
+  pitch: string | null
+  pitchAuthorId: string | null
   createdAt: string
-  assignedPitcherId: string | null
-  pitchOrder: number | null
-  pitchStartedAt: string | null
-  pitchCompletedAt: string | null
+  assignedPresenterId: string | null
+  presentOrder: number | null
+  presentStartedAt: string | null
+  presentCompletedAt: string | null
 }
 
 type GameState = SnapshotDrivenState<GamePlayer> & {
   currentPhase: CreationPhase | null
   phaseStartTime: string | null
-  currentPitchIndex: number | null
-  pitchSequence: string[]
+  currentPresentIndex: number | null
+  presentSequence: string[]
   adlobs: AdLobRecord[]
   phaseDurationSeconds: number
 }
 
-const CREATION_SEQUENCE: CreationPhase[] = ["big_idea", "visual", "headline", "mantra"]
+const CREATION_SEQUENCE: CreationPhase[] = ["big_idea", "visual", "headline", "pitch"]
 
 const PHASE_LABELS: Record<CreationPhase, string> = {
   big_idea: "Round 1: The Big Idea",
   visual: "Round 2: The Visual",
   headline: "Round 3: The Headline",
-  mantra: "Round 4: The Mantra",
+  pitch: "Round 4: The Pitch",
 }
 
 const PHASE_INSTRUCTIONS: Record<CreationPhase, string> = {
@@ -68,8 +68,8 @@ const PHASE_INSTRUCTIONS: Record<CreationPhase, string> = {
   visual:
     "Bring the campaign to life visually. Sketch, describe, or plan the visual so the next teammate can build on it.",
   headline: "Drop a headline that sings. Integrate it with the visual concept so it feels polished.",
-  mantra:
-    "Write a 1-3 sentence mantra that sells the campaign with swagger (aim for 50-100 words). No edits to previous work—just riff.",
+  pitch:
+    "Write a pitch that sells the campaign with swagger (aim for 50-100 words). No edits to previous work—just riff.",
 }
 
 function getPhaseIndex(phase: CreationPhase | null): number {
@@ -96,13 +96,6 @@ function parseCanvasData(data: unknown): CanvasState | null {
   return cloneCanvasState(parsed.data)
 }
 
-function countWords(value: string): number {
-  return value
-    .trim()
-    .split(/\s+/)
-    .filter((word) => word.length > 0).length
-}
-
 export default function CreatePage() {
   const router = useRouter()
   const params = useParams()
@@ -126,8 +119,7 @@ export default function CreatePage() {
 
   const [bigIdeaInput, setBigIdeaInput] = useState("")
   const [visualNotes, setVisualNotes] = useState("")
-  const [headlineNotes, setHeadlineNotes] = useState("")
-  const [mantraInput, setMantraInput] = useState("")
+  const [pitchInput, setPitchInput] = useState("")
   const [visualCanvas, setVisualCanvas] = useState<CanvasState | null>(null)
   const [headlineCanvas, setHeadlineCanvas] = useState<CanvasState | null>(null)
   const lastPhaseRef = useRef<CreationPhase | null>(null)
@@ -167,8 +159,8 @@ export default function CreatePage() {
           hostId: gameData.hostId,
           currentPhase: gameData.currentPhase ?? null,
           phaseStartTime: gameData.phaseStartTime ?? null,
-          currentPitchIndex: gameData.currentPitchIndex ?? null,
-          pitchSequence: gameData.pitchSequence ?? [],
+          currentPresentIndex: gameData.currentPresentIndex ?? null,
+          presentSequence: gameData.presentSequence ?? [],
           players: (gameData.players ?? []).map((player: GamePlayer & { joined_at?: string }) => ({
             ...player,
             joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
@@ -413,8 +405,7 @@ export default function CreatePage() {
     if (!game || !currentAdlob) {
       setBigIdeaInput("")
       setVisualNotes("")
-      setHeadlineNotes("")
-      setMantraInput("")
+      setPitchInput("")
       setVisualCanvas(null)
       setHeadlineCanvas(null)
       lastPhaseRef.current = nextPhase
@@ -432,22 +423,19 @@ export default function CreatePage() {
     if (nextPhase === "big_idea") {
       setBigIdeaInput(currentAdlob.bigIdea ?? "")
       setVisualNotes("")
-      setHeadlineNotes("")
-      setMantraInput("")
+      setPitchInput("")
       setVisualCanvas(null)
       setHeadlineCanvas(null)
     } else if (nextPhase === "visual") {
       setVisualNotes(extractNotes(currentAdlob.visualCanvasData))
       setVisualCanvas(parseCanvasData(currentAdlob.visualCanvasData))
-      setHeadlineNotes("")
-      setMantraInput("")
+      setPitchInput("")
       setHeadlineCanvas(null)
     } else if (nextPhase === "headline") {
-      setHeadlineNotes(extractNotes(currentAdlob.headlineCanvasData))
       setHeadlineCanvas(parseCanvasData(currentAdlob.headlineCanvasData))
-      setMantraInput("")
-    } else if (nextPhase === "mantra") {
-      setMantraInput(currentAdlob.mantra ?? "")
+      setPitchInput("")
+    } else if (nextPhase === "pitch") {
+      setPitchInput(currentAdlob.pitch ?? "")
     }
   }, [game, currentAdlob])
 
@@ -511,32 +499,23 @@ export default function CreatePage() {
           return
         }
 
-        const notes = headlineNotes.trim()
-        if (notes.length < 3) {
-          setError("Give the copy a little more love — add 3+ characters for headline guidance.")
-          setIsSubmitting(false)
-          return
-        }
-
         const canvasPayload = cloneCanvasState(headlineCanvas)
-        canvasPayload.notes = notes
 
         submissionEndpoint = `/api/adlobs/${currentAdlob.id}/headline`
         submissionPayload = {
           canvasData: canvasPayload,
           createdBy: currentPlayer.id,
         }
-      } else if (game.currentPhase === "mantra") {
-        const text = mantraInput.trim()
-        const words = countWords(text)
+      } else if (game.currentPhase === "pitch") {
+        const text = pitchInput.trim()
 
-        if (words < 3) {
-          setError("Mantras should be at least 3 words — give the pitch a little more runway.")
+        if (text.length === 0) {
+          setError("Add some text for your pitch before submitting.")
           setIsSubmitting(false)
           return
         }
 
-        submissionEndpoint = `/api/adlobs/${currentAdlob.id}/mantra`
+        submissionEndpoint = `/api/adlobs/${currentAdlob.id}/pitch`
         submissionPayload = {
           text,
           createdBy: currentPlayer.id,
@@ -675,7 +654,7 @@ export default function CreatePage() {
     if (game.status === "creating") return
 
     const destinations: Partial<Record<string, string>> = {
-      pitching: routes.pitch(roomCode),
+      presenting: routes.present(roomCode),
       voting: routes.vote(roomCode),
       results: routes.results(roomCode),
     }
@@ -757,44 +736,12 @@ export default function CreatePage() {
                   <p className="text-sm">{extractNotes(currentAdlob.visualCanvasData)}</p>
                 </div>
               )}
-
-              {canvasHasContent(visualCanvasData) && !canvasHasContent(headlineCanvas) && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setHeadlineCanvas(visualCanvasData)
-                  }}
-                >
-                  Copy Visual Canvas as Starting Point
-                </Button>
-              )}
             </div>
 
             <Canvas initialData={headlineCanvas ?? headlineCanvasData ?? visualCanvasData ?? null} onChange={setHeadlineCanvas} />
-
-            <div className="space-y-2">
-              <Label htmlFor="headline-notes">Headline Copy Notes</Label>
-              <Textarea
-                id="headline-notes"
-                value={headlineNotes}
-                onChange={(event) => setHeadlineNotes(event.target.value)}
-                placeholder="Add any copy, messaging notes, or guidance..."
-                rows={4}
-              />
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>{headlineNotes.length} characters</span>
-                {headlineNotes.length < 3 && (
-                  <span className="text-amber-600">Add at least 3 characters</span>
-                )}
-                {headlineNotes.length >= 3 && canvasHasContent(headlineCanvas) && (
-                  <span className="text-green-600">Complete! ✓</span>
-                )}
-              </div>
-            </div>
           </div>
         )
-      case "mantra":
+      case "pitch":
         return (
           <div className="space-y-4">
             <div className="space-y-2">
@@ -812,24 +759,6 @@ export default function CreatePage() {
                 </div>
               )}
 
-              {extractNotes(currentAdlob.headlineCanvasData) && (
-                <div className="rounded border-2 border-border bg-muted/50 p-3">
-                  <p className="text-xs font-bold uppercase text-muted-foreground">Headline Notes:</p>
-                  <p className="text-sm">{extractNotes(currentAdlob.headlineCanvasData)}</p>
-                </div>
-              )}
-
-              {visualCanvasData && (
-                <div className="rounded border-2 border-border bg-muted/50 p-3">
-                  <p className="mb-2 text-xs font-bold uppercase text-muted-foreground">Visual Sketch:</p>
-                  <Canvas
-                    initialData={visualCanvasData}
-                    readOnly
-                    className="pointer-events-none bg-card"
-                  />
-                </div>
-              )}
-
               {headlineCanvasData && (
                 <div className="rounded border-2 border-border bg-muted/50 p-3">
                   <p className="mb-2 text-xs font-bold uppercase text-muted-foreground">Headline Layout:</p>
@@ -843,30 +772,12 @@ export default function CreatePage() {
             </div>
 
             <Textarea
-              value={mantraInput}
-              onChange={(event) => setMantraInput(event.target.value)}
-              placeholder="Write your campaign mantra..."
+              value={pitchInput}
+              onChange={(event) => setPitchInput(event.target.value)}
+              placeholder="Write your pitch..."
               rows={4}
               className="text-lg"
             />
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <div className="space-x-4">
-                <span>{countWords(mantraInput)} words</span>
-                <span>{mantraInput.length} characters</span>
-              </div>
-              {countWords(mantraInput) < 3 && (
-                <span className="text-amber-600">Need at least 3 words</span>
-              )}
-              {countWords(mantraInput) >= 3 && countWords(mantraInput) < 50 && (
-                <span className="text-blue-600">Target: 50-100 words</span>
-              )}
-              {countWords(mantraInput) >= 50 && countWords(mantraInput) <= 100 && (
-                <span className="text-green-600">Perfect length! ✓</span>
-              )}
-              {countWords(mantraInput) > 100 && (
-                <span className="text-amber-600">Over target (but okay!)</span>
-              )}
-            </div>
           </div>
         )
       default:
@@ -926,8 +837,8 @@ export default function CreatePage() {
               >
                 {isAdvancingPhase
                   ? "Advancing..."
-                  : game?.currentPhase === "mantra"
-                    ? "Move to Pitch"
+                  : game?.currentPhase === "pitch"
+                    ? "Move to Present"
                     : "Start Next Round"}
               </Button>
             )}

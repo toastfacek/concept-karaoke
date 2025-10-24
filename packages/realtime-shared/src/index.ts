@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto"
 
-export type CreationPhase = "big_idea" | "visual" | "headline" | "mantra" | null
+export type CreationPhase = "big_idea" | "visual" | "headline" | "pitch" | null
 
 export interface PlayerSummary {
   id: string

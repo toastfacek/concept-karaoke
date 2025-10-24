@@ -14,8 +14,8 @@ export const INITIAL_GAME_STATE: GameStateSnapshot = {
 export const GAME_STATUS_TRANSITIONS: Record<GameStatus, readonly GameStatus[]> = {
   lobby: ["briefing"],
   briefing: ["creating"],
-  creating: ["pitching"],
-  pitching: ["voting"],
+  creating: ["presenting"],
+  presenting: ["voting"],
   voting: ["results"],
   results: ["lobby"], // Allows immediate replay via "Play Again"
 } as const
@@ -95,10 +95,10 @@ export function advanceCreationPhase(state: GameStateSnapshot): GameStateSnapsho
   const nextPhase = getNextCreationPhase(state.currentPhase)
 
   if (!nextPhase) {
-    // No more creation phases; promote to pitching
+    // No more creation phases; promote to presenting
     return transitionGameState(
       { status: state.status, currentPhase: state.currentPhase },
-      "pitching",
+      "presenting",
     )
   }
 

@@ -34,7 +34,7 @@ async function resolveRoom(identifier: string) {
   return room ?? null
 }
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const json = await request.json()
     const parsed = requestSchema.safeParse(json)
@@ -44,7 +44,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ success: false, error: message }, { status: 400 })
     }
 
-    const identifier = normalizeId(params.id)
+    const resolvedParams = await params
+    const identifier = normalizeId(resolvedParams.id)
     const supabase = getSupabaseAdminClient()
 
     const room = await resolveRoom(identifier)
@@ -96,12 +97,12 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
 
     const nextSnapshot = advanceCreationPhase(currentSnapshot)
-    let pitchSequence: string[] = []
+    let presentSequence: string[] = []
 
-    if (nextSnapshot.status === "pitching") {
-      const { data: adlobsForPitch, error: adlobsSelectError } = await supabase
+    if (nextSnapshot.status === "presenting") {
+      const { data: adlobsForPresent, error: adlobsSelectError } = await supabase
         .from(TABLES.adLobs)
-        .select("id, assigned_pitcher, mantra_created_by")
+        .select("id, assigned_presenter, pitch_created_by")
         .eq("room_id", room.id)
         .order("created_at", { ascending: true })
 
@@ -109,20 +110,20 @@ export async function POST(request: Request, { params }: { params: { id: string 
         throw adlobsSelectError
       }
 
-      const orderedAdlobs = adlobsForPitch ?? []
-      pitchSequence = orderedAdlobs.map((item) => item.id)
+      const orderedAdlobs = adlobsForPresent ?? []
+      presentSequence = orderedAdlobs.map((item) => item.id)
 
       for (let index = 0; index < orderedAdlobs.length; index += 1) {
         const adlob = orderedAdlobs[index]
-        const assignedPitcher = adlob.assigned_pitcher ?? adlob.mantra_created_by ?? null
+        const assignedPresenter = adlob.assigned_presenter ?? adlob.pitch_created_by ?? null
 
         const { error: adlobUpdateError } = await supabase
           .from(TABLES.adLobs)
           .update({
-            assigned_pitcher: assignedPitcher,
-            pitch_order: index,
-            pitch_started_at: null,
-            pitch_completed_at: null,
+            assigned_presenter: assignedPresenter,
+            present_order: index,
+            present_started_at: null,
+            present_completed_at: null,
           })
           .eq("id", adlob.id)
 
@@ -132,13 +133,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
       }
     }
 
-    const hasPitchSequence = pitchSequence.length > 0
+    const hasPresentSequence = presentSequence.length > 0
     const gameUpdate: Record<string, unknown> = {
       status: nextSnapshot.status,
       current_phase: nextSnapshot.status === "creating" ? nextSnapshot.currentPhase : null,
       phase_start_time: new Date().toISOString(),
-      current_pitch_index: nextSnapshot.status === "pitching" ? (hasPitchSequence ? 0 : null) : null,
-      pitch_sequence: nextSnapshot.status === "pitching" ? (hasPitchSequence ? pitchSequence : null) : null,
+      current_present_index: nextSnapshot.status === "presenting" ? (hasPresentSequence ? 0 : null) : null,
+      present_sequence: nextSnapshot.status === "presenting" ? (hasPresentSequence ? presentSequence : null) : null,
     }
 
     const { error: updateError } = await supabase.from(TABLES.gameRooms).update(gameUpdate).eq("id", room.id)

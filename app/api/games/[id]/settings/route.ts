@@ -13,9 +13,10 @@ const settingsSchema = z.object({
   playerId: z.string().uuid("Invalid player identifier"),
 })
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const roomCode = params.id.toUpperCase()
+    const resolvedParams = await params
+    const roomCode = resolvedParams.id.toUpperCase()
     const json = await request.json()
     const parsed = settingsSchema.safeParse(json)
 

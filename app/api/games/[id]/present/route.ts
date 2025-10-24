@@ -14,7 +14,7 @@ function normalizeId(id: string) {
   return trimmed.length === 6 ? trimmed.toUpperCase() : trimmed
 }
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const body = await request.json()
     const parsed = requestSchema.safeParse(body)
@@ -25,13 +25,18 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
 
     const supabase = getSupabaseAdminClient()
-    const identifier = normalizeId(params.id)
+    const resolvedParams = await params
+    const identifier = normalizeId(resolvedParams.id)
 
-    const { data: room, error: roomError } = await supabase
+    const matchByCode = /^[A-Z0-9]{6}$/.test(identifier)
+
+    const roomQuery = supabase
       .from(TABLES.gameRooms)
-      .select("id, code, status, host_id, current_pitch_index, pitch_sequence")
-      .or(`code.eq.${identifier},id.eq.${identifier}`)
-      .maybeSingle()
+      .select("id, code, status, host_id, current_present_index, present_sequence")
+
+    const { data: room, error: roomError } = matchByCode
+      ? await roomQuery.eq("code", identifier).maybeSingle()
+      : await roomQuery.eq("id", identifier).maybeSingle()
 
     if (roomError) {
       throw roomError
@@ -41,20 +46,20 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ success: false, error: "Game not found" }, { status: 404 })
     }
 
-    if (room.status !== "pitching") {
-      return NextResponse.json({ success: false, error: "Game is not in the pitching phase" }, { status: 409 })
+    if (room.status !== "presenting") {
+      return NextResponse.json({ success: false, error: "Game is not in the presenting phase" }, { status: 409 })
     }
 
-    const pitchSequence = room.pitch_sequence ?? []
-    const currentIndex = room.current_pitch_index ?? 0
+    const presentSequence = room.present_sequence ?? []
+    const currentIndex = room.current_present_index ?? 0
 
-    if (!Array.isArray(pitchSequence) || pitchSequence.length === 0) {
-      return NextResponse.json({ success: false, error: "No campaigns are ready to pitch yet" }, { status: 409 })
+    if (!Array.isArray(presentSequence) || presentSequence.length === 0) {
+      return NextResponse.json({ success: false, error: "No campaigns are ready to present yet" }, { status: 409 })
     }
 
-    const currentAdlobId = pitchSequence[currentIndex]
+    const currentAdlobId = presentSequence[currentIndex]
     if (!currentAdlobId) {
-      return NextResponse.json({ success: false, error: "Unable to determine current pitch" }, { status: 409 })
+      return NextResponse.json({ success: false, error: "Unable to determine current presentation" }, { status: 409 })
     }
 
     const { data: player, error: playerError } = await supabase
@@ -74,7 +79,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     const { data: adlob, error: adlobError } = await supabase
       .from(TABLES.adLobs)
-      .select("id, assigned_pitcher, pitch_started_at, pitch_completed_at")
+      .select("id, assigned_presenter, present_started_at, present_completed_at")
       .eq("id", currentAdlobId)
       .maybeSingle()
 
@@ -87,11 +92,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
 
     const isHost = player.is_host
-    const isPitcher = adlob.assigned_pitcher === player.id
+    const isPresenter = adlob.assigned_presenter === player.id
 
-    if (!isHost && !isPitcher) {
+    if (!isHost && !isPresenter) {
       return NextResponse.json(
-        { success: false, error: "Only the host or the assigned pitcher can control the pitch flow" },
+        { success: false, error: "Only the host or the assigned presenter can control the presentation flow" },
         { status: 403 },
       )
     }
@@ -99,13 +104,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const now = new Date().toISOString()
 
     if (parsed.data.action === "start") {
-      if (adlob.pitch_started_at) {
-        return NextResponse.json({ success: true, startedAt: adlob.pitch_started_at })
+      if (adlob.present_started_at) {
+        return NextResponse.json({ success: true, startedAt: adlob.present_started_at })
       }
 
       const { error: startError } = await supabase
         .from(TABLES.adLobs)
-        .update({ pitch_started_at: now, pitch_completed_at: null })
+        .update({ present_started_at: now, present_completed_at: null })
         .eq("id", adlob.id)
 
       if (startError) {
@@ -116,11 +121,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
 
     const adlobUpdate: Record<string, string> = {
-      pitch_completed_at: now,
+      present_completed_at: now,
     }
 
-    if (!adlob.pitch_started_at) {
-      adlobUpdate.pitch_started_at = now
+    if (!adlob.present_started_at) {
+      adlobUpdate.present_started_at = now
     }
 
     const { error: completeError } = await supabase.from(TABLES.adLobs).update(adlobUpdate).eq("id", adlob.id)
@@ -130,13 +135,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
 
     const nextIndex = currentIndex + 1
-    const hasNext = nextIndex < pitchSequence.length
+    const hasNext = nextIndex < presentSequence.length
 
     if (hasNext) {
       const { error: advanceError } = await supabase
         .from(TABLES.gameRooms)
         .update({
-          current_pitch_index: nextIndex,
+          current_present_index: nextIndex,
           phase_start_time: now,
         })
         .eq("id", room.id)
@@ -147,7 +152,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
       return NextResponse.json({
         success: true,
-        nextPitchIndex: nextIndex,
+        nextPresentIndex: nextIndex,
       })
     }
 
@@ -157,7 +162,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
         status: "voting",
         current_phase: null,
         phase_start_time: now,
-        current_pitch_index: null,
+        current_present_index: null,
       })
       .eq("id", room.id)
 
@@ -179,7 +184,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
       status: "voting",
     })
   } catch (error) {
-    console.error("Failed to update pitch flow", error)
-    return NextResponse.json({ success: false, error: "Failed to update pitch flow" }, { status: 500 })
+    console.error("Failed to update presentation flow", error)
+    const errorMessage = error instanceof Error ? error.message : "Failed to update presentation flow"
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 })
   }
 }

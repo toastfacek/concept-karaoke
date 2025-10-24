@@ -115,30 +115,30 @@
 - **Submit & Continue** (manual advance)
 
 **Flow**:
-- After Mantra phase → `/pitch/[roomId]`
+- After Mantra phase → `/present/[roomId]`
 
 ---
 
-### 6. Pitch Screen (`/pitch/[roomId]`)
-**Purpose**: Players pitch campaigns they didn't create
+### 6. Present Screen (`/present/[roomId]`)
+**Purpose**: Players present campaigns they didn't create
 
 **Features**:
-- Shows pitcher name + emoji
-- Pitch counter (e.g., "Pitch 2 of 4")
+- Shows presenter name + emoji
+- Presentation counter (e.g., "Presentation 2 of 4")
 - Two-step reveal:
   1. Mantra displayed full screen
   2. Complete campaign revealed
 
-**Buttons** (Pitcher):
+**Buttons** (Presenter):
 - **Reveal Campaign** (shows full AdLob)
-- **End Pitch** (advances to next)
+- **End Presentation** (advances to next)
 
 **Buttons** (Spectators):
 - None (watch mode)
 
 **Flow**:
 - Cycles through all AdLobs
-- After last pitch → `/vote/[roomId]`
+- After last presentation → `/vote/[roomId]`
 
 ---
 
@@ -148,8 +148,8 @@
 **Features**:
 - Grid layout of all campaigns
 - Shows Big Idea, Visual, and Mantra
-- Pitcher name displayed
-- Cannot vote for own pitch
+- Presenter name displayed
+- Cannot vote for own presentation
 - Click to select, then cast vote
 
 **Buttons**:
@@ -213,8 +213,8 @@
         └───────┬───────┘
                 ▼
         ┌───────────────┐
-        │Pitch          │
-        │(/pitch/[id])  │
+        │Present        │
+        │(/present/[id])│
         └───────┬───────┘
                 ▼
         ┌───────────────┐
@@ -279,8 +279,8 @@ All screens use sample data from `/lib/sample-data.ts`:
 3. View lobby with sample players
 4. Click "Start Game" → Goes to `/brief/ABC123`
 5. Edit brief, click "Lock Brief & Start" → Goes to `/create/ABC123`
-6. Complete all 4 creation rounds → Goes to `/pitch/ABC123`
-7. View pitches, click through → Goes to `/vote/ABC123`
+6. Complete all 4 creation rounds → Goes to `/present/ABC123`
+7. View presentations, click through → Goes to `/vote/ABC123`
 8. Select and vote → Goes to `/results/ABC123`
 9. Click "Play Again" or "Back to Home"
 

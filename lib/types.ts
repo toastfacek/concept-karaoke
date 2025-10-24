@@ -8,10 +8,10 @@ export interface Player {
   joinedAt: Date
 }
 
-export const GAME_STATUSES = ["lobby", "briefing", "creating", "pitching", "voting", "results"] as const
+export const GAME_STATUSES = ["lobby", "briefing", "creating", "presenting", "voting", "results"] as const
 export type GameStatus = (typeof GAME_STATUSES)[number]
 
-export const CREATION_PHASES = ["big_idea", "visual", "headline", "mantra"] as const
+export const CREATION_PHASES = ["big_idea", "visual", "headline", "pitch"] as const
 export type CreationPhase = (typeof CREATION_PHASES)[number]
 
 export const PRODUCT_CATEGORIES = [
@@ -64,14 +64,14 @@ export interface AdLob {
     canvasData: any
     createdBy: string
   }
-  mantra: {
+  pitch: {
     text: string
     createdBy: string
   }
-  assignedPitcher: string | null
-  pitchOrder?: number | null
-  pitchStartedAt?: Date | null
-  pitchCompletedAt?: Date | null
+  assignedPresenter: string | null
+  presentOrder?: number | null
+  presentStartedAt?: Date | null
+  presentCompletedAt?: Date | null
   voteCount: number
 }
 

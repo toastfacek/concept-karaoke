@@ -18,7 +18,7 @@ async function resolveRoom(identifier: string) {
 
   const roomQuery = supabase
     .from(TABLES.gameRooms)
-    .select("id, code, status, current_phase, phase_start_time, host_id, current_pitch_index, pitch_sequence, product_category, phase_duration_seconds")
+    .select("id, code, status, current_phase, phase_start_time, host_id, current_present_index, present_sequence, product_category, phase_duration_seconds")
 
   const { data: room, error: roomError } = matchByCode
     ? await roomQuery.eq("code", identifier).maybeSingle()
@@ -67,7 +67,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const { data: adlobs, error: adlobsError } = await supabase
       .from(TABLES.adLobs)
       .select(
-        "id, big_idea_text, big_idea_created_by, visual_canvas_data, visual_image_urls, visual_created_by, headline_canvas_data, headline_created_by, mantra_text, mantra_created_by, created_at, assigned_pitcher, pitch_order, pitch_started_at, pitch_completed_at",
+        "id, big_idea_text, big_idea_created_by, visual_canvas_data, visual_image_urls, visual_created_by, headline_canvas_data, headline_created_by, pitch_text, pitch_created_by, created_at, assigned_presenter, present_order, present_started_at, present_completed_at",
       )
       .eq("room_id", room.id)
       .order("created_at", { ascending: true })
@@ -85,8 +85,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         currentPhase: room.current_phase,
         phaseStartTime: room.phase_start_time,
         hostId: room.host_id,
-        currentPitchIndex: room.current_pitch_index,
-        pitchSequence: room.pitch_sequence ?? [],
+        currentPresentIndex: room.current_present_index,
+        presentSequence: room.present_sequence ?? [],
         productCategory: room.product_category,
         phaseDurationSeconds: room.phase_duration_seconds,
         players: players?.map((player) => ({
@@ -118,13 +118,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             visualAuthorId: adlob.visual_created_by,
             headlineCanvasData: adlob.headline_canvas_data,
             headlineAuthorId: adlob.headline_created_by,
-            mantra: adlob.mantra_text,
-            mantraAuthorId: adlob.mantra_created_by,
+            pitch: adlob.pitch_text,
+            pitchAuthorId: adlob.pitch_created_by,
             createdAt: adlob.created_at,
-            assignedPitcherId: adlob.assigned_pitcher,
-            pitchOrder: adlob.pitch_order,
-            pitchStartedAt: adlob.pitch_started_at,
-            pitchCompletedAt: adlob.pitch_completed_at,
+            assignedPresenterId: adlob.assigned_presenter,
+            presentOrder: adlob.present_order,
+            presentStartedAt: adlob.present_started_at,
+            presentCompletedAt: adlob.present_completed_at,
           })) ?? [],
       },
     })
@@ -135,7 +135,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 }
 
 const updateSchema = z.object({
-  status: z.enum(["briefing", "creating", "pitching", "voting", "results"]),
+  status: z.enum(["briefing", "creating", "presenting", "voting", "results"]),
   playerId: z.string().uuid("Invalid player identifier"),
 })
 
@@ -202,12 +202,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       )
     }
 
-    let pitchSequence: string[] = []
+    let presentSequence: string[] = []
 
-    if (nextState.status === "pitching") {
-      const { data: adlobsForPitch, error: adlobsSelectError } = await supabase
+    if (nextState.status === "presenting") {
+      const { data: adlobsForPresent, error: adlobsSelectError } = await supabase
         .from(TABLES.adLobs)
-        .select("id, assigned_pitcher, mantra_created_by")
+        .select("id, assigned_presenter, pitch_created_by")
         .eq("room_id", room.id)
         .order("created_at", { ascending: true })
 
@@ -215,20 +215,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         throw adlobsSelectError
       }
 
-      const orderedAdlobs = adlobsForPitch ?? []
-      pitchSequence = orderedAdlobs.map((item) => item.id)
+      const orderedAdlobs = adlobsForPresent ?? []
+      presentSequence = orderedAdlobs.map((item) => item.id)
 
       for (let index = 0; index < orderedAdlobs.length; index += 1) {
         const adlob = orderedAdlobs[index]
-        const assignedPitcher = adlob.assigned_pitcher ?? adlob.mantra_created_by ?? null
+        const assignedPresenter = adlob.assigned_presenter ?? adlob.pitch_created_by ?? null
 
         const { error: adlobUpdateError } = await supabase
           .from(TABLES.adLobs)
           .update({
-            assigned_pitcher: assignedPitcher,
-            pitch_order: index,
-            pitch_started_at: null,
-            pitch_completed_at: null,
+            assigned_presenter: assignedPresenter,
+            present_order: index,
+            present_started_at: null,
+            present_completed_at: null,
           })
           .eq("id", adlob.id)
 
@@ -238,7 +238,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     }
 
-    const hasPitchSequence = pitchSequence.length > 0
+    const hasPresentSequence = presentSequence.length > 0
 
     const { error: updateError } = await supabase
       .from(TABLES.gameRooms)
@@ -246,8 +246,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         status: nextState.status,
         current_phase: nextState.status === "creating" ? nextState.currentPhase : null,
         phase_start_time: new Date().toISOString(),
-        current_pitch_index: nextState.status === "pitching" ? (hasPitchSequence ? 0 : null) : null,
-        pitch_sequence: nextState.status === "pitching" ? (hasPitchSequence ? pitchSequence : null) : null,
+        current_present_index: nextState.status === "presenting" ? (hasPresentSequence ? 0 : null) : null,
+        present_sequence: nextState.status === "presenting" ? (hasPresentSequence ? presentSequence : null) : null,
       })
       .eq("id", room.id)
 

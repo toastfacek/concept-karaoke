@@ -12,9 +12,10 @@ const briefSchema = z.object({
   objective: z.string().min(1, "Objective is required"),
 })
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params
+    const resolvedParams = await params
+    const { id } = resolvedParams
     const body = await request.json()
 
     const parsed = briefSchema.safeParse(body)

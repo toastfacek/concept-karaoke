@@ -1,21 +1,169 @@
 import { NextResponse } from "next/server"
+import { z } from "zod"
+
+import { TABLES } from "@/lib/db"
+import { getSupabaseAdminClient } from "@/lib/supabase/admin"
+
+const voteSchema = z.object({
+  roomId: z.string().min(1, "Room ID is required"),
+  voterId: z.string().uuid("Invalid voter ID"),
+  adlobId: z.string().uuid("Invalid adlob ID"),
+})
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { roomId: _roomId, voterId: _voterId, adlobId: _adlobId } = body
+    const parsed = voteSchema.safeParse(body)
 
-    // TODO: Validate voter hasn't already voted
-    // TODO: Validate voter isn't voting for their own pitch
-    // TODO: Save vote to Supabase
-    // TODO: Check if all votes are in
-    // TODO: Calculate results and transition to results phase
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? "Invalid request payload"
+      return NextResponse.json({ success: false, error: message }, { status: 400 })
+    }
+
+    const { roomId, voterId, adlobId } = parsed.data
+    const supabase = getSupabaseAdminClient()
+
+    // Validate the game exists and is in voting phase
+    const { data: room, error: roomError } = await supabase
+      .from(TABLES.gameRooms)
+      .select("id, status")
+      .or(`code.eq.${roomId},id.eq.${roomId}`)
+      .maybeSingle()
+
+    if (roomError) {
+      throw roomError
+    }
+
+    if (!room) {
+      return NextResponse.json({ success: false, error: "Game not found" }, { status: 404 })
+    }
+
+    if (room.status !== "voting") {
+      return NextResponse.json({ success: false, error: "Game is not in voting phase" }, { status: 409 })
+    }
+
+    // Validate the voter is in this room
+    const { data: voter, error: voterError } = await supabase
+      .from(TABLES.players)
+      .select("id, room_id")
+      .eq("id", voterId)
+      .maybeSingle()
+
+    if (voterError) {
+      throw voterError
+    }
+
+    if (!voter || voter.room_id !== room.id) {
+      return NextResponse.json({ success: false, error: "Player not found in this room" }, { status: 403 })
+    }
+
+    // Check if voter has already voted
+    const { data: existingVote, error: existingVoteError } = await supabase
+      .from(TABLES.votes)
+      .select("id")
+      .eq("room_id", room.id)
+      .eq("voter_id", voterId)
+      .maybeSingle()
+
+    if (existingVoteError) {
+      throw existingVoteError
+    }
+
+    if (existingVote) {
+      return NextResponse.json({ success: false, error: "You have already voted" }, { status: 409 })
+    }
+
+    // Validate the adlob exists and get the presenter
+    const { data: adlob, error: adlobError } = await supabase
+      .from(TABLES.adLobs)
+      .select("id, room_id, assigned_presenter")
+      .eq("id", adlobId)
+      .maybeSingle()
+
+    if (adlobError) {
+      throw adlobError
+    }
+
+    if (!adlob || adlob.room_id !== room.id) {
+      return NextResponse.json({ success: false, error: "Campaign not found in this game" }, { status: 404 })
+    }
+
+    // Check if voter is trying to vote for their own campaign
+    if (adlob.assigned_presenter === voterId) {
+      return NextResponse.json({ success: false, error: "You cannot vote for your own campaign" }, { status: 409 })
+    }
+
+    // Insert the vote
+    const { error: insertError } = await supabase.from(TABLES.votes).insert({
+      room_id: room.id,
+      voter_id: voterId,
+      adlob_id: adlobId,
+    })
+
+    if (insertError) {
+      throw insertError
+    }
+
+    // Increment the vote count on the adlob
+    const { error: updateError } = await supabase.rpc("increment_vote_count", { adlob_id: adlobId })
+
+    // If the RPC doesn't exist, fall back to manual update
+    if (updateError) {
+      const { error: fallbackError } = await supabase
+        .from(TABLES.adLobs)
+        .update({ vote_count: supabase.raw("vote_count + 1") })
+        .eq("id", adlobId)
+
+      if (fallbackError) {
+        throw fallbackError
+      }
+    }
+
+    // Check if all players have voted
+    const { count: playerCount, error: playerCountError } = await supabase
+      .from(TABLES.players)
+      .select("*", { count: "exact", head: true })
+      .eq("room_id", room.id)
+
+    if (playerCountError) {
+      throw playerCountError
+    }
+
+    const { count: voteCount, error: voteCountError } = await supabase
+      .from(TABLES.votes)
+      .select("*", { count: "exact", head: true })
+      .eq("room_id", room.id)
+
+    if (voteCountError) {
+      throw voteCountError
+    }
+
+    const allVotesIn = playerCount !== null && voteCount !== null && voteCount >= playerCount
+
+    // If all votes are in, transition to results
+    if (allVotesIn) {
+      const { error: statusError } = await supabase
+        .from(TABLES.gameRooms)
+        .update({
+          status: "results",
+          phase_start_time: new Date().toISOString(),
+        })
+        .eq("id", room.id)
+
+      if (statusError) {
+        throw statusError
+      }
+    }
 
     return NextResponse.json({
       success: true,
       message: "Vote recorded",
+      allVotesIn,
+      status: allVotesIn ? "results" : "voting",
     })
-  } catch {
-    return NextResponse.json({ success: false, error: "Failed to record vote" }, { status: 500 })
+  } catch (error) {
+    console.error("Failed to record vote", error)
+    const errorMessage = error instanceof Error ? error.message : "Failed to record vote"
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 })
   }
 }

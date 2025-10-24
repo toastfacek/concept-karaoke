@@ -423,7 +423,7 @@ export default function LobbyPage() {
     const destinations: Partial<Record<string, string>> = {
       briefing: routes.brief(roomCode),
       creating: routes.create(roomCode),
-      pitching: routes.pitch(roomCode),
+      presenting: routes.present(roomCode),
       voting: routes.vote(roomCode),
       results: routes.results(roomCode),
     }
