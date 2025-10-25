@@ -1,0 +1,21 @@
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+
+[phases.install]
+cmds = [
+  "npm i -g corepack@latest",
+  "corepack enable",
+  "corepack prepare pnpm@10.18.3 --activate",
+  "cd ../..",
+  "pnpm install --frozen-lockfile"
+]
+
+[phases.build]
+cmds = [
+  "cd ../..",
+  "pnpm --filter @concept-karaoke/realtime-shared build",
+  "pnpm --filter concept-karaoke-realtime-server build"
+]
+
+[start]
+cmd = "cd services/realtime-server && node dist/index.js"

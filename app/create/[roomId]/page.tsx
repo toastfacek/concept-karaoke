@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Timer } from "@/components/timer"
-import { PhaseProgress } from "@/components/phase-progress"
+import { PhaseProgressHorizontal } from "@/components/phase-progress-horizontal"
 import { PlayerStatus } from "@/components/player-status"
 import { useRoomRealtime, type RoomRealtimeListenerHelpers } from "@/hooks/use-room-realtime"
 import { canvasHasContent, canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/canvas"
@@ -745,8 +745,6 @@ export default function CreatePage() {
               <p className="text-sm">{currentAdlob.bigIdea ?? "Waiting for big idea..."}</p>
             </div>
 
-            <Canvas initialData={visualCanvas} onChange={setVisualCanvas} />
-
             <div className="space-y-2">
               <Label htmlFor="visual-notes">Visual Notes</Label>
               <Textarea
@@ -766,6 +764,8 @@ export default function CreatePage() {
                 )}
               </div>
             </div>
+
+            <Canvas initialData={visualCanvas} onChange={setVisualCanvas} />
           </div>
         )
       case "headline":
@@ -807,17 +807,6 @@ export default function CreatePage() {
                   <p className="text-sm">{extractNotes(currentAdlob.visualCanvasData)}</p>
                 </div>
               )}
-
-              {headlineCanvasData && (
-                <div className="rounded border-2 border-border bg-muted/50 p-3">
-                  <p className="mb-2 text-xs font-bold uppercase text-muted-foreground">Headline Layout:</p>
-                  <Canvas
-                    initialData={headlineCanvasData}
-                    readOnly
-                    className="pointer-events-none bg-card"
-                  />
-                </div>
-              )}
             </div>
 
             <Textarea
@@ -827,6 +816,17 @@ export default function CreatePage() {
               rows={4}
               className="text-lg"
             />
+
+            {headlineCanvasData && (
+              <div className="rounded border-2 border-border bg-muted/50 p-3">
+                <p className="mb-2 text-xs font-bold uppercase text-muted-foreground">Headline Layout:</p>
+                <Canvas
+                  initialData={headlineCanvasData}
+                  readOnly
+                  className="pointer-events-none bg-card"
+                />
+              </div>
+            )}
           </div>
         )
       default:
@@ -862,33 +862,19 @@ export default function CreatePage() {
               </p>
 
               {renderPhaseContent()}
-
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <Button
-                  type="button"
-                  size="lg"
-                  className="w-full sm:w-auto"
-                  onClick={handleSubmitWork}
-                  disabled={isSubmitting || !currentPlayer || !game?.currentPhase}
-                >
-                  {isSubmitting ? "Submitting..." : "Submit Work & Ready Up"}
-                </Button>
-                <Button
-                  type="button"
-                  size="lg"
-                  variant="secondary"
-                  className="w-full sm:w-auto"
-                  onClick={handleToggleReady}
-                  disabled={isTogglingReady || !currentPlayer}
-                >
-                  {isTogglingReady ? "Updating..." : currentPlayer?.isReady ? "Mark Not Ready" : "Ready Up"}
-                </Button>
-              </div>
             </section>
           </div>
 
           {/* Right Sidebar - Status & Progress */}
           <div className="w-80 shrink-0 space-y-6 sticky top-6 self-start">
+            {/* Phase Progress */}
+            <div className="retro-border bg-card p-4">
+              <PhaseProgressHorizontal
+                currentPhase={game?.currentPhase ?? "big_idea"}
+                completedPhases={completedPhases}
+              />
+            </div>
+
             {/* View Brief Button */}
             <Button
               variant="outline"
@@ -904,17 +890,31 @@ export default function CreatePage() {
               <Timer endTime={phaseEndTime} className="w-full" />
             </div>
 
-            {/* Phase Progress */}
-            <div className="retro-border bg-card p-4">
-              <PhaseProgress
-                currentPhase={game?.currentPhase ?? "big_idea"}
-                completedPhases={completedPhases}
-              />
-            </div>
-
             {/* Player Status */}
             <div className="retro-border bg-card p-4">
               <PlayerStatus players={playerStatusData} />
+
+              <div className="mt-4 pt-4 border-t-2 border-border space-y-3">
+                <Button
+                  type="button"
+                  size="lg"
+                  className="w-full"
+                  onClick={handleSubmitWork}
+                  disabled={isSubmitting || !currentPlayer || !game?.currentPhase}
+                >
+                  {isSubmitting ? "Submitting..." : "Submit Work & Ready Up"}
+                </Button>
+                <Button
+                  type="button"
+                  size="lg"
+                  variant="secondary"
+                  className="w-full"
+                  onClick={handleToggleReady}
+                  disabled={isTogglingReady || !currentPlayer}
+                >
+                  {isTogglingReady ? "Updating..." : currentPlayer?.isReady ? "Mark Not Ready" : "Ready Up"}
+                </Button>
+              </div>
 
               {currentPlayer?.isHost && (
                 <div className="mt-4 pt-4 border-t-2 border-border">
