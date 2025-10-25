@@ -556,12 +556,6 @@ export default function CreatePage() {
       } else if (game.currentPhase === "pitch") {
         const text = pitchInput.trim()
 
-        if (text.length === 0) {
-          setError("Add some text for your pitch before submitting.")
-          setIsSubmitting(false)
-          return
-        }
-
         submissionEndpoint = `/api/adlobs/${currentAdlob.id}/pitch`
         submissionPayload = {
           text,
