@@ -10,9 +10,9 @@ import { PlayerStatus } from "@/components/player-status"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
 import { useRealtime } from "@/components/realtime-provider"
+import { useRoomRealtime, type RoomRealtimeListenerHelpers } from "@/hooks/use-room-realtime"
 import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
 import type { RealtimeStatus } from "@/lib/realtime-client"
-import { fetchRealtimeToken, type RealtimeToken } from "@/lib/realtime/token"
 
 type CampaignBrief = {
   productName: string
@@ -51,13 +51,8 @@ export default function BriefPage() {
   const router = useRouter()
   const params = useParams()
   const roomCode = (params.roomId as string).toUpperCase()
-  const {
-    connect: connectRealtime,
-    disconnect: disconnectRealtime,
-    send: sendRealtime,
-    addListener: addRealtimeListener,
-    status: realtimeStatus,
-  } = useRealtime()
+  const realtime = useRealtime()
+  const { send: sendRealtime, status: realtimeStatus } = realtime
 
   const [storedPlayer, setStoredPlayer] = useState<StoredPlayer | null>(null)
   const [game, setGame] = useState<BriefGameState | null>(null)
@@ -70,9 +65,7 @@ export default function BriefPage() {
   const [isAdvancing, setIsAdvancing] = useState(false)
   const [showLoadingModal, setShowLoadingModal] = useState(false)
   const [showBriefReveal, setShowBriefReveal] = useState(false)
-  const realtimeConnectionKeyRef = useRef<string | null>(null)
   const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
-  const tokenRef = useRef<RealtimeToken | null>(null)
   const latestGameRef = useRef<BriefGameState | null>(null)
   const initialLoadRef = useRef(true)
 
@@ -458,146 +451,121 @@ export default function BriefPage() {
     latestGameRef.current = game
   }, [game])
 
-  useEffect(() => {
+  const getInitialSnapshot = useCallback(() => {
     const snapshotSource = latestGameRef.current
-    const playerId = storedPlayer?.id
-    if (!playerId || !snapshotSource) return
+    return snapshotSource ? stateToSnapshot(snapshotSource) : null
+  }, [])
 
-    const connectionKey = `${roomCode}:${playerId}`
-    if (realtimeConnectionKeyRef.current === connectionKey) {
-      return
-    }
+  const registerRealtimeListeners = useCallback(
+    ({ addListener }: RoomRealtimeListenerHelpers) => {
+      const unsubscribeHello = addListener("hello_ack", ({ snapshot: incoming }) => {
+        setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as BriefGameState) : previous))
+      })
 
-    let cancelled = false
-    let cleanupFns: Array<() => void> = []
+      const unsubscribeRoomState = addListener("room_state", ({ snapshot: incoming }) => {
+        setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as BriefGameState) : previous))
+      })
 
-    const initialize = async () => {
-      try {
-        let tokenInfo = tokenRef.current
-        if (!tokenInfo || tokenInfo.expiresAt <= Date.now() + 5_000) {
-          tokenInfo = await fetchRealtimeToken(roomCode, playerId)
-          if (cancelled) return
-          tokenRef.current = tokenInfo
-        }
+      const unsubscribeReady = addListener("ready_update", ({ playerId: readyPlayerId, isReady, version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                version,
+                players: previous.players.map((player) =>
+                  player.id === readyPlayerId ? { ...player, isReady } : player,
+                ),
+              }
+            : previous,
+        )
+      })
 
-        connectRealtime({
-          roomCode,
-          playerId,
-          playerToken: tokenInfo.token,
-          initialSnapshot: stateToSnapshot(snapshotSource),
+      const unsubscribePlayerJoined = addListener("player_joined", ({ player, version }) => {
+        setGame((previous) => {
+          if (!previous) return previous
+          const existing = previous.players.find((candidate) => candidate.id === player.id)
+          const players = existing
+            ? previous.players.map((candidate) =>
+                candidate.id === player.id
+                  ? {
+                      ...candidate,
+                      name: player.name,
+                      emoji: player.emoji,
+                      isReady: player.isReady,
+                      isHost: player.isHost,
+                    }
+                  : candidate,
+              )
+            : [
+                ...previous.players,
+                {
+                  id: player.id,
+                  name: player.name,
+                  emoji: player.emoji,
+                  isReady: player.isReady,
+                  isHost: player.isHost,
+                  joinedAt: new Date().toISOString(),
+                },
+              ]
+          const hostId = players.find((candidate) => candidate.isHost)?.id ?? previous.hostId
+          return {
+            ...previous,
+            version,
+            players,
+            hostId,
+          }
         })
-        realtimeConnectionKeyRef.current = connectionKey
+      })
 
-        const unsubscribeHello = addRealtimeListener("hello_ack", ({ snapshot: incoming }) => {
-          setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as BriefGameState) : previous))
+      const unsubscribePlayerLeft = addListener("player_left", ({ playerId: leftPlayerId, version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                version,
+                players: previous.players.map((player) =>
+                  player.id === leftPlayerId ? { ...player, isReady: false } : player,
+                ),
+              }
+            : previous,
+        )
+      })
+
+      const unsubscribePhaseChanged = addListener("phase_changed", ({ version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                version,
+                status: previous.status === "creating" ? previous.status : "creating",
+              }
+            : previous,
+        )
+        fetchGame({ silent: true }).catch((error) => {
+          console.error("Failed to refresh briefing room after phase change", error)
         })
+      })
 
-        const unsubscribeRoomState = addRealtimeListener("room_state", ({ snapshot: incoming }) => {
-          setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as BriefGameState) : previous))
-        })
+      return [
+        unsubscribeHello,
+        unsubscribeRoomState,
+        unsubscribeReady,
+        unsubscribePlayerJoined,
+        unsubscribePlayerLeft,
+        unsubscribePhaseChanged,
+      ]
+    },
+    [fetchGame, setGame],
+  )
 
-        const unsubscribeReady = addRealtimeListener("ready_update", ({ playerId: readyPlayerId, isReady, version }) => {
-          setGame((previous) =>
-            previous
-              ? {
-                  ...previous,
-                  version,
-                  players: previous.players.map((player) =>
-                    player.id === readyPlayerId ? { ...player, isReady } : player,
-                  ),
-                }
-              : previous,
-          )
-        })
-
-        const unsubscribePlayerJoined = addRealtimeListener("player_joined", ({ player, version }) => {
-          setGame((previous) => {
-            if (!previous) return previous
-            const existing = previous.players.find((candidate) => candidate.id === player.id)
-            const players = existing
-              ? previous.players.map((candidate) =>
-                  candidate.id === player.id
-                    ? {
-                        ...candidate,
-                        name: player.name,
-                        emoji: player.emoji,
-                        isReady: player.isReady,
-                        isHost: player.isHost,
-                      }
-                    : candidate,
-                )
-              : [
-                  ...previous.players,
-                  {
-                    id: player.id,
-                    name: player.name,
-                    emoji: player.emoji,
-                    isReady: player.isReady,
-                    isHost: player.isHost,
-                    joinedAt: new Date().toISOString(),
-                  },
-                ]
-            const hostId = players.find((candidate) => candidate.isHost)?.id ?? previous.hostId
-            return {
-              ...previous,
-              version,
-              players,
-              hostId,
-            }
-          })
-        })
-
-        const unsubscribePlayerLeft = addRealtimeListener("player_left", ({ playerId: leftPlayerId, version }) => {
-          setGame((previous) =>
-            previous
-              ? {
-                  ...previous,
-                  version,
-                  players: previous.players.map((player) =>
-                    player.id === leftPlayerId ? { ...player, isReady: false } : player,
-                  ),
-                }
-              : previous,
-          )
-        })
-
-        const unsubscribePhaseChanged = addRealtimeListener("phase_changed", ({ version }) => {
-          setGame((previous) =>
-            previous
-              ? {
-                  ...previous,
-                  version,
-                  status: previous.status === "creating" ? previous.status : "creating",
-                }
-              : previous,
-          )
-          fetchGame({ silent: true }).catch((error) => {
-            console.error("Failed to refresh briefing room after phase change", error)
-          })
-        })
-
-        cleanupFns = [
-          unsubscribeHello,
-          unsubscribeRoomState,
-          unsubscribeReady,
-          unsubscribePlayerJoined,
-          unsubscribePlayerLeft,
-          unsubscribePhaseChanged,
-        ]
-      } catch (error) {
-        console.error("Failed to initialize briefing realtime connection", error)
-      }
-    }
-
-    void initialize()
-
-    return () => {
-      cancelled = true
-      cleanupFns.forEach((fn) => fn())
-      disconnectRealtime()
-      realtimeConnectionKeyRef.current = null
-    }
-  }, [addRealtimeListener, connectRealtime, disconnectRealtime, fetchGame, roomCode, storedPlayer?.id])
+  useRoomRealtime({
+    roomCode,
+    playerId: storedPlayer?.id ?? null,
+    enabled: Boolean(storedPlayer?.id && game),
+    getInitialSnapshot,
+    registerListeners: registerRealtimeListeners,
+    realtime,
+  })
 
   useEffect(() => {
     if (!game) return

@@ -38,7 +38,7 @@ export const canvasTextBlockSchema = z.object({
 })
 
 export const canvasStateSchema = z.object({
-  version: z.literal(1),
+  version: z.number().int().positive(),
   size: z.object({
     width: z.number().positive(),
     height: z.number().positive(),

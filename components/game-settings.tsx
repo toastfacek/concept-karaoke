@@ -30,8 +30,8 @@ export function GameSettings({
   playerId,
   onSettingsChange,
 }: GameSettingsProps) {
-  const [selectedCategory, setSelectedCategory] = useState(productCategory)
-  const [selectedDuration, setSelectedDuration] = useState(phaseDurationSeconds)
+  const [selectedCategory, setSelectedCategory] = useState<ProductCategory>(productCategory as ProductCategory)
+  const [selectedDuration, setSelectedDuration] = useState<PhaseDuration>(phaseDurationSeconds as PhaseDuration)
   const [isUpdating, setIsUpdating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

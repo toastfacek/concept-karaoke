@@ -10,9 +10,9 @@ import { canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/can
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
 import { useRealtime } from "@/components/realtime-provider"
+import { useRoomRealtime, type RoomRealtimeListenerHelpers } from "@/hooks/use-room-realtime"
 import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
 import type { RealtimeStatus } from "@/lib/realtime-client"
-import { fetchRealtimeToken, type RealtimeToken } from "@/lib/realtime/token"
 
 type GamePlayer = {
   id: string
@@ -47,17 +47,6 @@ type PresentGameState = SnapshotDrivenState<GamePlayer> & {
   adlobs: PresentAdlob[]
 }
 
-function extractNotes(data: unknown): string {
-  if (!data || typeof data !== "object") return ""
-  if ("notes" in data && typeof (data as { notes?: unknown }).notes === "string") {
-    return (data as { notes?: string }).notes ?? ""
-  }
-  if ("text" in data && typeof (data as { text?: unknown }).text === "string") {
-    return (data as { text?: string }).text ?? ""
-  }
-  return ""
-}
-
 function parseCanvasData(data: unknown): CanvasState | null {
   const parsed = canvasStateSchema.safeParse(data)
   if (!parsed.success) {
@@ -70,12 +59,8 @@ export default function PresentPage() {
   const router = useRouter()
   const params = useParams()
   const roomCode = (params.roomId as string).toUpperCase()
-  const {
-    connect: connectRealtime,
-    disconnect: disconnectRealtime,
-    addListener: addRealtimeListener,
-    status: realtimeStatus,
-  } = useRealtime()
+  const realtime = useRealtime()
+  const { status: realtimeStatus } = realtime
 
   const [storedPlayer, setStoredPlayer] = useState<StoredPlayer | null>(null)
   const [game, setGame] = useState<PresentGameState | null>(null)
@@ -88,10 +73,16 @@ export default function PresentPage() {
   const [showCampaign, setShowCampaign] = useState(false)
 
   const lastPresentIdRef = useRef<string | null>(null)
-  const realtimeConnectionKeyRef = useRef<string | null>(null)
   const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
-  const tokenRef = useRef<RealtimeToken | null>(null)
   const latestGameRef = useRef<PresentGameState | null>(null)
+  const pendingRefreshTimeoutRef = useRef<number | null>(null)
+
+  const clearPendingRefresh = useCallback(() => {
+    if (pendingRefreshTimeoutRef.current !== null) {
+      window.clearTimeout(pendingRefreshTimeoutRef.current)
+      pendingRefreshTimeoutRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     setStoredPlayer(loadPlayer(roomCode))
@@ -164,6 +155,16 @@ export default function PresentPage() {
     [roomCode],
   )
 
+  const scheduleSnapshotFallback = useCallback(() => {
+    clearPendingRefresh()
+    pendingRefreshTimeoutRef.current = window.setTimeout(() => {
+      fetchGame({ silent: true }).catch((fallbackError) => {
+        console.error("Failed to refresh presentation view after realtime fallback", fallbackError)
+      })
+      pendingRefreshTimeoutRef.current = null
+    }, 2000)
+  }, [clearPendingRefresh, fetchGame])
+
   useEffect(() => {
     fetchGame()
   }, [fetchGame])
@@ -219,7 +220,6 @@ export default function PresentPage() {
     return game.players.find((player) => player.id === currentAdlob.assignedPresenterId) ?? null
   }, [game, currentAdlob])
 
-  const visualCanvas = useMemo(() => parseCanvasData(currentAdlob?.visualCanvasData), [currentAdlob])
   const headlineCanvas = useMemo(() => parseCanvasData(currentAdlob?.headlineCanvasData), [currentAdlob])
 
   const canControlPresent = !!currentPlayer && (currentPlayer.isHost || currentPlayer.id === currentAdlob?.assignedPresenterId)
@@ -278,8 +278,12 @@ export default function PresentPage() {
         return
       }
 
-      console.log("[PRESENT DEBUG] Not moving to voting, refreshing game state...")
-      await fetchGame({ silent: true })
+      console.log("[PRESENT DEBUG] Not moving to voting, relying on realtime update...")
+      if (realtimeStatus !== "connected") {
+        await fetchGame({ silent: true })
+      } else {
+        scheduleSnapshotFallback()
+      }
     } catch (advanceError) {
       console.error("[PRESENT DEBUG] Error:", advanceError)
       setError(advanceError instanceof Error ? advanceError.message : "Failed to advance presentation.")
@@ -292,146 +296,141 @@ export default function PresentPage() {
     latestGameRef.current = game
   }, [game])
 
+  const gameVersion = game?.version
+
   useEffect(() => {
-    const snapshotSource = latestGameRef.current
-    const playerId = storedPlayer?.id
-    if (!playerId || !snapshotSource) return
-
-    const connectionKey = `${roomCode}:${playerId}`
-    if (realtimeConnectionKeyRef.current === connectionKey) {
-      return
+    if (gameVersion != null) {
+      clearPendingRefresh()
     }
+  }, [gameVersion, clearPendingRefresh])
 
-    let cancelled = false
-    let cleanupFns: Array<() => void> = []
-
-    const initialize = async () => {
-      try {
-        let tokenInfo = tokenRef.current
-        if (!tokenInfo || tokenInfo.expiresAt <= Date.now() + 5_000) {
-          tokenInfo = await fetchRealtimeToken(roomCode, playerId)
-          if (cancelled) return
-          tokenRef.current = tokenInfo
-        }
-
-        connectRealtime({
-          roomCode,
-          playerId,
-          playerToken: tokenInfo.token,
-          initialSnapshot: stateToSnapshot(snapshotSource),
-        })
-        realtimeConnectionKeyRef.current = connectionKey
-
-        const unsubscribeHello = addRealtimeListener("hello_ack", ({ snapshot: incoming }) => {
-          setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as PresentGameState) : previous))
-        })
-
-        const unsubscribeRoomState = addRealtimeListener("room_state", ({ snapshot: incoming }) => {
-          setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as PresentGameState) : previous))
-        })
-
-        const unsubscribePlayerJoined = addRealtimeListener("player_joined", ({ player, version }) => {
-          setGame((previous) => {
-            if (!previous) return previous
-            const existing = previous.players.find((candidate) => candidate.id === player.id)
-            const players = existing
-              ? previous.players.map((candidate) =>
-                  candidate.id === player.id
-                    ? {
-                        ...candidate,
-                        name: player.name,
-                        emoji: player.emoji,
-                        isReady: player.isReady,
-                        isHost: player.isHost,
-                      }
-                    : candidate,
-                )
-              : [
-                  ...previous.players,
-                  {
-                    id: player.id,
-                    name: player.name,
-                    emoji: player.emoji,
-                    isReady: player.isReady,
-                    isHost: player.isHost,
-                    joinedAt: new Date().toISOString(),
-                  },
-                ]
-            const hostId = players.find((candidate) => candidate.isHost)?.id ?? previous.hostId
-            return {
-              ...previous,
-              version,
-              players,
-              hostId,
-            }
-          })
-        })
-
-        const unsubscribePlayerLeft = addRealtimeListener("player_left", ({ playerId: leftPlayerId, version }) => {
-          setGame((previous) =>
-            previous
-              ? {
-                  ...previous,
-                  version,
-                  players: previous.players.map((player) =>
-                    player.id === leftPlayerId ? { ...player, isReady: false } : player,
-                  ),
-                }
-              : previous,
-          )
-        })
-
-        const unsubscribeReady = addRealtimeListener("ready_update", ({ playerId: readyPlayerId, isReady, version }) => {
-          setGame((previous) =>
-            previous
-              ? {
-                  ...previous,
-                  version,
-                  players: previous.players.map((player) =>
-                    player.id === readyPlayerId ? { ...player, isReady } : player,
-                  ),
-                }
-              : previous,
-          )
-        })
-
-        const unsubscribePhaseChanged = addRealtimeListener("phase_changed", ({ version }) => {
-          setGame((previous) =>
-            previous
-              ? {
-                  ...previous,
-                  version,
-                  status: previous.status === "presenting" ? previous.status : "presenting",
-                }
-              : previous,
-          )
-          fetchGame({ silent: true }).catch((error) => {
-            console.error("Failed to refresh presentation flow after phase change", error)
-          })
-        })
-
-        cleanupFns = [
-          unsubscribeHello,
-          unsubscribeRoomState,
-          unsubscribePlayerJoined,
-          unsubscribePlayerLeft,
-          unsubscribeReady,
-          unsubscribePhaseChanged,
-        ]
-      } catch (error) {
-        console.error("Failed to initialize presentation realtime connection", error)
-      }
-    }
-
-    void initialize()
-
+  useEffect(() => {
     return () => {
-      cancelled = true
-      cleanupFns.forEach((fn) => fn())
-      disconnectRealtime()
-      realtimeConnectionKeyRef.current = null
+      clearPendingRefresh()
     }
-  }, [addRealtimeListener, connectRealtime, disconnectRealtime, fetchGame, roomCode, storedPlayer?.id])
+  }, [clearPendingRefresh])
+
+  const getInitialSnapshot = useCallback(() => {
+    const snapshotSource = latestGameRef.current
+    return snapshotSource ? stateToSnapshot(snapshotSource) : null
+  }, [])
+
+  const registerRealtimeListeners = useCallback(
+    ({ addListener }: RoomRealtimeListenerHelpers) => {
+      const unsubscribeHello = addListener("hello_ack", ({ snapshot: incoming }) => {
+        setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as PresentGameState) : previous))
+        clearPendingRefresh()
+      })
+
+      const unsubscribeRoomState = addListener("room_state", ({ snapshot: incoming }) => {
+        setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as PresentGameState) : previous))
+        clearPendingRefresh()
+      })
+
+      const unsubscribePlayerJoined = addListener("player_joined", ({ player, version }) => {
+        setGame((previous) => {
+          if (!previous) return previous
+          const existing = previous.players.find((candidate) => candidate.id === player.id)
+          const players = existing
+            ? previous.players.map((candidate) =>
+                candidate.id === player.id
+                  ? {
+                      ...candidate,
+                      name: player.name,
+                      emoji: player.emoji,
+                      isReady: player.isReady,
+                      isHost: player.isHost,
+                    }
+                  : candidate,
+              )
+            : [
+                ...previous.players,
+                {
+                  id: player.id,
+                  name: player.name,
+                  emoji: player.emoji,
+                  isReady: player.isReady,
+                  isHost: player.isHost,
+                  joinedAt: new Date().toISOString(),
+                },
+              ]
+          const hostId = players.find((candidate) => candidate.isHost)?.id ?? previous.hostId
+          return {
+            ...previous,
+            version,
+            players,
+            hostId,
+          }
+        })
+        clearPendingRefresh()
+      })
+
+      const unsubscribePlayerLeft = addListener("player_left", ({ playerId: leftPlayerId, version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                version,
+                players: previous.players.map((player) =>
+                  player.id === leftPlayerId ? { ...player, isReady: false } : player,
+                ),
+            }
+          : previous,
+        )
+        clearPendingRefresh()
+      })
+
+      const unsubscribeReady = addListener("ready_update", ({ playerId: readyPlayerId, isReady, version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                version,
+                players: previous.players.map((player) =>
+                  player.id === readyPlayerId ? { ...player, isReady } : player,
+                ),
+            }
+          : previous,
+        )
+        clearPendingRefresh()
+      })
+
+      const unsubscribePhaseChanged = addListener("phase_changed", ({ version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                version,
+                status: previous.status === "presenting" ? previous.status : "presenting",
+            }
+          : previous,
+        )
+        fetchGame({ silent: true }).catch((error) => {
+          console.error("Failed to refresh presentation flow after phase change", error)
+        })
+        clearPendingRefresh()
+      })
+
+      return [
+        unsubscribeHello,
+        unsubscribeRoomState,
+        unsubscribePlayerJoined,
+        unsubscribePlayerLeft,
+        unsubscribeReady,
+        unsubscribePhaseChanged,
+      ]
+    },
+    [clearPendingRefresh, fetchGame],
+  )
+
+  useRoomRealtime({
+    roomCode,
+    playerId: storedPlayer?.id ?? null,
+    enabled: Boolean(storedPlayer?.id && game),
+    getInitialSnapshot,
+    registerListeners: registerRealtimeListeners,
+    realtime,
+  })
   useEffect(() => {
     if (!game) return
 

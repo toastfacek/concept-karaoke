@@ -5,6 +5,7 @@ import { TABLES } from "@/lib/db"
 import { getInitialCreationPhase, transitionGameState } from "@/lib/game-state-machine"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 import type { CreationPhase, GameStatus } from "@/lib/types"
+import { serializeGameRow } from "@/lib/serializers/game"
 
 function normalizeId(id: string) {
   const trimmed = id.trim()
@@ -37,96 +38,44 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const identifier = normalizeId(rawId)
     const supabase = getSupabaseAdminClient()
 
-    const room = await resolveRoom(identifier)
+    const matchByCode = /^[A-Z0-9]{6}$/.test(identifier)
+    let query = supabase
+      .from(TABLES.gameRooms)
+      .select(
+        `
+          id,
+          code,
+          status,
+          current_phase,
+          phase_start_time,
+          host_id,
+          current_present_index,
+          present_sequence,
+          product_category,
+          phase_duration_seconds,
+          version,
+          players:players(id, name, emoji, is_ready, is_host, joined_at),
+          brief:campaign_briefs(id, product_name, product_category, business_problem, target_audience, objective, updated_at),
+          adlobs:adlobs(id, big_idea_text, big_idea_created_by, visual_canvas_data, visual_image_urls, visual_created_by, headline_canvas_data, headline_created_by, pitch_text, pitch_created_by, created_at, assigned_presenter, present_order, present_started_at, present_completed_at, vote_count)
+        `,
+      )
+      .limit(1)
+
+    query = matchByCode ? query.eq("code", identifier) : query.eq("id", identifier)
+
+    const { data: room, error: roomError } = await query.maybeSingle()
+
+    if (roomError) {
+      throw roomError
+    }
 
     if (!room) {
       return NextResponse.json({ success: false, error: "Game not found" }, { status: 404 })
     }
 
-    const { data: players, error: playersError } = await supabase
-      .from(TABLES.players)
-      .select("id, name, emoji, is_ready, is_host, joined_at")
-      .eq("room_id", room.id)
-      .order("joined_at", { ascending: true })
-
-    if (playersError) {
-      throw playersError
-    }
-
-    const { data: brief, error: briefError } = await supabase
-      .from(TABLES.campaignBriefs)
-      .select("id, product_name, product_category, business_problem, target_audience, objective, updated_at")
-      .eq("room_id", room.id)
-      .order("created_at", { ascending: true })
-      .maybeSingle()
-
-    if (briefError) {
-      throw briefError
-    }
-
-    const { data: adlobs, error: adlobsError } = await supabase
-      .from(TABLES.adLobs)
-      .select(
-        "id, big_idea_text, big_idea_created_by, visual_canvas_data, visual_image_urls, visual_created_by, headline_canvas_data, headline_created_by, pitch_text, pitch_created_by, created_at, assigned_presenter, present_order, present_started_at, present_completed_at",
-      )
-      .eq("room_id", room.id)
-      .order("created_at", { ascending: true })
-
-    if (adlobsError) {
-      throw adlobsError
-    }
-
     return NextResponse.json({
       success: true,
-      game: {
-        id: room.id,
-        code: room.code,
-        status: room.status,
-        currentPhase: room.current_phase,
-        phaseStartTime: room.phase_start_time,
-        hostId: room.host_id,
-        currentPresentIndex: room.current_present_index,
-        presentSequence: room.present_sequence ?? [],
-        productCategory: room.product_category,
-        phaseDurationSeconds: room.phase_duration_seconds,
-        players: players?.map((player) => ({
-          id: player.id,
-          name: player.name,
-          emoji: player.emoji,
-          isReady: player.is_ready,
-          isHost: player.is_host,
-          joinedAt: player.joined_at,
-        })) ?? [],
-        brief: brief
-          ? {
-              id: brief.id,
-              productName: brief.product_name,
-              productCategory: brief.product_category,
-              businessProblem: brief.business_problem,
-              targetAudience: brief.target_audience,
-              objective: brief.objective,
-              updatedAt: brief.updated_at,
-            }
-          : null,
-        adlobs:
-          adlobs?.map((adlob) => ({
-            id: adlob.id,
-            bigIdea: adlob.big_idea_text,
-            bigIdeaAuthorId: adlob.big_idea_created_by,
-            visualCanvasData: adlob.visual_canvas_data,
-            visualImageUrls: adlob.visual_image_urls,
-            visualAuthorId: adlob.visual_created_by,
-            headlineCanvasData: adlob.headline_canvas_data,
-            headlineAuthorId: adlob.headline_created_by,
-            pitch: adlob.pitch_text,
-            pitchAuthorId: adlob.pitch_created_by,
-            createdAt: adlob.created_at,
-            assignedPresenterId: adlob.assigned_presenter,
-            presentOrder: adlob.present_order,
-            presentStartedAt: adlob.present_started_at,
-            presentCompletedAt: adlob.present_completed_at,
-          })) ?? [],
-      },
+      game: serializeGameRow(room),
     })
   } catch (error) {
     console.error("Failed to fetch game", error)
