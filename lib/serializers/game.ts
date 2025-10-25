@@ -41,7 +41,7 @@ type RawAdlob = {
 type RawGameRow = {
   id: string
   code: string
-  status: GameStatus
+  status: string
   current_phase: string | null
   phase_start_time: string | null
   host_id: string
@@ -109,7 +109,7 @@ export function serializeGameRow(row: RawGameRow) {
   return {
     id: row.id,
     code: row.code,
-    status: row.status,
+    status: row.status as GameStatus,
     currentPhase: row.current_phase,
     phaseStartTime: row.phase_start_time,
     hostId: row.host_id,

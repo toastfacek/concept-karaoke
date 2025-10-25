@@ -7,12 +7,12 @@ import { Button } from "@/components/ui/button"
 import { PRODUCT_CATEGORIES, PHASE_DURATIONS, type ProductCategory, type PhaseDuration } from "@/lib/types"
 
 interface GameSettingsProps {
-  productCategory: string
-  phaseDurationSeconds: number
+  productCategory: ProductCategory
+  phaseDurationSeconds: PhaseDuration
   isHost: boolean
   roomCode: string
   playerId: string
-  onSettingsChange?: (settings: { productCategory: string; phaseDurationSeconds: number }) => void
+  onSettingsChange?: (settings: { productCategory: ProductCategory; phaseDurationSeconds: PhaseDuration }) => void
 }
 
 const DURATION_LABELS: Record<PhaseDuration, string> = {
@@ -30,8 +30,8 @@ export function GameSettings({
   playerId,
   onSettingsChange,
 }: GameSettingsProps) {
-  const [selectedCategory, setSelectedCategory] = useState<ProductCategory>(productCategory as ProductCategory)
-  const [selectedDuration, setSelectedDuration] = useState<PhaseDuration>(phaseDurationSeconds as PhaseDuration)
+  const [selectedCategory, setSelectedCategory] = useState<ProductCategory>(productCategory)
+  const [selectedDuration, setSelectedDuration] = useState<PhaseDuration>(phaseDurationSeconds)
   const [isUpdating, setIsUpdating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

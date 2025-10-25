@@ -15,7 +15,7 @@ import { useRoomRealtime } from "../use-room-realtime"
 const mockedFetchRealtimeToken = vi.mocked(fetchRealtimeToken)
 
 function createMockRealtime(overrides: Partial<RealtimeContextValue> = {}): RealtimeContextValue {
-  const addListener = vi.fn(() => vi.fn())
+  const addListener = vi.fn(() => vi.fn()) as unknown as RealtimeContextValue["addListener"]
 
   return {
     client: {} as unknown as RealtimeContextValue["client"],
@@ -31,12 +31,12 @@ function createMockRealtime(overrides: Partial<RealtimeContextValue> = {}): Real
 const BASE_SNAPSHOT = {
   id: "room-id",
   code: "ROOM01",
-  status: "results",
+  status: "results" as const,
   currentPhase: null,
   phaseStartTime: null,
-  players: [],
+  players: [] as never[],
   version: 1,
-} as const
+}
 
 afterEach(() => {
   cleanup()
@@ -48,7 +48,7 @@ describe("useRoomRealtime", () => {
     const realtime = createMockRealtime()
     const listenerCleanup = vi.fn()
     const eventHandler = vi.fn()
-    realtime.addListener.mockReturnValue(listenerCleanup)
+    ;(realtime.addListener as ReturnType<typeof vi.fn>).mockReturnValue(listenerCleanup)
 
     function Harness({ enabled }: { enabled: boolean }) {
       useRoomRealtime({
@@ -84,7 +84,7 @@ describe("useRoomRealtime", () => {
     const realtime = createMockRealtime()
     const listenerCleanup = vi.fn()
     const eventHandler = vi.fn()
-    realtime.addListener.mockReturnValue(listenerCleanup)
+    ;(realtime.addListener as ReturnType<typeof vi.fn>).mockReturnValue(listenerCleanup)
 
     function Harness({ enabled }: { enabled: boolean }) {
       useRoomRealtime({
