@@ -889,22 +889,6 @@ export default function CreatePage() {
                 >
                   {isTogglingReady ? "Updating..." : currentPlayer?.isReady ? "Mark Not Ready" : "Ready Up"}
                 </Button>
-                {currentPlayer?.isHost && (
-                  <Button
-                    type="button"
-                    size="lg"
-                    variant="outline"
-                    className="w-full sm:w-auto"
-                    onClick={handleAdvancePhase}
-                    disabled={!everyoneReady || isAdvancingPhase || !game?.currentPhase}
-                  >
-                    {isAdvancingPhase
-                      ? "Advancing..."
-                      : game?.currentPhase === "pitch"
-                        ? "Move to Present"
-                        : "Start Next Round"}
-                  </Button>
-                )}
               </div>
             </section>
           </div>
@@ -937,6 +921,30 @@ export default function CreatePage() {
             {/* Player Status */}
             <div className="retro-border bg-card p-4">
               <PlayerStatus players={playerStatusData} />
+
+              {currentPlayer?.isHost && (
+                <div className="mt-4 pt-4 border-t-2 border-border">
+                  <Button
+                    type="button"
+                    size="lg"
+                    variant="default"
+                    className="w-full"
+                    onClick={handleAdvancePhase}
+                    disabled={!everyoneReady || isAdvancingPhase || !game?.currentPhase}
+                  >
+                    {isAdvancingPhase
+                      ? "Advancing..."
+                      : game?.currentPhase === "pitch"
+                        ? "Move to Present"
+                        : "Start Next Round"}
+                  </Button>
+                  {!everyoneReady && (
+                    <p className="mt-2 text-center text-xs text-muted-foreground">
+                      Waiting for all players to ready up...
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
