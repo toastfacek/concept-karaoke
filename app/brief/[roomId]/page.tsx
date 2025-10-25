@@ -407,6 +407,24 @@ export default function BriefPage() {
     setError(null)
 
     try {
+      // Auto-save any unsaved brief changes before advancing
+      if (game.brief) {
+        const hasUnsavedChanges =
+          briefDraft.productName !== game.brief.productName ||
+          briefDraft.businessProblem !== game.brief.businessProblem ||
+          briefDraft.targetAudience !== game.brief.targetAudience ||
+          briefDraft.objective !== game.brief.objective
+
+        if (hasUnsavedChanges) {
+          try {
+            await persistBrief(briefDraft)
+          } catch (saveError) {
+            console.error("Failed to auto-save brief before advancing", saveError)
+            throw new Error("Failed to save brief changes. Please try again.")
+          }
+        }
+      }
+
       const response = await fetch(`/api/games/${roomCode}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
