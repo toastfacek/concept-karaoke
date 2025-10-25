@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Canvas } from "@/components/canvas"
@@ -8,6 +8,10 @@ import { loadPlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
 import { canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/canvas"
 import { cn } from "@/lib/utils"
+import { useRealtime } from "@/components/realtime-provider"
+import { useRoomRealtime, type RoomRealtimeListenerHelpers } from "@/hooks/use-room-realtime"
+import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
+import type { RealtimeStatus } from "@/lib/realtime-client"
 
 interface GamePlayer {
   id: string
@@ -15,6 +19,7 @@ interface GamePlayer {
   emoji: string
   isReady: boolean
   isHost: boolean
+  joinedAt: string
 }
 
 interface AdLob {
@@ -34,11 +39,7 @@ interface AdLob {
   voteCount: number
 }
 
-interface VoteGameState {
-  id: string
-  code: string
-  status: string
-  players: GamePlayer[]
+interface VoteGameState extends SnapshotDrivenState<GamePlayer> {
   adlobs: AdLob[]
 }
 
@@ -65,6 +66,8 @@ export default function VotePage() {
   const router = useRouter()
   const params = useParams()
   const roomCode = params.roomId as string
+  const realtime = useRealtime()
+  const { status: realtimeStatus } = realtime
 
   const [storedPlayer, setStoredPlayer] = useState<StoredPlayer | null>(null)
   const [game, setGame] = useState<VoteGameState | null>(null)
@@ -73,12 +76,19 @@ export default function VotePage() {
   const [selectedAdLob, setSelectedAdLob] = useState<string | null>(null)
   const [hasVoted, setHasVoted] = useState(false)
   const [isVoting, setIsVoting] = useState(false)
+  const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
+  const latestGameRef = useRef<VoteGameState | null>(null)
 
   useEffect(() => {
     setStoredPlayer(loadPlayer(roomCode))
   }, [roomCode])
 
-  const fetchGame = useCallback(async () => {
+  const fetchGame = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) {
+      setLoading(true)
+      setError(null)
+    }
+
     try {
       const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
       const payload = await response.json()
@@ -115,27 +125,58 @@ export default function VotePage() {
         emoji: player.emoji,
         isReady: player.isReady ?? false,
         isHost: player.isHost ?? false,
+        joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
       }))
 
       setGame({
         id: gameData.id,
         code: gameData.code,
         status: gameData.status,
+        hostId: gameData.hostId,
+        version: typeof gameData.version === "number" ? gameData.version : 0,
         players: mappedPlayers,
         adlobs: mappedAdlobs,
+      })
+
+      setStoredPlayer((previous) => {
+        if (!previous) return previous
+        const latestPlayer = mappedPlayers.find((player) => player.id === previous.id)
+        if (latestPlayer) {
+          return { ...previous, isHost: latestPlayer.isHost, emoji: latestPlayer.emoji, name: latestPlayer.name }
+        }
+        return previous
       })
     } catch (fetchError) {
       console.error("Failed to fetch voting data", fetchError)
       setError("Unable to load voting data")
       setGame(null)
     } finally {
-      setLoading(false)
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }, [roomCode])
 
   useEffect(() => {
     fetchGame()
   }, [fetchGame])
+
+  useEffect(() => {
+    latestGameRef.current = game
+  }, [game])
+
+  useEffect(() => {
+    if (realtimeStatus === "disconnected") {
+      fetchGame({ silent: true }).catch((statusError) => {
+        console.error("Failed to refresh voting data after disconnect", statusError)
+      })
+    } else if (realtimeStatus === "connected" && lastRealtimeStatusRef.current === "disconnected") {
+      fetchGame({ silent: true }).catch((statusError) => {
+        console.error("Failed to refresh voting data after reconnect", statusError)
+      })
+    }
+    lastRealtimeStatusRef.current = realtimeStatus
+  }, [fetchGame, realtimeStatus])
 
   // Redirect if game status changes
   useEffect(() => {
@@ -175,23 +216,10 @@ export default function VotePage() {
 
       setHasVoted(true)
 
-      // If all votes are in, the API will have transitioned to results
-      // Poll to check if status has changed
       if (result.allVotesIn) {
         router.push(routes.results(roomCode))
       } else {
-        // Poll for status changes
-        const pollInterval = setInterval(async () => {
-          const checkResponse = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
-          const checkPayload = await checkResponse.json()
-          if (checkPayload.success && checkPayload.game.status === "results") {
-            clearInterval(pollInterval)
-            router.push(routes.results(roomCode))
-          }
-        }, 2000)
-
-        // Clean up polling after 2 minutes
-        setTimeout(() => clearInterval(pollInterval), 120000)
+        await fetchGame({ silent: true })
       }
     } catch (voteError) {
       console.error("Failed to submit vote", voteError)
@@ -200,6 +228,116 @@ export default function VotePage() {
       setIsVoting(false)
     }
   }
+
+  const getInitialSnapshot = useCallback(() => {
+    const snapshotSource = latestGameRef.current
+    return snapshotSource ? stateToSnapshot(snapshotSource) : null
+  }, [])
+
+  const registerRealtimeListeners = useCallback(
+    ({ addListener }: RoomRealtimeListenerHelpers) => {
+      const unsubscribeHello = addListener("hello_ack", ({ snapshot: incoming }) => {
+        setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as VoteGameState) : previous))
+      })
+
+      const unsubscribeRoomState = addListener("room_state", ({ snapshot: incoming }) => {
+        setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as VoteGameState) : previous))
+        fetchGame({ silent: true }).catch((error) => {
+          console.error("Failed to refresh voting data after room_state", error)
+        })
+      })
+
+      const unsubscribeReady = addListener("ready_update", ({ playerId, isReady, version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                version,
+                players: previous.players.map((player) =>
+                  player.id === playerId ? { ...player, isReady } : player,
+                ),
+              }
+            : previous,
+        )
+      })
+
+      const unsubscribePlayerJoined = addListener("player_joined", ({ player, version }) => {
+        setGame((previous) => {
+          if (!previous) return previous
+          const existing = previous.players.find((candidate) => candidate.id === player.id)
+          const players = existing
+            ? previous.players.map((candidate) =>
+                candidate.id === player.id
+                  ? {
+                      ...candidate,
+                      name: player.name,
+                      emoji: player.emoji,
+                      isReady: player.isReady,
+                      isHost: player.isHost,
+                    }
+                  : candidate,
+              )
+            : [
+                ...previous.players,
+                {
+                  id: player.id,
+                  name: player.name,
+                  emoji: player.emoji,
+                  isReady: player.isReady,
+                  isHost: player.isHost,
+                  joinedAt: new Date().toISOString(),
+                },
+              ]
+          const hostId = players.find((candidate) => candidate.isHost)?.id ?? previous.hostId
+          return {
+            ...previous,
+            version,
+            players,
+            hostId,
+          }
+        })
+      })
+
+      const unsubscribePlayerLeft = addListener("player_left", ({ playerId: leftPlayerId, version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                version,
+                players: previous.players.map((player) =>
+                  player.id === leftPlayerId ? { ...player, isReady: false } : player,
+                ),
+              }
+            : previous,
+        )
+      })
+
+      const unsubscribePhaseChanged = addListener("phase_changed", () => {
+        fetchGame({ silent: true }).catch((error) => {
+          console.error("Failed to refresh voting data after phase change", error)
+        })
+      })
+
+      return [
+        unsubscribeHello,
+        unsubscribeRoomState,
+        unsubscribeReady,
+        unsubscribePlayerJoined,
+        unsubscribePlayerLeft,
+        unsubscribePhaseChanged,
+      ]
+    },
+    [fetchGame],
+  )
+
+  useRoomRealtime({
+    roomCode,
+    playerId: storedPlayer?.id ?? null,
+    enabled: Boolean(storedPlayer?.id && game),
+    getInitialSnapshot,
+    registerListeners: registerRealtimeListeners,
+    realtime,
+  })
 
   const getPresenterName = (presenterId: string | null) => {
     if (!game) return "Unknown"
@@ -251,20 +389,20 @@ export default function VotePage() {
                 key={adlob.id}
                 type="button"
                 onClick={() => {
-                  if (hasVoted) return
+                  if (hasVoted || isOwnCampaign) return
                   setError(null)
                   setSelectedAdLob(adlob.id)
                 }}
-                disabled={hasVoted}
+                disabled={hasVoted || isOwnCampaign}
                 aria-pressed={isSelected}
                 className={cn(
                   "retro-border flex h-full flex-col gap-4 text-left transition-all p-6",
                   isSelected
                     ? "bg-primary text-primary-foreground shadow-lg"
-                    : hasVoted
+                    : hasVoted || isOwnCampaign
                       ? "bg-muted text-muted-foreground opacity-80"
                       : "bg-card hover:-translate-y-0.5 hover:bg-muted hover:shadow-md",
-                  hasVoted ? "cursor-default" : "cursor-pointer",
+                  hasVoted || isOwnCampaign ? "cursor-not-allowed" : "cursor-pointer",
                 )}
               >
                 <p className="font-mono text-xs uppercase tracking-wider">

@@ -48,8 +48,17 @@ export function mergeSnapshotIntoState<TState extends SnapshotDrivenState>(
   state: TState,
   snapshot: RoomSnapshot,
 ): TState {
+  if (state.version === snapshot.version) {
+    return state
+  }
+
+  const existingPlayers = new Map(state.players.map((player) => [player.id, player]))
   const players = snapshot.players.map((player) => {
-    const existing = state.players.find((candidate) => candidate.id === player.id)
+    const existing = existingPlayers.get(player.id)
+    if (existing && existing.name === player.name && existing.emoji === player.emoji && existing.isReady === player.isReady && existing.isHost === player.isHost) {
+      return existing
+    }
+
     return {
       id: player.id,
       name: player.name,

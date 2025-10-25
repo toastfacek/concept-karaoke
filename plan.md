@@ -15,6 +15,28 @@ The core game is fully functional with all major features implemented:
 
 ---
 
+## Streamlining & Performance Opportunities (Nov 2025)
+
+1. ✅ **Stabilize realtime client context** — `components/realtime-provider.tsx:45`
+   - Memoized `connect`/`disconnect`/`send`/`addListener` so heartbeat-driven status updates no longer churn callback identities or tear down WebSocket effects. Realtime consumers now hold a stable client reference without triggering reconnect loops.
+
+2. ✅ **Extract shared realtime room hook** — `hooks/use-room-realtime.ts`, `app/(lobby|brief|create|present|vote|results)/[roomId]/page.tsx`
+   - `useRoomRealtime` now owns snapshot hand-off, token refresh, and listener lifecycle across every phase (lobby → results), cutting hundreds of duplicated lines and keeping reconnection logic consistent. Added unit coverage (`hooks/__tests__/use-room-realtime.test.tsx`) to verify we reconnect cleanly after disconnects.
+
+3. ✅ **Rely on realtime updates instead of fallback refetches** — `app/lobby/[roomId]/page.tsx:180-252`, `app/create/[roomId]/page.tsx:569-662`, `app/present/[roomId]/page.tsx:248-283`
+   - Ready toggles and phase transitions now stay optimistic and lean on websocket broadcasts; we only schedule a lightweight, 2‑second fallback fetch when the client isn’t connected or an ack never arrives. This halves redundant API calls while retaining resilience if realtime hiccups.
+
+4. ✅ **Trim deep canvas diffing work** — `components/canvas.tsx:62-208, 528-835`
+   - Canvas state updates now bump a monotonically increasing `version`, allowing `statesEqual` to short-circuit on matching revisions instead of walking every stroke/text/image. All debug logging has been removed and the initial-data effect now applies updates only when the incoming version changes, drastically cutting render thrash on busy boards.
+
+5. ✅ **Batch room data fetches** — `app/api/games/[id]/route.ts`, `lib/serializers/game.ts`
+   - Replaced the triple Supabase round-trip with a single relational select that pulls players, adlobs, and the brief together, then normalize it via a shared serializer. All pages now read the same canonical game payload, shaving repeated data-munging and improving cold-load latency.
+
+6. ✅ **Tighten snapshot merge performance** — `lib/realtime/snapshot.ts`
+   - Snapshot merges now index players by id, reuse existing objects when nothing changed, and skip work entirely if the version already matches. Joined-at timestamps no longer churn on every update, which keeps React memoization intact even with large lobbies.
+
+---
+
 ## Recent Work Summary (October 2025)
 
 ### Completed (Latest Session - October 24, 2025)

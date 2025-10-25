@@ -7,7 +7,6 @@ import { Spinner } from "@/components/ui/spinner"
 interface BriefLoadingModalProps {
   isOpen: boolean
   category: string
-  onComplete?: () => void
 }
 
 const LOADING_MESSAGES = [
@@ -16,7 +15,7 @@ const LOADING_MESSAGES = [
   "Almost ready",
 ]
 
-export function BriefLoadingModal({ isOpen, category, onComplete }: BriefLoadingModalProps) {
+export function BriefLoadingModal({ isOpen, category }: BriefLoadingModalProps) {
   const [messageIndex, setMessageIndex] = useState(0)
 
   useEffect(() => {

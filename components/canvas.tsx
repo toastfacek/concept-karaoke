@@ -7,13 +7,10 @@ import type { CanvasState, CanvasStroke, CanvasTextBlock, CanvasImage } from "@/
 import { cn } from "@/lib/utils"
 
 import { Button } from "./ui/button"
-import { Label } from "./ui/label"
-import { Textarea } from "./ui/textarea"
 
 interface CanvasProps {
   initialData?: CanvasState | null
   onChange?: (data: CanvasState) => void
-  onSave?: (data: CanvasState) => void
   readOnly?: boolean
   className?: string
 }
@@ -85,7 +82,10 @@ function cloneState(state: CanvasState): CanvasState {
 }
 
 function statesEqual(a: CanvasState, b: CanvasState): boolean {
-  if (a.version !== b.version) return false
+  if (a === b) return true
+  if (typeof a.version === "number" && typeof b.version === "number" && a.version === b.version) {
+    return true
+  }
   if (a.size.width !== b.size.width || a.size.height !== b.size.height) return false
   if ((a.background ?? "") !== (b.background ?? "")) return false
 
@@ -173,6 +173,9 @@ function parseInitialState(initialData?: CanvasState | null): CanvasState {
   }
 
   const result = parsed.data
+  if (typeof result.version !== "number") {
+    result.version = 1
+  }
   if (result.textBlocks === undefined) {
     result.textBlocks = []
   }
@@ -447,7 +450,7 @@ function loadImageElement(src: string): Promise<HTMLImageElement> {
   })
 }
 
-export function Canvas({ initialData, onChange, onSave, readOnly = false, className }: CanvasProps) {
+export function Canvas({ initialData, onChange, readOnly = false, className }: CanvasProps) {
   const [tool, setTool] = useState<Tool>("pen")
   const [color, setColor] = useState(DEFAULT_STROKE_COLOR)
   const [strokeWidth, setStrokeWidth] = useState(DEFAULT_STROKE_WIDTH)
@@ -518,14 +521,7 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
   }, [canvasState.size])
 
   const selectedTextBlock = useMemo(() => {
-    console.log('[TEXT-DEBUG] selectedTextBlock useMemo calculating', {
-      selectedTextId,
-      textBlocksCount: textBlocks.length,
-      textBlockIds: textBlocks.map(b => b.id)
-    })
-    const result = textBlocks.find((block) => block.id === selectedTextId) ?? null
-    console.log('[TEXT-DEBUG] selectedTextBlock result:', result ? result.id : 'null')
-    return result
+    return textBlocks.find((block) => block.id === selectedTextId) ?? null
   }, [selectedTextId, textBlocks])
 
   const selectedImage = useMemo(
@@ -546,16 +542,8 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
   // Auto-select newly created text blocks
   const prevTextBlockCountRef = useRef(textBlockCount)
   useEffect(() => {
-    console.log('[TEXT-DEBUG] Auto-select useEffect running', {
-      tool,
-      textBlockCount,
-      prevCount: prevTextBlockCountRef.current,
-      willSelect: tool === "text" && textBlockCount > prevTextBlockCountRef.current && textBlocks.length > 0
-    })
-    // If a new text block was just added and we're using the text tool, select the last block
     if (tool === "text" && textBlockCount > prevTextBlockCountRef.current && textBlocks.length > 0) {
       const lastBlock = textBlocks[textBlocks.length - 1]
-      console.log('[TEXT-DEBUG] Auto-selecting last block:', lastBlock.id)
       setSelectedTextId(lastBlock.id)
     }
     prevTextBlockCountRef.current = textBlockCount
@@ -578,9 +566,17 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
   const applyState = useCallback(
     (updater: CanvasState | ((previous: CanvasState) => CanvasState)) => {
       setCanvasState((previous) => {
-        const resolved = typeof updater === "function" ? (updater as (prev: CanvasState) => CanvasState)(previous) : updater
+        const resolved =
+          typeof updater === "function" ? (updater as (prev: CanvasState) => CanvasState)(previous) : updater
         const snapshot = cloneState(resolved)
-        // Track that we're emitting this state change - this helps us ignore it when it comes back via initialData
+        const previousVersion = typeof previous.version === "number" ? previous.version : 0
+        const shouldIncrementVersion =
+          typeof updater === "function" || snapshot.version === previous.version || typeof snapshot.version !== "number"
+
+        if (shouldIncrementVersion) {
+          snapshot.version = previousVersion + 1
+        }
+
         lastEmittedStateRef.current = snapshot
         lastChangeTimeRef.current = Date.now()
         Promise.resolve().then(() => {
@@ -652,23 +648,8 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
       next.textBlocks = (next.textBlocks ?? []).filter((block) => block.id !== selectedTextId)
       return next
     })
-    console.log('[TEXT-DEBUG] setSelectedTextId(null) - delete text handler')
     setSelectedTextId(null)
   }, [applyState, selectedTextId])
-
-  const updateSelectedImage = useCallback(
-    (changes: Partial<CanvasImage>) => {
-      if (!selectedImageId) return
-      applyState((previous) => {
-        const next = cloneState(previous)
-        next.images = (next.images ?? []).map((image) =>
-          image.id === selectedImageId ? { ...image, ...changes } : image,
-        )
-        return next
-      })
-    },
-    [applyState, selectedImageId],
-  )
 
   const handleDeleteSelectedImage = useCallback(() => {
     if (!selectedImageId) return
@@ -680,17 +661,6 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
     delete imageCacheRef.current[selectedImageId]
     setSelectedImageId(null)
   }, [applyState, selectedImageId])
-
-  const handleImageDimensionChange = useCallback(
-    (dimension: "width" | "height", value: number) => {
-      if (!selectedImage) return
-      if (!Number.isFinite(value)) return
-      const maxDimension = dimension === "width" ? canvasSizeRef.current.width : canvasSizeRef.current.height
-      const clamped = Math.max(40, Math.min(value, maxDimension))
-      updateSelectedImage({ [dimension]: clamped })
-    },
-    [selectedImage, updateSelectedImage],
-  )
 
   const handleCancelPendingImage = useCallback(() => {
     if (isGeneratingImage) return
@@ -776,57 +746,34 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
   useEffect(() => {
     const parsed = parseInitialState(initialData)
 
-    // Skip updating if this is the same state we just emitted via onChange
-    // This prevents circular updates where our own changes come back via initialData
     if (lastEmittedStateRef.current && statesEqual(parsed, lastEmittedStateRef.current)) {
-      console.log('[CANVAS-DEBUG] Ignoring initialData update - same as last emitted state')
       return
     }
 
-    // Skip updating if the parsed state is the same as current state
-    // This prevents unnecessary resets when parent passes back identical data
     if (statesEqual(parsed, canvasState)) {
-      console.log('[CANVAS-DEBUG] Ignoring initialData update - same as current state')
       return
     }
 
-    // Skip updating if we recently made a change (within 100ms cooldown)
-    // This prevents resets during the brief window after drawing/editing finishes
     const timeSinceLastChange = Date.now() - lastChangeTimeRef.current
     if (timeSinceLastChange < 100) {
-      console.log('[CANVAS-DEBUG] Ignoring initialData update - within cooldown period', { timeSinceLastChange })
       return
     }
 
-    // Skip updating if we're actively editing text or images (user-initiated changes in progress)
     const isActivelyEditing = selectedTextId !== null || selectedImageId !== null
-
-    // Skip updating if we're drawing
     const isDrawing = isDrawingRef.current
 
-    console.log('[CANVAS-DEBUG] initialData effect check', {
-      statesEqual: statesEqual(parsed, canvasState),
-      isDrawing,
-      isActivelyEditing,
-      selectedTextId,
-      selectedImageId,
-      timeSinceLastChange
-    })
-
-    if (!isDrawing && !isActivelyEditing) {
-      console.log('[CANVAS-DEBUG] Applying initialData update (external change detected)')
-      setCanvasState(parsed)
-      setSelectedTextId(null)
-      setSelectedImageId(null)
-      setPendingImagePosition(null)
-      imageCacheRef.current = {}
-      // Store this as the last emitted state to prevent circular updates
-      lastEmittedStateRef.current = parsed
-    } else {
-      console.log('[CANVAS-DEBUG] Skipping initialData update - user interaction in progress')
+    if (isDrawing || isActivelyEditing) {
+      return
     }
+
+    setCanvasState(parsed)
+    setSelectedTextId(null)
+    setSelectedImageId(null)
+    setPendingImagePosition(null)
+    imageCacheRef.current = {}
+    lastEmittedStateRef.current = parsed
     // Only react when caller provides new data — ignore onChange dependency
-    // Note: We intentionally do NOT include selectedTextId/selectedImageId as dependencies
+    // Note: We intentionally do NOT include selectedTextId/selectedImageId/canvasState as dependencies
     // because we only want this to fire when initialData changes from external sources
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialData])
@@ -981,7 +928,6 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
       const coordinates = getCanvasCoordinates(event, canvas, canvasSizeRef.current)
 
       if (tool === "image") {
-        console.log('[TEXT-DEBUG] setSelectedTextId(null) - image tool pointerdown')
         setSelectedTextId(null)
         setImageError(null)
 
@@ -1046,7 +992,6 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
           const bounds = getTextBounds(context, selectedTextBlock)
           const handle = getTextHandleAtPoint(bounds, coordinates)
           if (handle) {
-            console.log('[TEXT-DEBUG] setSelectedTextId - text resize handle clicked:', selectedTextBlock.id)
             setSelectedTextId(selectedTextBlock.id)
             setSelectedImageId(null)
             textResizeRef.current = {
@@ -1075,7 +1020,6 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
           const block = textBlocks[index]
           const bounds = getTextBounds(context, block)
           if (pointInBounds(coordinates, bounds)) {
-            console.log('[TEXT-DEBUG] setSelectedTextId - existing text block clicked:', block.id)
             setSelectedTextId(block.id)
             setSelectedImageId(null)
             textDragRef.current = {
@@ -1093,7 +1037,6 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
 
         // If text is already selected, clicking empty space deselects (finalizes) it
         if (selectedTextId !== null) {
-          console.log('[TEXT-DEBUG] setSelectedTextId(null) - clicking empty space to finalize text')
           setSelectedTextId(null)
           setSelectedImageId(null)
           setPendingImagePosition(null)
@@ -1113,11 +1056,9 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
           align: "left",
         }
 
-        console.log('[TEXT-DEBUG] Creating new text block:', newBlock.id)
         applyState((previous) => {
           const next = cloneState(previous)
           next.textBlocks = [...(next.textBlocks ?? []), newBlock]
-          console.log('[TEXT-DEBUG] applyState - new textBlocks count:', next.textBlocks.length)
           return next
         })
         setSelectedImageId(null)
@@ -1129,7 +1070,6 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
         return
       }
 
-      console.log('[TEXT-DEBUG] setSelectedTextId(null) - pen/eraser tool pointerdown')
       setSelectedTextId(null)
       setSelectedImageId(null)
       setPendingImagePosition(null)
@@ -1162,6 +1102,7 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
       textFontFamily,
       textFontSize,
       tool,
+      selectedTextId,
     ],
   )
 
@@ -1428,7 +1369,6 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
         textBlocks: updated,
       })
       if (selectedTextId && !updated.some((block) => block.id === selectedTextId)) {
-        console.log('[TEXT-DEBUG] setSelectedTextId(null) - undo removed selected text')
         setSelectedTextId(null)
       }
       return
@@ -1458,20 +1398,11 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
       textBlocks: [],
       images: [],
     })
-    console.log('[TEXT-DEBUG] setSelectedTextId(null) - clear canvas')
     setSelectedTextId(null)
     setSelectedImageId(null)
     setPendingImagePosition(null)
     imageCacheRef.current = {}
   }, [applyState, canvasState])
-
-  const handleSave = useCallback(() => {
-    setCanvasState((previous) => {
-      const snapshot = cloneState(previous)
-      onSave?.(snapshot)
-      return snapshot
-    })
-  }, [onSave])
 
   useEffect(() => {
     const canvasElement = canvasRef.current
@@ -1586,7 +1517,6 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
                   variant={tool === "image" ? "default" : "outline"}
                   onClick={() => {
                     setTool("image")
-                    console.log('[TEXT-DEBUG] setSelectedTextId(null) - image tool button clicked')
                     setSelectedTextId(null)
                   }}
                   title="Image"
@@ -1861,10 +1791,8 @@ export function Canvas({ initialData, onChange, onSave, readOnly = false, classN
 
         {/* Inline text editing overlay and toolbar */}
         {!readOnly && selectedTextBlock && canvasRef.current && (() => {
-          console.log('[TEXT-DEBUG] Text overlay rendering for block:', selectedTextBlock.id)
           const { screenX, screenY } = getTextScreenPosition(selectedTextBlock, canvasRef.current, canvasState.size)
           const rect = canvasRef.current.getBoundingClientRect()
-          const scaleX = rect.width / canvasState.size.width
           const scaleY = rect.height / canvasState.size.height
 
           return (

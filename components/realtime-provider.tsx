@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 
 import type { ClientToServerEvent, RoomSnapshot, ServerToClientEvent } from "@concept-karaoke/realtime-shared"
 
@@ -8,7 +8,7 @@ import { createRealtimeClient, type RealtimeClient, type RealtimeStatus } from "
 
 type Status = RealtimeStatus
 
-interface RealtimeContextValue {
+export interface RealtimeContextValue {
   client: RealtimeClient
   status: Status
   connect: (options: {
@@ -42,16 +42,39 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     return unsubscribe
   }, [client])
 
+  const connect = useCallback<RealtimeContextValue["connect"]>(
+    (options) => {
+      client.connect(options)
+    },
+    [client],
+  )
+
+  const disconnect = useCallback<RealtimeContextValue["disconnect"]>(() => {
+    client.disconnect()
+  }, [client])
+
+  const send = useCallback<RealtimeContextValue["send"]>(
+    (event) => {
+      client.send(event)
+    },
+    [client],
+  )
+
+  const addListener = useCallback<RealtimeContextValue["addListener"]>(
+    (type, listener) => client.on(type, listener),
+    [client],
+  )
+
   const value = useMemo<RealtimeContextValue>(
     () => ({
       client,
       status,
-      connect: (options) => client.connect(options),
-      disconnect: () => client.disconnect(),
-      send: (event) => client.send(event),
-      addListener: (type, listener) => client.on(type, listener),
+      connect,
+      disconnect,
+      send,
+      addListener,
     }),
-    [client, status],
+    [client, status, connect, disconnect, send, addListener],
   )
 
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>

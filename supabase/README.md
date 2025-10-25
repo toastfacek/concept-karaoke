@@ -41,6 +41,7 @@ Stores game session information.
 - `current_phase` (VARCHAR): Current creation phase (big_idea, visual, headline, mantra, pitch)
 - `phase_start_time` (TIMESTAMP): When current phase started (for timer)
 - `host_id` (UUID): Player ID of the game host
+- `version` (INTEGER): Monotonic revision counter for realtime sync
 - `created_at` (TIMESTAMP): When game was created
 - `updated_at` (TIMESTAMP): Last update time
 

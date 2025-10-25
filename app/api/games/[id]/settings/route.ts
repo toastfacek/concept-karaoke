@@ -3,7 +3,7 @@ import { z } from "zod"
 
 import { TABLES } from "@/lib/db"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
-import { PRODUCT_CATEGORIES, PHASE_DURATIONS } from "@/lib/types"
+import { PRODUCT_CATEGORIES } from "@/lib/types"
 
 const settingsSchema = z.object({
   productCategory: z.enum(PRODUCT_CATEGORIES).optional(),

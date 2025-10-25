@@ -1,12 +1,18 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { Button } from "@/components/ui/button"
 import { Trophy } from "lucide-react"
-import { routes } from "@/lib/routes"
+
+import { Button } from "@/components/ui/button"
 import { Canvas } from "@/components/canvas"
+import { useRealtime } from "@/components/realtime-provider"
+import { useRoomRealtime, type RoomRealtimeListenerHelpers } from "@/hooks/use-room-realtime"
 import { canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/canvas"
+import { loadPlayer, type StoredPlayer } from "@/lib/player-storage"
+import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
+import type { RealtimeStatus } from "@/lib/realtime-client"
+import { routes } from "@/lib/routes"
 
 interface GamePlayer {
   id: string
@@ -14,6 +20,7 @@ interface GamePlayer {
   emoji: string
   isReady: boolean
   isHost: boolean
+  joinedAt: string
 }
 
 interface AdLob {
@@ -33,11 +40,7 @@ interface AdLob {
   voteCount: number
 }
 
-interface ResultsGameState {
-  id: string
-  code: string
-  status: string
-  players: GamePlayer[]
+interface ResultsGameState extends SnapshotDrivenState<GamePlayer> {
   adlobs: AdLob[]
 }
 
@@ -64,12 +67,26 @@ export default function ResultsPage() {
   const router = useRouter()
   const params = useParams()
   const roomCode = params.roomId as string
+  const realtime = useRealtime()
+  const { status: realtimeStatus } = realtime
 
+  const [storedPlayer, setStoredPlayer] = useState<StoredPlayer | null>(null)
   const [game, setGame] = useState<ResultsGameState | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
+  const latestGameRef = useRef<ResultsGameState | null>(null)
 
-  const fetchGame = useCallback(async () => {
+  useEffect(() => {
+    setStoredPlayer(loadPlayer(roomCode))
+  }, [roomCode])
+
+  const fetchGame = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) {
+      setLoading(true)
+      setError(null)
+    }
+
     try {
       const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
       const payload = await response.json()
@@ -82,7 +99,6 @@ export default function ResultsPage() {
 
       const gameData = payload.game
 
-      // Map the API response to our game state format
       const mappedAdlobs: AdLob[] = (gameData.adlobs ?? []).map((adlob: any) => ({
         id: adlob.id,
         bigIdea: {
@@ -106,12 +122,15 @@ export default function ResultsPage() {
         emoji: player.emoji,
         isReady: player.isReady ?? false,
         isHost: player.isHost ?? false,
+        joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
       }))
 
       setGame({
         id: gameData.id,
         code: gameData.code,
         status: gameData.status,
+        hostId: gameData.hostId,
+        version: typeof gameData.version === "number" ? gameData.version : 0,
         players: mappedPlayers,
         adlobs: mappedAdlobs,
       })
@@ -120,7 +139,9 @@ export default function ResultsPage() {
       setError("Unable to load results")
       setGame(null)
     } finally {
-      setLoading(false)
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }, [roomCode])
 
@@ -128,10 +149,153 @@ export default function ResultsPage() {
     fetchGame()
   }, [fetchGame])
 
-  const getPresenterName = (presenterId: string | null) => {
-    if (!game) return "Unknown"
-    return game.players.find((p) => p.id === presenterId)?.name ?? "Unknown"
-  }
+  useEffect(() => {
+    latestGameRef.current = game
+  }, [game])
+
+  useEffect(() => {
+    if (realtimeStatus === "disconnected") {
+      fetchGame({ silent: true }).catch((statusError) => {
+        console.error("Failed to refresh results after disconnect", statusError)
+      })
+    } else if (realtimeStatus === "connected" && lastRealtimeStatusRef.current === "disconnected") {
+      fetchGame({ silent: true }).catch((statusError) => {
+        console.error("Failed to refresh results after reconnect", statusError)
+      })
+    }
+    lastRealtimeStatusRef.current = realtimeStatus
+  }, [fetchGame, realtimeStatus])
+
+  useEffect(() => {
+    if (!game) return
+
+    switch (game.status) {
+      case "lobby":
+        router.push(routes.lobby(roomCode))
+        break
+      case "creating":
+        router.push(routes.create(roomCode))
+        break
+      case "presenting":
+        router.push(routes.present(roomCode))
+        break
+      case "voting":
+        router.push(routes.vote(roomCode))
+        break
+      default:
+        break
+    }
+  }, [game, router, roomCode])
+
+  const getInitialSnapshot = useCallback(() => {
+    const snapshotSource = latestGameRef.current
+    return snapshotSource ? stateToSnapshot(snapshotSource) : null
+  }, [])
+
+  const registerRealtimeListeners = useCallback(
+    ({ addListener }: RoomRealtimeListenerHelpers) => {
+      const unsubscribeHello = addListener("hello_ack", ({ snapshot: incoming }) => {
+        setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as ResultsGameState) : previous))
+      })
+
+      const unsubscribeRoomState = addListener("room_state", ({ snapshot: incoming }) => {
+        setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as ResultsGameState) : previous))
+        fetchGame({ silent: true }).catch((error) => {
+          console.error("Failed to refresh results after room_state", error)
+        })
+      })
+
+      const unsubscribePlayerJoined = addListener("player_joined", ({ player, version }) => {
+        setGame((previous) => {
+          if (!previous) return previous
+          const existing = previous.players.find((candidate) => candidate.id === player.id)
+          const players = existing
+            ? previous.players.map((candidate) =>
+                candidate.id === player.id
+                  ? {
+                      ...candidate,
+                      name: player.name,
+                      emoji: player.emoji,
+                      isReady: player.isReady,
+                      isHost: player.isHost,
+                    }
+                  : candidate,
+              )
+            : [
+                ...previous.players,
+                {
+                  id: player.id,
+                  name: player.name,
+                  emoji: player.emoji,
+                  isReady: player.isReady,
+                  isHost: player.isHost,
+                  joinedAt: new Date().toISOString(),
+                },
+              ]
+          const hostId = players.find((candidate) => candidate.isHost)?.id ?? previous.hostId
+          return {
+            ...previous,
+            version,
+            players,
+            hostId,
+          }
+        })
+      })
+
+      const unsubscribePlayerLeft = addListener("player_left", ({ playerId: leftPlayerId, version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                version,
+                players: previous.players.map((player) =>
+                  player.id === leftPlayerId ? { ...player, isReady: false } : player,
+                ),
+              }
+            : previous,
+        )
+      })
+
+      const unsubscribeReady = addListener("ready_update", ({ playerId: readyPlayerId, isReady, version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                version,
+                players: previous.players.map((player) =>
+                  player.id === readyPlayerId ? { ...player, isReady } : player,
+                ),
+              }
+            : previous,
+        )
+      })
+
+      const unsubscribePhaseChanged = addListener("phase_changed", () => {
+        fetchGame({ silent: true }).catch((error) => {
+          console.error("Failed to refresh results after phase change", error)
+        })
+      })
+
+      return [
+        unsubscribeHello,
+        unsubscribeRoomState,
+        unsubscribePlayerJoined,
+        unsubscribePlayerLeft,
+        unsubscribeReady,
+        unsubscribePhaseChanged,
+      ]
+    },
+    [fetchGame],
+  )
+
+  useRoomRealtime({
+    roomCode,
+    playerId: storedPlayer?.id ?? null,
+    enabled: Boolean(storedPlayer?.id && game),
+    getInitialSnapshot,
+    registerListeners: registerRealtimeListeners,
+    realtime,
+  })
 
   const getPresenter = (presenterId: string | null) => {
     if (!game) return null
@@ -162,7 +326,6 @@ export default function ResultsPage() {
     )
   }
 
-  // Sort adlobs by vote count descending
   const sortedAdLobs = [...game.adlobs].sort((a, b) => b.voteCount - a.voteCount)
   const winner = sortedAdLobs[0]
   const winnerPresenter = winner ? getPresenter(winner.assignedPresenterId) : null
@@ -199,25 +362,17 @@ export default function ResultsPage() {
                   </div>
                 )}
 
-                <div>
-                  {winnerCanvas ? (
-                    <Canvas
-                      initialData={winnerCanvas}
-                      readOnly
-                      className="bg-white [&>div:first-child]:hidden"
-                    />
-                  ) : (
-                    <div className="retro-border flex aspect-video items-center justify-center bg-white">
-                      <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-                        No visual submitted
-                      </p>
-                    </div>
-                  )}
-                </div>
+                {winnerCanvas ? (
+                  <Canvas initialData={winnerCanvas} readOnly className="pointer-events-none bg-muted" />
+                ) : (
+                  <div className="retro-border bg-muted p-6 text-center font-mono text-sm text-muted-foreground">
+                    No visual or headline canvas available
+                  </div>
+                )}
 
                 <div>
-                  <p className="mb-2 font-mono text-xs uppercase text-muted-foreground">Campaign Pitch</p>
-                  <p className="text-lg">{winner.pitch.text}</p>
+                  <p className="mb-2 font-mono text-xs uppercase text-muted-foreground">Pitch</p>
+                  <p className="text-lg leading-relaxed">{winner.pitch.text}</p>
                 </div>
               </div>
             </div>
@@ -225,33 +380,65 @@ export default function ResultsPage() {
         )}
 
         <div className="retro-border bg-card p-8">
-          <h2 className="mb-6 text-center text-2xl font-bold uppercase">All Results</h2>
-          <div className="space-y-4">
-            {sortedAdLobs.map((adlob, index) => (
-              <div key={adlob.id} className="retro-border flex items-center justify-between bg-muted p-4">
-                <div className="flex items-center gap-4">
-                  <span className="text-2xl font-bold text-muted-foreground">#{index + 1}</span>
-                  <div>
-                    <p className="font-bold">{adlob.bigIdea.text}</p>
-                    <p className="font-mono text-xs text-muted-foreground">
-                      Presented by {getPresenterName(adlob.assignedPresenterId)}
-                    </p>
-                    {adlob.visualNotes && (
-                      <p className="mt-1 text-xs italic text-muted-foreground/70">"{adlob.visualNotes}"</p>
-                    )}
+          <h2 className="mb-6 text-center text-2xl font-bold uppercase">Full Standings</h2>
+          <div className="space-y-6">
+            {sortedAdLobs.map((adlob, index) => {
+              const presenter = getPresenter(adlob.assignedPresenterId)
+              const canvas = adlob.headlineCanvas ?? adlob.visualCanvas
+              return (
+                <div key={adlob.id} className="rounded border border-border bg-muted/30 p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-mono text-xs uppercase text-muted-foreground">Rank #{index + 1}</p>
+                      <p className="text-xl font-bold">
+                        <span className="text-2xl">{presenter?.emoji}</span> {presenter?.name}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-mono text-xs uppercase text-muted-foreground">Votes</p>
+                      <p className="text-3xl font-bold">{adlob.voteCount}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div className="space-y-3">
+                      <div>
+                        <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Big Idea</p>
+                        <p className="text-base leading-relaxed">{adlob.bigIdea.text}</p>
+                      </div>
+                      <div>
+                        <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Pitch</p>
+                        <p className="text-base leading-relaxed">{adlob.pitch.text}</p>
+                      </div>
+                      {adlob.visualNotes && (
+                        <div>
+                          <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Visual Notes</p>
+                          <p className="text-sm leading-relaxed">{adlob.visualNotes}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      {canvas ? (
+                        <Canvas initialData={canvas} readOnly className="pointer-events-none bg-muted" />
+                      ) : (
+                        <div className="retro-border bg-muted p-6 text-center font-mono text-xs text-muted-foreground">
+                          No canvas provided
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="retro-border bg-primary px-4 py-2 text-primary-foreground">
-                  <p className="text-xl font-bold">{adlob.voteCount}</p>
-                  <p className="font-mono text-xs">vote{adlob.voteCount !== 1 ? "s" : ""}</p>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
 
-        <div className="flex justify-center">
-          <Button onClick={() => router.push(routes.home())} size="lg" className="px-12">
+        <div className="flex justify-center gap-4">
+          <Button variant="outline" onClick={() => router.push(routes.lobby(roomCode))} size="lg">
+            Back to Lobby
+          </Button>
+          <Button onClick={() => router.push(routes.create(roomCode))} size="lg">
             Play Again
           </Button>
         </div>

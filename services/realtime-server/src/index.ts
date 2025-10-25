@@ -22,7 +22,7 @@ import {
 import { logger } from "./logger.js"
 import { MetricsRecorder } from "./metrics.js"
 
-const DEFAULT_PORT = process.env.PORT ? Number(process.env.PORT) : 8080
+const DEFAULT_PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080
 const HEARTBEAT_INTERVAL_MS = 15_000
 const HEARTBEAT_TIMEOUT_MS = 45_000
 
