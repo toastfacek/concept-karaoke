@@ -138,16 +138,14 @@ export default function VotePage() {
         adlobs: mappedAdlobs,
       })
 
-      if (storedPlayer) {
-        const latestPlayer = mappedPlayers.find((player) => player.id === storedPlayer.id)
+      setStoredPlayer((previous) => {
+        if (!previous) return previous
+        const latestPlayer = mappedPlayers.find((player) => player.id === previous.id)
         if (latestPlayer) {
-          setStoredPlayer((previous) =>
-            previous
-              ? { ...previous, isHost: latestPlayer.isHost, emoji: latestPlayer.emoji, name: latestPlayer.name }
-              : previous,
-          )
+          return { ...previous, isHost: latestPlayer.isHost, emoji: latestPlayer.emoji, name: latestPlayer.name }
         }
-      }
+        return previous
+      })
     } catch (fetchError) {
       console.error("Failed to fetch voting data", fetchError)
       setError("Unable to load voting data")
@@ -157,7 +155,7 @@ export default function VotePage() {
         setLoading(false)
       }
     }
-  }, [roomCode, storedPlayer])
+  }, [roomCode])
 
   useEffect(() => {
     fetchGame()
