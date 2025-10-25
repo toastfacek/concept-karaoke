@@ -7,7 +7,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "pnpm --filter @concept-karaoke/realtime-shared build && tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "test": "vitest run"
   },
