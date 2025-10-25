@@ -97,7 +97,7 @@ export function GameSettings({
           </Label>
           <Select
             value={selectedCategory}
-            onValueChange={setSelectedCategory}
+            onValueChange={(value) => setSelectedCategory(value as ProductCategory)}
             disabled={!isHost || isUpdating}
           >
             <SelectTrigger id="product-category" className="retro-border">

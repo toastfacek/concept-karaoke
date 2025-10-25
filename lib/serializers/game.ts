@@ -30,7 +30,7 @@ type RawAdlob = {
   headline_created_by: string | null
   pitch_text: string | null
   pitch_created_by: string | null
-  created_at: string
+  created_at: string | null
   assigned_presenter: string | null
   present_order: number | null
   present_started_at: string | null
@@ -93,7 +93,7 @@ function serializeAdlob(row: RawAdlob) {
     headlineAuthorId: row.headline_created_by,
     pitch: row.pitch_text,
     pitchAuthorId: row.pitch_created_by,
-    createdAt: row.created_at,
+    createdAt: row.created_at ?? new Date().toISOString(),
     assignedPresenterId: row.assigned_presenter,
     presentOrder: row.present_order,
     presentStartedAt: row.present_started_at,

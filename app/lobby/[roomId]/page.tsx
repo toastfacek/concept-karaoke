@@ -13,6 +13,7 @@ import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
 import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
 import type { RealtimeStatus } from "@/lib/realtime-client"
+import type { ProductCategory, PhaseDuration } from "@/lib/types"
 
 type LobbyPlayer = {
   id: string
@@ -485,8 +486,8 @@ export default function LobbyPage() {
             {/* Game Settings */}
             {lobby && currentPlayer && (
               <GameSettings
-                productCategory={lobby.productCategory}
-                phaseDurationSeconds={lobby.phaseDurationSeconds}
+                productCategory={lobby.productCategory as ProductCategory}
+                phaseDurationSeconds={lobby.phaseDurationSeconds as PhaseDuration}
                 isHost={isHost}
                 roomCode={roomCode}
                 playerId={currentPlayer.id}
