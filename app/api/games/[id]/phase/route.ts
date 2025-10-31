@@ -100,9 +100,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     let presentSequence: string[] = []
 
     if (nextSnapshot.status === "presenting") {
+      // Fetch all players ordered by join time for deterministic round-robin assignment
+      const { data: allPlayers, error: playersForPresentError } = await supabase
+        .from(TABLES.players)
+        .select("id")
+        .eq("room_id", room.id)
+        .order("joined_at", { ascending: true })
+
+      if (playersForPresentError) {
+        throw playersForPresentError
+      }
+
       const { data: adlobsForPresent, error: adlobsSelectError } = await supabase
         .from(TABLES.adLobs)
-        .select("id, assigned_presenter, pitch_created_by")
+        .select("id")
         .eq("room_id", room.id)
         .order("created_at", { ascending: true })
 
@@ -110,12 +121,39 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         throw adlobsSelectError
       }
 
+      const orderedPlayers = allPlayers ?? []
       const orderedAdlobs = adlobsForPresent ?? []
+
+      // Validate that we have the same number of players and adlobs
+      if (orderedPlayers.length !== orderedAdlobs.length) {
+        console.error(
+          `[PRESENT ASSIGNMENT] Mismatch: ${orderedPlayers.length} players vs ${orderedAdlobs.length} adlobs`,
+        )
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Cannot assign presenters: ${orderedPlayers.length} players but ${orderedAdlobs.length} campaigns`,
+          },
+          { status: 409 },
+        )
+      }
+
+      if (orderedAdlobs.length === 0) {
+        return NextResponse.json(
+          { success: false, error: "Cannot transition to presenting: no campaigns exist" },
+          { status: 409 },
+        )
+      }
+
       presentSequence = orderedAdlobs.map((item) => item.id)
 
+      // Assign presenters using round-robin: player[i] presents adlob[i]
+      // This guarantees every player presents exactly once
       for (let index = 0; index < orderedAdlobs.length; index += 1) {
         const adlob = orderedAdlobs[index]
-        const assignedPresenter = adlob.assigned_presenter ?? adlob.pitch_created_by ?? null
+        const assignedPresenter = orderedPlayers[index].id
+
+        console.log(`[PRESENT ASSIGNMENT] AdLob ${index} (${adlob.id}) → Player ${assignedPresenter}`)
 
         const { error: adlobUpdateError } = await supabase
           .from(TABLES.adLobs)
@@ -131,15 +169,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           throw adlobUpdateError
         }
       }
+
+      console.log(
+        `[PRESENT ASSIGNMENT] Successfully assigned ${orderedAdlobs.length} presenters for room ${room.id}`,
+      )
     }
 
     const hasPresentSequence = presentSequence.length > 0
+
+    // Increment version to trigger realtime refresh for all clients
+    const { data: currentRoom } = await supabase
+      .from(TABLES.gameRooms)
+      .select("version")
+      .eq("id", room.id)
+      .single()
+
     const gameUpdate: Record<string, unknown> = {
       status: nextSnapshot.status,
       current_phase: nextSnapshot.status === "creating" ? nextSnapshot.currentPhase : null,
       phase_start_time: new Date().toISOString(),
       current_present_index: nextSnapshot.status === "presenting" ? (hasPresentSequence ? 0 : null) : null,
       present_sequence: nextSnapshot.status === "presenting" ? (hasPresentSequence ? presentSequence : null) : null,
+      version: (currentRoom?.version ?? 0) + 1,
     }
 
     const { error: updateError } = await supabase.from(TABLES.gameRooms).update(gameUpdate).eq("id", room.id)
