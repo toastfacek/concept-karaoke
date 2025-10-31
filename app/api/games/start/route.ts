@@ -48,7 +48,7 @@ async function generateBrief(productCategory: string) {
     "}",
     `The productCategory field MUST be exactly: "${category}"`,
     "Make the productName creative and fitting for this category.",
-    "Keep it playful but useful for a collaborative improv game.",
+    "Keep it playful but useful for a collaborative online game.",
     "Do not wrap the JSON in markdown fences or add extra text.",
   ].join("\n")
 

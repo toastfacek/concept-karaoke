@@ -68,7 +68,7 @@ export async function POST(request: Request) {
       "}",
       `The productCategory field MUST be exactly: "${productCategory}"`,
       "Make the productName creative and fitting for this category.",
-      "Keep it playful but useful for a collaborative improv game.",
+      "Keep it playful but useful for a collaborative online game.",
       "Do not wrap the JSON in markdown fences or add extra text.",
     ].join("\n")
 

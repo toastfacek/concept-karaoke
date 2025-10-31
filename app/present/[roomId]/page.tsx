@@ -598,6 +598,17 @@ export default function PresentPage() {
 
   return (
     <main className="min-h-screen bg-background p-8">
+      {currentPresenter && (
+        <div className="sticky top-6 z-10 mb-6 flex justify-end">
+          <div className="retro-border inline-flex items-center gap-3 bg-card/90 px-4 py-2 shadow-md backdrop-blur">
+            <span className="text-3xl leading-none">{currentPresenter.emoji}</span>
+            <div className="text-left">
+              <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">Now Presenting</p>
+              <p className="text-sm font-semibold">{currentPresenter.name}</p>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="mx-auto flex max-w-6xl flex-col gap-8">
         <header className="retro-border bg-card px-6 py-4 text-center">
           <p className="mb-2 font-mono text-sm uppercase tracking-wider text-muted-foreground">Up Next</p>
