@@ -336,6 +336,8 @@ export default function BriefPage() {
       isReady: desiredReady,
     })
 
+    setIsUpdatingReady(false)
+
     try {
       const response = await fetch(`/api/games/${roomCode}/players/${currentPlayer.id}`, {
         method: "PATCH",
@@ -440,6 +442,30 @@ export default function BriefPage() {
         throw new Error(payload.error ?? "Failed to advance game")
       }
 
+      const nextStatus = typeof payload.status === "string" ? payload.status : null
+      const nextCurrentPhase = payload.currentPhase ?? null
+      const phaseStartTime = typeof payload.phaseStartTime === "string" ? payload.phaseStartTime : new Date().toISOString()
+
+      if (nextStatus) {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                status: nextStatus,
+              }
+            : previous,
+        )
+
+        sendRealtime({
+          type: "set_status",
+          roomCode,
+          playerId: currentPlayer.id,
+          status: nextStatus,
+          currentPhase: nextCurrentPhase,
+          phaseStartTime,
+        })
+      }
+
       if (payload.status === "creating" && game?.id) {
         const createResponse = await fetch("/api/adlobs/create", {
           method: "POST",
@@ -456,7 +482,9 @@ export default function BriefPage() {
         }
       }
 
-      await fetchGame({ silent: true })
+      if (realtimeStatus !== "connected") {
+        await fetchGame({ silent: true })
+      }
     } catch (advanceError) {
       console.error(advanceError)
       setError(advanceError instanceof Error ? advanceError.message : "Failed to advance game.")
@@ -470,9 +498,12 @@ export default function BriefPage() {
   }, [game])
 
   const getInitialSnapshot = useCallback(() => {
+    if (game) {
+      return stateToSnapshot(game)
+    }
     const snapshotSource = latestGameRef.current
     return snapshotSource ? stateToSnapshot(snapshotSource) : null
-  }, [])
+  }, [game])
 
   const registerRealtimeListeners = useCallback(
     ({ addListener }: RoomRealtimeListenerHelpers) => {
@@ -549,19 +580,27 @@ export default function BriefPage() {
         )
       })
 
+      const unsubscribeStatusChanged = addListener("status_changed", ({ status, version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                status,
+                version,
+              }
+            : previous,
+        )
+      })
+
       const unsubscribePhaseChanged = addListener("phase_changed", ({ version }) => {
         setGame((previous) =>
           previous
             ? {
                 ...previous,
                 version,
-                status: previous.status === "creating" ? previous.status : "creating",
               }
             : previous,
         )
-        fetchGame({ silent: true }).catch((error) => {
-          console.error("Failed to refresh briefing room after phase change", error)
-        })
       })
 
       return [
@@ -570,10 +609,11 @@ export default function BriefPage() {
         unsubscribeReady,
         unsubscribePlayerJoined,
         unsubscribePlayerLeft,
+        unsubscribeStatusChanged,
         unsubscribePhaseChanged,
       ]
     },
-    [fetchGame, setGame],
+    [setGame],
   )
 
   useRoomRealtime({

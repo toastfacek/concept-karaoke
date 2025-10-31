@@ -1,10 +1,12 @@
-import { useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { RoomSnapshot, ServerToClientEvent } from "@concept-karaoke/realtime-shared"
 
 import { useRealtime, type RealtimeContextValue } from "@/components/realtime-provider"
 import { fetchRealtimeToken, type RealtimeToken } from "@/lib/realtime/token"
 
 const TOKEN_REFRESH_BUFFER_MS = 5_000
+const INITIAL_RECONNECT_DELAY_MS = 500
+const MAX_RECONNECT_DELAY_MS = 30_000
 
 type ListenerCleanup = () => void
 
@@ -44,11 +46,15 @@ export function useRoomRealtime({
 }: UseRoomRealtimeOptions) {
   const fallbackRealtime = useRealtime()
   const context = realtime ?? fallbackRealtime
-  const { connect, disconnect, addListener } = context
+  const { connect, disconnect, addListener, status } = context
 
   const tokenRef = useRef<RealtimeToken | null>(null)
   const connectionKeyRef = useRef<string | null>(null)
   const listenerCleanupRef = useRef<ListenerCleanup[]>([])
+  const reconnectAttemptRef = useRef(0)
+  const reconnectTimerRef = useRef<number | null>(null)
+  const isDisposedRef = useRef(false)
+  const [activeConnectionKey, setActiveConnectionKey] = useState<string | null>(null)
 
   const getInitialSnapshotRef = useRef(getInitialSnapshot)
   useEffect(() => {
@@ -60,30 +66,51 @@ export function useRoomRealtime({
     addListenerRef.current = addListener
   }, [addListener])
 
-  useEffect(() => {
-    if (!enabled || !playerId) {
+  const clearReconnectTimer = useCallback(() => {
+    if (typeof window === "undefined") {
+      reconnectTimerRef.current = null
       return
     }
-
-    const connectionKey = `${roomCode}:${playerId}`
-    if (connectionKeyRef.current === connectionKey) {
-      return
+    if (reconnectTimerRef.current !== null) {
+      window.clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
     }
+  }, [])
 
-    let cancelled = false
-    let didConnect = false
+  const cleanupListeners = useCallback(() => {
+    listenerCleanupRef.current.forEach((cleanup) => {
+      try {
+        cleanup()
+      } catch (error) {
+        console.error("useRoomRealtime: listener cleanup failed", error)
+      }
+    })
+    listenerCleanupRef.current = []
+  }, [])
 
-    const establishConnection = async () => {
+  const establishConnection = useCallback(
+    async ({ forceTokenRefresh = false }: { forceTokenRefresh?: boolean } = {}) => {
+      if (!enabled || !playerId || isDisposedRef.current) {
+        return false
+      }
+
+      const connectionKey = `${roomCode}:${playerId}`
       const initialSnapshot = getInitialSnapshotRef.current?.() ?? null
       if (!initialSnapshot) {
-        return
+        return false
       }
 
       try {
         let token = tokenRef.current
-        if (!token || token.expiresAt <= Date.now() + TOKEN_REFRESH_BUFFER_MS) {
+        if (
+          forceTokenRefresh ||
+          !token ||
+          token.expiresAt <= Date.now() + TOKEN_REFRESH_BUFFER_MS
+        ) {
           token = await fetchRealtimeToken(roomCode, playerId)
-          if (cancelled) return
+          if (isDisposedRef.current) {
+            return false
+          }
           tokenRef.current = token
         }
 
@@ -94,38 +121,119 @@ export function useRoomRealtime({
           initialSnapshot,
         })
         connectionKeyRef.current = connectionKey
-        didConnect = true
+        setActiveConnectionKey(connectionKey)
+        reconnectAttemptRef.current = 0
         onConnect?.()
+        return true
       } catch (error) {
         console.error("useRoomRealtime: failed to initialize realtime connection", error)
+        return false
+      }
+    },
+    [connect, enabled, onConnect, playerId, roomCode],
+  )
+
+  useEffect(() => {
+    isDisposedRef.current = false
+    if (!enabled || !playerId) {
+      return () => {
+        isDisposedRef.current = true
       }
     }
 
-    void establishConnection()
+    const connectionKey = `${roomCode}:${playerId}`
+
+    if (connectionKeyRef.current !== connectionKey) {
+      void establishConnection()
+    }
 
     return () => {
-      cancelled = true
-      if (!didConnect) {
+      isDisposedRef.current = true
+      clearReconnectTimer()
+      cleanupListeners()
+      if (connectionKeyRef.current === connectionKey) {
+        connectionKeyRef.current = null
+        setActiveConnectionKey(null)
+      }
+      disconnect()
+      onDisconnect?.()
+    }
+  }, [
+    cleanupListeners,
+    clearReconnectTimer,
+    disconnect,
+    establishConnection,
+    enabled,
+    onDisconnect,
+    playerId,
+    roomCode,
+  ])
+
+  useEffect(() => {
+    if (!enabled || !playerId) {
+      reconnectAttemptRef.current = 0
+      clearReconnectTimer()
+      return
+    }
+
+    const connectionKey = `${roomCode}:${playerId}`
+
+    if (status === "connected") {
+      reconnectAttemptRef.current = 0
+      clearReconnectTimer()
+      return
+    }
+
+    const shouldRetry = status === "disconnected" || status === "error"
+    if (!shouldRetry) {
+      clearReconnectTimer()
+      return
+    }
+
+    if (connectionKeyRef.current !== connectionKey) {
+      return
+    }
+
+    if (reconnectTimerRef.current !== null) {
+      return
+    }
+
+    const attempt = reconnectAttemptRef.current + 1
+    reconnectAttemptRef.current = attempt
+
+    const delay =
+      attempt === 1
+        ? INITIAL_RECONNECT_DELAY_MS
+        : Math.min(MAX_RECONNECT_DELAY_MS, INITIAL_RECONNECT_DELAY_MS * 2 ** (attempt - 1))
+
+    if (typeof window === "undefined") {
+      return
+    }
+
+    reconnectTimerRef.current = window.setTimeout(() => {
+      reconnectTimerRef.current = null
+      if (isDisposedRef.current) {
+        return
+      }
+      if (!enabled || !playerId) {
+        return
+      }
+      if (connectionKeyRef.current !== connectionKey) {
         return
       }
 
-      listenerCleanupRef.current.forEach((cleanup) => {
-        try {
-          cleanup()
-        } catch (error) {
-          console.error("useRoomRealtime: listener cleanup failed", error)
-        }
-      })
-      listenerCleanupRef.current = []
-
-      disconnect()
-      onDisconnect?.()
-
-      if (connectionKeyRef.current === connectionKey) {
-        connectionKeyRef.current = null
-      }
-    }
-  }, [enabled, playerId, roomCode, connect, disconnect, onConnect, onDisconnect])
+      connectionKeyRef.current = null
+      setActiveConnectionKey(null)
+      void establishConnection({ forceTokenRefresh: true })
+    }, delay)
+  }, [
+    clearReconnectTimer,
+    establishConnection,
+    enabled,
+    playerId,
+    roomCode,
+    status,
+  ])
 
   useEffect(() => {
     listenerCleanupRef.current.forEach((cleanup) => {
@@ -141,8 +249,8 @@ export function useRoomRealtime({
       return
     }
 
-    const activeConnectionKey = `${roomCode}:${playerId}`
-    if (connectionKeyRef.current !== activeConnectionKey) {
+    const expectedConnectionKey = `${roomCode}:${playerId}`
+    if (activeConnectionKey !== expectedConnectionKey) {
       return
     }
 
@@ -166,9 +274,11 @@ export function useRoomRealtime({
       })
       listenerCleanupRef.current = []
     }
-  }, [enabled, playerId, roomCode, registerListeners])
+  }, [activeConnectionKey, enabled, playerId, registerListeners, roomCode])
+
+  const expectedConnectionKey = playerId ? `${roomCode}:${playerId}` : null
 
   return {
-    isConnected: connectionKeyRef.current === (playerId ? `${roomCode}:${playerId}` : null),
+    isConnected: activeConnectionKey === expectedConnectionKey,
   }
 }

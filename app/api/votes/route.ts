@@ -143,12 +143,16 @@ export async function POST(request: Request) {
     const allVotesIn = playerCount !== null && voteCount !== null && voteCount >= playerCount
 
     // If all votes are in, transition to results
+    let phaseStartTime: string | null = null
+
     if (allVotesIn) {
+      const resultsPhaseStartTime = new Date().toISOString()
+      phaseStartTime = resultsPhaseStartTime
       const { error: statusError } = await supabase
         .from(TABLES.gameRooms)
         .update({
           status: "results",
-          phase_start_time: new Date().toISOString(),
+          phase_start_time: resultsPhaseStartTime,
         })
         .eq("id", room.id)
 
@@ -162,6 +166,7 @@ export async function POST(request: Request) {
       message: "Vote recorded",
       allVotesIn,
       status: allVotesIn ? "results" : "voting",
+      phaseStartTime,
     })
   } catch (error) {
     console.error("Failed to record vote", error)

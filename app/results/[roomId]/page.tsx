@@ -188,9 +188,12 @@ export default function ResultsPage() {
   }, [game, router, roomCode])
 
   const getInitialSnapshot = useCallback(() => {
+    if (game) {
+      return stateToSnapshot(game)
+    }
     const snapshotSource = latestGameRef.current
     return snapshotSource ? stateToSnapshot(snapshotSource) : null
-  }, [])
+  }, [game])
 
   const registerRealtimeListeners = useCallback(
     ({ addListener }: RoomRealtimeListenerHelpers) => {
@@ -270,10 +273,30 @@ export default function ResultsPage() {
         )
       })
 
-      const unsubscribePhaseChanged = addListener("phase_changed", () => {
-        fetchGame({ silent: true }).catch((error) => {
-          console.error("Failed to refresh results after phase change", error)
-        })
+      const unsubscribeStatusChanged = addListener("status_changed", ({ status, phaseStartTime, version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                status,
+                phaseStartTime,
+                version,
+              }
+            : previous,
+        )
+      })
+
+      const unsubscribePhaseChanged = addListener("phase_changed", ({ currentPhase, phaseStartTime, version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                currentPhase,
+                phaseStartTime,
+                version,
+              }
+            : previous,
+        )
       })
 
       return [
@@ -282,6 +305,7 @@ export default function ResultsPage() {
         unsubscribePlayerJoined,
         unsubscribePlayerLeft,
         unsubscribeReady,
+        unsubscribeStatusChanged,
         unsubscribePhaseChanged,
       ]
     },

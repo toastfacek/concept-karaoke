@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto"
 
 export type CreationPhase = "big_idea" | "visual" | "headline" | "pitch" | null
+export type GameStatus = "lobby" | "briefing" | "creating" | "presenting" | "voting" | "results"
 
 export interface PlayerSummary {
   id: string
@@ -13,7 +14,7 @@ export interface PlayerSummary {
 export interface RoomSnapshot {
   id: string
   code: string
-  status: string
+  status: GameStatus
   currentPhase: CreationPhase
   phaseStartTime: string | null
   players: PlayerSummary[]
@@ -46,6 +47,21 @@ export type ClientToServerEvent =
   | {
       type: "heartbeat"
       roomCode: string
+    }
+  | {
+      type: "set_status"
+      roomCode: string
+      playerId: string
+      status: GameStatus
+      currentPhase: CreationPhase | null
+      phaseStartTime?: string | null
+    }
+  | {
+      type: "presentation_state"
+      roomCode: string
+      playerId: string
+      presentIndex: number
+      showCampaign: boolean
     }
 
 export type ServerToClientEvent =
@@ -82,6 +98,21 @@ export type ServerToClientEvent =
       roomCode: string
       currentPhase: CreationPhase
       phaseStartTime: string | null
+      version: number
+    }
+  | {
+      type: "status_changed"
+      roomCode: string
+      status: GameStatus
+      currentPhase: CreationPhase | null
+      phaseStartTime: string | null
+      version: number
+    }
+  | {
+      type: "presentation_state"
+      roomCode: string
+      presentIndex: number
+      showCampaign: boolean
       version: number
     }
   | {

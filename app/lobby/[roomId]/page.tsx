@@ -218,6 +218,8 @@ export default function LobbyPage() {
       isReady: desiredReady,
     })
 
+    setIsUpdatingReady(false)
+
     try {
       const response = await fetch(`/api/games/${roomCode}/players/${currentPlayer.id}`, {
         method: "PATCH",
@@ -229,6 +231,30 @@ export default function LobbyPage() {
 
       if (!response.ok || !payload.success) {
         throw new Error(payload.error ?? "Unable to update ready state.")
+      }
+
+      const nextStatus = typeof payload.status === "string" ? payload.status : null
+      const nextCurrentPhase = payload.currentPhase ?? null
+      const phaseStartTime = typeof payload.phaseStartTime === "string" ? payload.phaseStartTime : new Date().toISOString()
+
+      if (nextStatus) {
+        setLobby((previous) =>
+          previous
+            ? {
+                ...previous,
+                status: nextStatus,
+              }
+            : previous,
+        )
+
+        sendRealtime({
+          type: "set_status",
+          roomCode,
+          playerId: currentPlayer.id,
+          status: nextStatus,
+          currentPhase: nextCurrentPhase,
+          phaseStartTime,
+        })
       }
 
       if (realtimeStatus !== "connected") {
@@ -277,6 +303,30 @@ export default function LobbyPage() {
         return
       }
 
+      const nextStatus = typeof payload.status === "string" ? payload.status : null
+      const nextCurrentPhase = payload.currentPhase ?? null
+      const phaseStartTime = typeof payload.phaseStartTime === "string" ? payload.phaseStartTime : new Date().toISOString()
+
+      if (nextStatus) {
+        setLobby((previous) =>
+          previous
+            ? {
+                ...previous,
+                status: nextStatus,
+              }
+            : previous,
+        )
+
+        sendRealtime({
+          type: "set_status",
+          roomCode,
+          playerId: currentPlayer.id,
+          status: nextStatus,
+          currentPhase: nextCurrentPhase,
+          phaseStartTime,
+        })
+      }
+
       if (realtimeStatus !== "connected") {
         await fetchLobby({ silent: true })
       } else {
@@ -303,23 +353,29 @@ export default function LobbyPage() {
   }
 
   const getInitialSnapshot = useCallback(() => {
+    if (lobby) {
+      return stateToSnapshot(lobby)
+    }
     const snapshotSource = latestLobbyRef.current
     return snapshotSource ? stateToSnapshot(snapshotSource) : null
-  }, [])
+  }, [lobby])
 
   const registerRealtimeListeners = useCallback(
     ({ addListener }: RoomRealtimeListenerHelpers) => {
       const unsubscribeHello = addListener("hello_ack", ({ snapshot: incoming }) => {
+        console.log("[lobby realtime] hello_ack", { roomCode, version: incoming.version, players: incoming.players.length })
         setLobby((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as LobbyState) : previous))
         clearPendingRefresh()
       })
 
       const unsubscribeRoomState = addListener("room_state", ({ snapshot: incoming }) => {
+        console.log("[lobby realtime] room_state", { roomCode, version: incoming.version, players: incoming.players.length })
         setLobby((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as LobbyState) : previous))
         clearPendingRefresh()
       })
 
       const unsubscribeReady = addListener("ready_update", ({ playerId: readyPlayerId, isReady, version }) => {
+        console.log("[lobby realtime] ready_update", { roomCode, playerId: readyPlayerId, isReady, version })
         setLobby((previous) =>
           previous
             ? {
@@ -333,6 +389,7 @@ export default function LobbyPage() {
       })
 
       const unsubscribePlayerJoined = addListener("player_joined", ({ player, version }) => {
+        console.log("[lobby realtime] player_joined", { roomCode, playerId: player.id, version })
         setLobby((previous) => {
           if (!previous) return previous
           const existing = previous.players.find((candidate) => candidate.id === player.id)
@@ -371,6 +428,7 @@ export default function LobbyPage() {
       })
 
       const unsubscribePlayerLeft = addListener("player_left", ({ playerId: leftPlayerId, version }) => {
+        console.log("[lobby realtime] player_left", { roomCode, playerId: leftPlayerId, version })
         setLobby((previous) =>
           previous
             ? {
@@ -385,25 +443,42 @@ export default function LobbyPage() {
         clearPendingRefresh()
       })
 
+      const unsubscribeStatusChanged = addListener("status_changed", ({ status, version }) => {
+        console.log("[lobby realtime] status_changed", { roomCode, status, version })
+        setLobby((previous) =>
+          previous
+            ? {
+                ...previous,
+                status,
+                version,
+            }
+          : previous,
+        )
+        clearPendingRefresh()
+      })
+
       const unsubscribePhaseChanged = addListener("phase_changed", ({ version }) => {
+        console.log("[lobby realtime] phase_changed", { roomCode, version })
         setLobby((previous) =>
           previous
             ? {
                 ...previous,
                 version,
-                status: previous.status === "creating" ? previous.status : "creating",
             }
           : previous,
         )
-        fetchLobby({ silent: true }).catch((error) => {
-          console.error("Failed to refresh lobby after phase change", error)
-        })
         clearPendingRefresh()
       })
 
       const unsubscribeSettingsChanged = addListener(
         "settings_changed",
         ({ productCategory, phaseDurationSeconds, version }) => {
+          console.log("[lobby realtime] settings_changed", {
+            roomCode,
+            productCategory,
+            phaseDurationSeconds,
+            version,
+          })
           setLobby((previous) =>
             previous
               ? {
@@ -424,11 +499,12 @@ export default function LobbyPage() {
         unsubscribeReady,
         unsubscribePlayerJoined,
         unsubscribePlayerLeft,
+        unsubscribeStatusChanged,
         unsubscribePhaseChanged,
         unsubscribeSettingsChanged,
       ]
     },
-    [clearPendingRefresh, fetchLobby],
+    [clearPendingRefresh],
   )
 
   useRoomRealtime({
