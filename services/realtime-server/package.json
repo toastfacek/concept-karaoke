@@ -14,6 +14,7 @@
   "dependencies": {
     "@concept-karaoke/realtime-shared": "workspace:*",
     "@supabase/supabase-js": "^2.43.5",
+    "dotenv": "^17.2.3",
     "ws": "^8.18.0"
   },
   "devDependencies": {

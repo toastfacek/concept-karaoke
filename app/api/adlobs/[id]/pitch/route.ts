@@ -28,7 +28,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     const { data: adlob, error: adlobError } = await supabase
       .from(TABLES.adLobs)
-      .select("id, room_id, assigned_presenter")
+      .select("id, room_id, assigned_presenter, pitch_created_by")
       .eq("id", adlobId)
       .maybeSingle()
 
@@ -38,6 +38,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     if (!adlob) {
       return NextResponse.json({ success: false, error: "AdLob not found" }, { status: 404 })
+    }
+
+    // Prevent overwriting existing pitch from a different creator (safety guard)
+    if (adlob.pitch_created_by && adlob.pitch_created_by !== parsed.data.createdBy) {
+      return NextResponse.json(
+        { success: false, error: "This pitch was already created by another player" },
+        { status: 409 },
+      )
     }
 
     const { data: player, error: playerError } = await supabase
@@ -66,6 +74,18 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (updateError) {
       throw updateError
     }
+
+    // Increment game version to trigger realtime refresh
+    const { data: room } = await supabase
+      .from(TABLES.gameRooms)
+      .select("version")
+      .eq("id", adlob.room_id)
+      .single()
+
+    await supabase
+      .from(TABLES.gameRooms)
+      .update({ version: (room?.version ?? 0) + 1 })
+      .eq("id", adlob.room_id)
 
     return NextResponse.json({ success: true })
   } catch (error) {
