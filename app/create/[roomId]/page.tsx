@@ -263,23 +263,29 @@ export default function CreatePage() {
   }, [fetchGame, realtimeStatus])
 
   const getInitialSnapshot = useCallback(() => {
+    if (game) {
+      return stateToSnapshot(game)
+    }
     const snapshotSource = latestGameRef.current
     return snapshotSource ? stateToSnapshot(snapshotSource) : null
-  }, [])
+  }, [game])
 
   const registerRealtimeListeners = useCallback(
     ({ addListener }: RoomRealtimeListenerHelpers) => {
       const unsubscribeHello = addListener("hello_ack", ({ snapshot: incoming }) => {
+        console.log("[create realtime] hello_ack", { roomCode, version: incoming.version, players: incoming.players.length })
         setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as GameState) : previous))
         clearPendingRefresh()
       })
 
       const unsubscribeRoomState = addListener("room_state", ({ snapshot: incoming }) => {
+        console.log("[create realtime] room_state", { roomCode, version: incoming.version, players: incoming.players.length })
         setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as GameState) : previous))
         clearPendingRefresh()
       })
 
       const unsubscribeReady = addListener("ready_update", ({ playerId: readyPlayerId, isReady, version }) => {
+        console.log("[create realtime] ready_update", { roomCode, playerId: readyPlayerId, isReady, version })
         setGame((previous) =>
           previous
             ? {
@@ -297,6 +303,7 @@ export default function CreatePage() {
       })
 
       const unsubscribePhase = addListener("phase_changed", ({ currentPhase, phaseStartTime, version }) => {
+        console.log("[create realtime] phase_changed", { roomCode, currentPhase, phaseStartTime, version })
         setGame((previous) =>
           previous
             ? {
@@ -304,13 +311,30 @@ export default function CreatePage() {
                 currentPhase,
                 phaseStartTime,
                 version,
-            }
+              }
+          : previous,
+        )
+        clearPendingRefresh()
+      })
+
+      const unsubscribeStatusChanged = addListener("status_changed", ({ status, currentPhase, phaseStartTime, version }) => {
+        console.log("[create realtime] status_changed", { roomCode, status, currentPhase, phaseStartTime, version })
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                status,
+                currentPhase,
+                phaseStartTime,
+                version,
+              }
           : previous,
         )
         clearPendingRefresh()
       })
 
       const unsubscribePlayerJoined = addListener("player_joined", ({ player, version }) => {
+        console.log("[create realtime] player_joined", { roomCode, playerId: player.id, version })
         setGame((previous) => {
           if (!previous) return previous
           const exists = previous.players.some((existing) => existing.id === player.id)
@@ -358,6 +382,7 @@ export default function CreatePage() {
       })
 
       const unsubscribePlayerLeft = addListener("player_left", ({ playerId: leftPlayerId, version }) => {
+        console.log("[create realtime] player_left", { roomCode, playerId: leftPlayerId, version })
         setGame((previous) =>
           previous
             ? {
@@ -378,9 +403,17 @@ export default function CreatePage() {
         clearPendingRefresh()
       })
 
-      return [unsubscribeHello, unsubscribeRoomState, unsubscribeReady, unsubscribePhase, unsubscribePlayerJoined, unsubscribePlayerLeft]
+      return [
+        unsubscribeHello,
+        unsubscribeRoomState,
+        unsubscribeReady,
+        unsubscribePhase,
+        unsubscribeStatusChanged,
+        unsubscribePlayerJoined,
+        unsubscribePlayerLeft,
+      ]
     },
-    [clearPendingRefresh],
+    [clearPendingRefresh, roomCode],
   )
 
   useRoomRealtime({
@@ -506,7 +539,7 @@ export default function CreatePage() {
       if (game.currentPhase === "big_idea") {
         const text = bigIdeaInput.trim()
         if (text.length === 0) {
-          setError("Give your other players something to work with!")
+          setError("Big idea can't be blank.")
           setIsSubmitting(false)
           return
         }
@@ -524,8 +557,8 @@ export default function CreatePage() {
         }
 
         const notes = visualNotes.trim()
-        if (notes.length < 10) {
-          setError("Add at least one sentence (10+ characters) of visual guidance for the next teammate.")
+        if (notes.length === 0) {
+          setError("Visual notes can't be blank.")
           setIsSubmitting(false)
           return
         }
@@ -555,6 +588,11 @@ export default function CreatePage() {
         }
       } else if (game.currentPhase === "pitch") {
         const text = pitchInput.trim()
+        if (text.length === 0) {
+          setError("Pitch can't be blank.")
+          setIsSubmitting(false)
+          return
+        }
 
         submissionEndpoint = `/api/adlobs/${currentAdlob.id}/pitch`
         submissionPayload = {
@@ -626,6 +664,8 @@ export default function CreatePage() {
       isReady: desiredReady,
     })
 
+    setIsTogglingReady(false)
+
     try {
       const response = await fetch(`/api/games/${roomCode}/players/${currentPlayer.id}`, {
         method: "PATCH",
@@ -639,7 +679,11 @@ export default function CreatePage() {
         throw new Error(payload.error ?? "Unable to update ready state.")
       }
 
-      await fetchGame({ silent: true })
+      if (realtimeStatus !== "connected") {
+        await fetchGame({ silent: true })
+      } else {
+        scheduleSnapshotFallback()
+      }
     } catch (readyError) {
       console.error(readyError)
       setGame((previous) =>
@@ -677,6 +721,33 @@ export default function CreatePage() {
 
       if (!response.ok || !payload.success) {
         throw new Error(payload.error ?? "Failed to advance phase")
+      }
+
+      const nextStatus = typeof payload.status === "string" ? payload.status : null
+      const nextCurrentPhase = payload.currentPhase ?? null
+      const phaseStartTime = typeof payload.phaseStartTime === "string" ? payload.phaseStartTime : new Date().toISOString()
+      const previousStatus = latestGameRef.current?.status ?? game.status
+
+      setGame((previous) =>
+        previous
+          ? {
+              ...previous,
+              status: nextStatus ?? previous.status,
+              currentPhase: nextStatus === "creating" ? nextCurrentPhase : null,
+              phaseStartTime,
+            }
+          : previous,
+      )
+
+      if (nextStatus && nextStatus !== previousStatus) {
+        sendRealtime({
+          type: "set_status",
+          roomCode,
+          playerId: currentPlayer.id,
+          status: nextStatus,
+          currentPhase: nextCurrentPhase,
+          phaseStartTime,
+        })
       }
 
       sendRealtime({
@@ -756,12 +827,6 @@ export default function CreatePage() {
               />
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>{visualNotes.length} characters</span>
-                {visualNotes.length < 10 && (
-                  <span className="text-amber-600">Add at least 10 characters for context</span>
-                )}
-                {visualNotes.length >= 10 && canvasHasContent(visualCanvas) && (
-                  <span className="text-green-600">Complete! ✓</span>
-                )}
               </div>
             </div>
 

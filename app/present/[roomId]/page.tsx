@@ -60,7 +60,7 @@ export default function PresentPage() {
   const params = useParams()
   const roomCode = (params.roomId as string).toUpperCase()
   const realtime = useRealtime()
-  const { status: realtimeStatus } = realtime
+  const { send: sendRealtime, status: realtimeStatus } = realtime
 
   const [storedPlayer, setStoredPlayer] = useState<StoredPlayer | null>(null)
   const [game, setGame] = useState<PresentGameState | null>(null)
@@ -241,6 +241,16 @@ export default function PresentPage() {
         }),
       })
 
+      if (realtimeStatus === "connected") {
+        sendRealtime({
+          type: "presentation_state",
+          roomCode,
+          playerId: currentPlayer.id,
+          presentIndex: currentPresentIndex,
+          showCampaign: true,
+        })
+      }
+
       setShowPitch(false)
       setShowCampaign(true)
     } catch (revealError) {
@@ -271,11 +281,53 @@ export default function PresentPage() {
       const result = await response.json()
       console.log("[PRESENT DEBUG] API response:", result)
 
-      // If we moved to voting, redirect immediately
+      const nextStatus = typeof result.status === "string" ? result.status : null
+      const phaseStartTime = typeof result.phaseStartTime === "string" ? result.phaseStartTime : new Date().toISOString()
+      const previousStatus = latestGameRef.current?.status ?? game.status
+      const nextPresentIndex = typeof result.nextPresentIndex === "number" ? result.nextPresentIndex : null
+
+      setGame((previous) => {
+        if (!previous) return previous
+        return {
+          ...previous,
+          status: nextStatus ?? previous.status,
+          currentPresentIndex: nextPresentIndex ?? previous.currentPresentIndex,
+          phaseStartTime,
+        }
+      })
+
+      if (nextStatus && nextStatus !== previousStatus) {
+        sendRealtime({
+          type: "set_status",
+          roomCode,
+          playerId: currentPlayer.id,
+          status: nextStatus,
+          currentPhase: null,
+          phaseStartTime,
+        })
+      }
+
       if (result.success && result.status === "voting") {
         console.log("[PRESENT DEBUG] Moving to voting, redirecting...")
+        if (realtimeStatus !== "connected") {
+          await fetchGame({ silent: true })
+        }
         router.push(routes.vote(roomCode))
         return
+      }
+
+      if (
+        result.success &&
+        typeof result.nextPresentIndex === "number" &&
+        realtimeStatus === "connected"
+      ) {
+        sendRealtime({
+          type: "presentation_state",
+          roomCode,
+          playerId: currentPlayer.id,
+          presentIndex: result.nextPresentIndex,
+          showCampaign: false,
+        })
       }
 
       console.log("[PRESENT DEBUG] Not moving to voting, relying on realtime update...")
@@ -311,9 +363,12 @@ export default function PresentPage() {
   }, [clearPendingRefresh])
 
   const getInitialSnapshot = useCallback(() => {
+    if (game) {
+      return stateToSnapshot(game)
+    }
     const snapshotSource = latestGameRef.current
     return snapshotSource ? stateToSnapshot(snapshotSource) : null
-  }, [])
+  }, [game])
 
   const registerRealtimeListeners = useCallback(
     ({ addListener }: RoomRealtimeListenerHelpers) => {
@@ -395,19 +450,47 @@ export default function PresentPage() {
         clearPendingRefresh()
       })
 
-      const unsubscribePhaseChanged = addListener("phase_changed", ({ version }) => {
+      const unsubscribeStatusChanged = addListener("status_changed", ({ status, phaseStartTime, version }) => {
         setGame((previous) =>
           previous
             ? {
                 ...previous,
+                status,
+                phaseStartTime,
                 version,
-                status: previous.status === "presenting" ? previous.status : "presenting",
-            }
-          : previous,
+              }
+            : previous,
         )
-        fetchGame({ silent: true }).catch((error) => {
-          console.error("Failed to refresh presentation flow after phase change", error)
-        })
+        clearPendingRefresh()
+      })
+
+      const unsubscribePhaseChanged = addListener("phase_changed", ({ currentPhase, phaseStartTime, version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                phaseStartTime,
+                version,
+                currentPhase,
+              }
+            : previous,
+        )
+        clearPendingRefresh()
+      })
+
+      const unsubscribePresentationState = addListener("presentation_state", ({ presentIndex, showCampaign }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                currentPresentIndex: presentIndex,
+              }
+            : previous,
+        )
+        setShowCampaign(showCampaign)
+        setShowPitch(!showCampaign)
+        setIsRevealing(false)
+        setIsAdvancing(false)
         clearPendingRefresh()
       })
 
@@ -417,10 +500,12 @@ export default function PresentPage() {
         unsubscribePlayerJoined,
         unsubscribePlayerLeft,
         unsubscribeReady,
+        unsubscribeStatusChanged,
         unsubscribePhaseChanged,
+        unsubscribePresentationState,
       ]
     },
-    [clearPendingRefresh, fetchGame],
+    [clearPendingRefresh],
   )
 
   useRoomRealtime({

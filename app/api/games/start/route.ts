@@ -155,12 +155,14 @@ export async function POST(request: Request) {
       "briefing",
     )
 
+    const phaseStartTime = new Date().toISOString()
+
     const { error: updateError } = await supabase
       .from(TABLES.gameRooms)
       .update({
         status: nextState.status,
         current_phase: nextState.currentPhase,
-        phase_start_time: new Date().toISOString(),
+        phase_start_time: phaseStartTime,
       })
       .eq("id", room.id)
 
@@ -238,6 +240,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       status: nextState.status,
+      currentPhase: nextState.currentPhase ?? null,
+      phaseStartTime,
       brief: generatedBrief,
     })
   } catch (error) {

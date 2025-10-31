@@ -27,6 +27,8 @@ export class RealtimeClient {
   private connectOptions: ConnectOptions | null = null
   private readonly serverUrl: string
   private heartbeatTimer: number | null = null
+  private outboundQueue: ClientToServerEvent[] = []
+  private readonly maxQueueSize = 100
 
   constructor(serverUrl: string) {
     this.serverUrl = serverUrl
@@ -83,7 +85,8 @@ export class RealtimeClient {
         playerToken: options.playerToken,
         initialSnapshot: options.initialSnapshot,
       }
-      this.send(joinEvent)
+      socket.send(JSON.stringify(joinEvent))
+      this.flushQueue()
       this.startHeartbeat()
     })
 
@@ -115,12 +118,45 @@ export class RealtimeClient {
       this.socket.close()
       this.socket = null
     }
+    this.outboundQueue = []
     this.updateStatus("disconnected")
   }
 
   send(event: ClientToServerEvent) {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      if (this.outboundQueue.length > 0) {
+        this.flushQueue()
+      }
       this.socket.send(JSON.stringify(event))
+      return
+    }
+
+    if (this.outboundQueue.length >= this.maxQueueSize) {
+      this.outboundQueue.shift()
+      console.warn("[realtime-client] outbound queue is full, dropping oldest event")
+    }
+    this.outboundQueue.push(event)
+  }
+
+  private flushQueue() {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      return
+    }
+
+    while (this.outboundQueue.length > 0) {
+      const nextEvent = this.outboundQueue.shift()
+      if (!nextEvent) {
+        continue
+      }
+
+      try {
+        this.socket.send(JSON.stringify(nextEvent))
+      } catch (error) {
+        console.error("[realtime-client] failed to send queued event", error)
+        // Requeue the event at the front so we can retry later.
+        this.outboundQueue.unshift(nextEvent)
+        break
+      }
     }
   }
 
