@@ -177,6 +177,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const hasPresentSequence = presentSequence.length > 0
 
+    const phaseStartTime = new Date().toISOString()
+
     // Increment version to trigger realtime refresh for all clients
     const { data: currentRoom } = await supabase
       .from(TABLES.gameRooms)
@@ -187,7 +189,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const gameUpdate: Record<string, unknown> = {
       status: nextSnapshot.status,
       current_phase: nextSnapshot.status === "creating" ? nextSnapshot.currentPhase : null,
-      phase_start_time: new Date().toISOString(),
+      phase_start_time: phaseStartTime,
       current_present_index: nextSnapshot.status === "presenting" ? (hasPresentSequence ? 0 : null) : null,
       present_sequence: nextSnapshot.status === "presenting" ? (hasPresentSequence ? presentSequence : null) : null,
       version: (currentRoom?.version ?? 0) + 1,
@@ -212,6 +214,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       success: true,
       status: nextSnapshot.status,
       currentPhase: nextSnapshot.currentPhase ?? null,
+      phaseStartTime,
     })
   } catch (error) {
     console.error("Failed to advance phase", error)

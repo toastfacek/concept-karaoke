@@ -14,7 +14,7 @@ export type SnapshotPlayer = {
 export interface SnapshotDrivenState<TPlayer extends SnapshotPlayer = SnapshotPlayer> {
   id: string
   code: string
-  status: string
+  status: RoomSnapshot["status"]
   hostId: string
   players: TPlayer[]
   version: number

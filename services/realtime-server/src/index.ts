@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto"
 import {
   verifyRealtimeToken,
   type ClientToServerEvent,
+  type GameStatus,
   type PlayerSummary,
   type RoomSnapshot,
   type ServerToClientEvent,
@@ -26,6 +27,7 @@ import { MetricsRecorder } from "./metrics.js"
 const DEFAULT_PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080
 const HEARTBEAT_INTERVAL_MS = 15_000
 const HEARTBEAT_TIMEOUT_MS = 45_000
+const VALID_GAME_STATUSES: ReadonlyArray<GameStatus> = ["lobby", "briefing", "creating", "presenting", "voting", "results"]
 
 interface ConnectionMeta {
   roomCode?: string
@@ -112,6 +114,18 @@ function broadcast(roomCode: string, message: ServerToClientEvent, exclude?: Web
   }
 }
 
+function broadcastRoomState(roomCode: string, snapshot: RoomSnapshot, exclude?: WebSocket) {
+  const snapshotCopy = cloneSnapshot(snapshot)
+  broadcast(
+    roomCode,
+    {
+      type: "room_state",
+      snapshot: snapshotCopy,
+    },
+    exclude,
+  )
+}
+
 async function handleJoinRoom(socket: WebSocket, payload: ClientToServerEvent & { type: "join_room" }) {
   metrics.increment("join_room_attempts_total")
   const { roomCode, playerId, playerToken, initialSnapshot } = payload
@@ -170,16 +184,34 @@ async function handleJoinRoom(socket: WebSocket, payload: ClientToServerEvent & 
     const snapshot = initialSnapshot ? cloneSnapshot(initialSnapshot) : createPlaceholderSnapshot(roomCode)
     room = registry.ensureRoom(roomCode, snapshot)
   } else if (initialSnapshot) {
-    registry.updateRoom(roomCode, (state) => {
-      const next = cloneSnapshot(state)
-      next.players = initialSnapshot.players.map((player) => ({ ...player }))
-      next.status = initialSnapshot.status
-      next.currentPhase = initialSnapshot.currentPhase
-      next.phaseStartTime = initialSnapshot.phaseStartTime
-      next.version = Math.max(state.version + 1, initialSnapshot.version ?? state.version + 1)
-      return next
-    })
-    room = registry.getRoom(roomCode)
+    const snapshotVersion = initialSnapshot.version ?? 0
+    if (snapshotVersion >= room.state.version) {
+      registry.updateRoom(roomCode, (state) => {
+        const next = cloneSnapshot(state)
+        const mergedPlayers: PlayerSummary[] = []
+        const seen = new Set<string>()
+
+        for (const player of initialSnapshot.players) {
+          mergedPlayers.push({ ...player })
+          seen.add(player.id)
+        }
+
+        for (const existing of state.players) {
+          if (seen.has(existing.id)) {
+            continue
+          }
+          mergedPlayers.push({ ...existing })
+        }
+
+        next.players = mergedPlayers
+        next.status = initialSnapshot.status
+        next.currentPhase = initialSnapshot.currentPhase
+        next.phaseStartTime = initialSnapshot.phaseStartTime
+        next.version = snapshotVersion >= state.version ? snapshotVersion : state.version + 1
+        return next
+      })
+      room = registry.getRoom(roomCode)
+    }
   }
 
   if (!room) {
@@ -257,6 +289,8 @@ async function handleJoinRoom(socket: WebSocket, payload: ClientToServerEvent & 
     )
     logger.info("player_joined_broadcast", { roomCode, playerId, version: currentRoom.state.version })
   }
+
+  broadcastRoomState(roomCode, currentRoom.state, socket)
 }
 
 async function handleSetReady(socket: WebSocket, payload: ClientToServerEvent & { type: "set_ready" }) {
@@ -303,6 +337,8 @@ async function handleSetReady(socket: WebSocket, payload: ClientToServerEvent & 
     version: updated.state.version,
   })
 
+  broadcastRoomState(roomCode, updated.state)
+
   snapshotScheduler.schedule(updated.state)
 
   metrics.increment("ready_update_success_total")
@@ -341,6 +377,10 @@ async function handleAdvancePhase(socket: WebSocket, payload: ClientToServerEven
     const nextPhase = phases[(currentIndex + 1) % phases.length]
     next.currentPhase = nextPhase
     next.phaseStartTime = new Date().toISOString()
+    next.players = next.players.map((player) => ({
+      ...player,
+      isReady: false,
+    }))
     next.version = state.version + 1
     return next
   })
@@ -358,6 +398,8 @@ async function handleAdvancePhase(socket: WebSocket, payload: ClientToServerEven
     phaseStartTime: updated.state.phaseStartTime,
     version: updated.state.version,
   })
+
+  broadcastRoomState(roomCode, updated.state)
 
   snapshotScheduler.schedule(updated.state)
   try {
@@ -381,6 +423,147 @@ async function handleAdvancePhase(socket: WebSocket, payload: ClientToServerEven
   })
 }
 
+async function handleSetStatus(socket: WebSocket, payload: ClientToServerEvent & { type: "set_status" }) {
+  metrics.increment("status_update_attempts_total")
+  const { roomCode, playerId, status, currentPhase, phaseStartTime } = payload
+  if (!roomCode || !playerId || !status) {
+    sendMessage(socket, {
+      type: "error",
+      code: "invalid_payload",
+      message: "Missing roomCode, playerId, or status",
+    })
+    return
+  }
+
+  if (!VALID_GAME_STATUSES.includes(status)) {
+    metrics.increment("status_update_failures_total")
+    logger.warn("status_update_invalid_status", { roomCode, playerId, status })
+    sendMessage(socket, {
+      type: "error",
+      code: "invalid_payload",
+      message: `Invalid status value: ${status}`,
+    })
+    return
+  }
+
+  const room = registry.getRoom(roomCode)
+  if (!room) {
+    metrics.increment("status_update_failures_total")
+    logger.warn("status_update_room_not_found", { roomCode, playerId })
+    sendMessage(socket, {
+      type: "error",
+      code: "room_not_found",
+      message: "Room not initialized",
+    })
+    return
+  }
+
+  const actor = room.state.players.find((player) => player.id === playerId)
+  if (!actor) {
+    metrics.increment("status_update_failures_total")
+    logger.warn("status_update_player_not_found", { roomCode, playerId })
+    sendMessage(socket, {
+      type: "error",
+      code: "player_not_found",
+      message: "Player not found in this room",
+    })
+    return
+  }
+
+  const requiresHost = status !== "results"
+
+  if (requiresHost && !actor.isHost) {
+    metrics.increment("status_update_failures_total")
+    logger.warn("status_update_forbidden", { roomCode, playerId })
+    sendMessage(socket, {
+      type: "error",
+      code: "forbidden",
+      message: "Only the host can change game status",
+    })
+    return
+  }
+
+  const normalizedPhaseStart = phaseStartTime ?? new Date().toISOString()
+
+  const updated = registry.updateRoom(roomCode, (state) => {
+    const next = cloneSnapshot(state)
+    next.status = status
+    next.currentPhase = currentPhase
+    next.phaseStartTime = normalizedPhaseStart
+    next.version = state.version + 1
+    return next
+  })
+
+  if (!updated) {
+    return
+  }
+
+  broadcast(roomCode, {
+    type: "status_changed",
+    roomCode,
+    status,
+    currentPhase,
+    phaseStartTime: normalizedPhaseStart,
+    version: updated.state.version,
+  })
+
+  broadcastRoomState(roomCode, updated.state)
+
+  snapshotScheduler.schedule(updated.state)
+
+  try {
+    await recordRoomEventImpl({
+      roomCode,
+      eventType: "status_changed",
+      version: updated.state.version,
+      payload: {
+        status,
+        currentPhase,
+        phaseStartTime: normalizedPhaseStart,
+      },
+    })
+    metrics.increment("event_persist_success_total")
+  } catch (error) {
+    metrics.increment("event_persist_failures_total")
+    logger.error("status_changed_event_persist_failed", { error: error instanceof Error ? error.message : "unknown" })
+  }
+
+  metrics.increment("status_update_success_total")
+  logger.info("status_update_success", {
+    roomCode,
+    playerId,
+    status,
+    version: updated.state.version,
+  })
+}
+
+async function handlePresentationState(
+  _socket: WebSocket,
+  payload: ClientToServerEvent & { type: "presentation_state" },
+) {
+  const { roomCode, playerId, presentIndex, showCampaign } = payload
+  const room = registry.getRoom(roomCode)
+  if (!room) {
+    logger.warn("presentation_state_room_not_found", { roomCode, playerId })
+    return
+  }
+
+  const actor = room.state.players.find((player) => player.id === playerId)
+  if (!actor) {
+    logger.warn("presentation_state_player_not_found", { roomCode, playerId })
+    return
+  }
+
+  broadcast(roomCode, {
+    type: "presentation_state",
+    roomCode,
+    presentIndex,
+    showCampaign,
+    version: room.state.version,
+  })
+  logger.debug("presentation_state_broadcast", { roomCode, playerId, presentIndex, showCampaign })
+}
+
 async function handleMessage(socket: WebSocket, event: ClientToServerEvent) {
   switch (event.type) {
     case "join_room":
@@ -391,6 +574,12 @@ async function handleMessage(socket: WebSocket, event: ClientToServerEvent) {
       break
     case "advance_phase":
       await handleAdvancePhase(socket, event)
+      break
+    case "set_status":
+      await handleSetStatus(socket, event)
+      break
+    case "presentation_state":
+      await handlePresentationState(socket, event)
       break
     case "leave_room":
       await handleDisconnect(socket)
@@ -436,6 +625,8 @@ async function handleDisconnect(socket: WebSocket) {
       playerId: meta.playerId,
       version: room.state.version,
     })
+
+    broadcastRoomState(meta.roomCode, room.state)
 
     snapshotScheduler.schedule(room.state)
 

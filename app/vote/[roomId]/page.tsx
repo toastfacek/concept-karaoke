@@ -67,7 +67,7 @@ export default function VotePage() {
   const params = useParams()
   const roomCode = params.roomId as string
   const realtime = useRealtime()
-  const { status: realtimeStatus } = realtime
+  const { send: sendRealtime, status: realtimeStatus } = realtime
 
   const [storedPlayer, setStoredPlayer] = useState<StoredPlayer | null>(null)
   const [game, setGame] = useState<VoteGameState | null>(null)
@@ -216,7 +216,39 @@ export default function VotePage() {
 
       setHasVoted(true)
 
+      const nextStatus = result.allVotesIn && typeof result.status === "string" ? result.status : null
+      const phaseStartTime = result.allVotesIn && typeof result.phaseStartTime === "string"
+        ? result.phaseStartTime
+        : new Date().toISOString()
+      const previousStatus = latestGameRef.current?.status ?? game.status
+
+      if (nextStatus) {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                status: nextStatus,
+                phaseStartTime,
+              }
+            : previous,
+        )
+
+        if (nextStatus !== previousStatus) {
+          sendRealtime({
+            type: "set_status",
+            roomCode,
+            playerId: storedPlayer.id,
+            status: nextStatus,
+            currentPhase: null,
+            phaseStartTime,
+          })
+        }
+      }
+
       if (result.allVotesIn) {
+        if (realtimeStatus !== "connected") {
+          await fetchGame({ silent: true })
+        }
         router.push(routes.results(roomCode))
       } else {
         await fetchGame({ silent: true })
@@ -230,9 +262,12 @@ export default function VotePage() {
   }
 
   const getInitialSnapshot = useCallback(() => {
+    if (game) {
+      return stateToSnapshot(game)
+    }
     const snapshotSource = latestGameRef.current
     return snapshotSource ? stateToSnapshot(snapshotSource) : null
-  }, [])
+  }, [game])
 
   const registerRealtimeListeners = useCallback(
     ({ addListener }: RoomRealtimeListenerHelpers) => {
@@ -312,10 +347,30 @@ export default function VotePage() {
         )
       })
 
-      const unsubscribePhaseChanged = addListener("phase_changed", () => {
-        fetchGame({ silent: true }).catch((error) => {
-          console.error("Failed to refresh voting data after phase change", error)
-        })
+      const unsubscribeStatusChanged = addListener("status_changed", ({ status, phaseStartTime, version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                status,
+                phaseStartTime,
+                version,
+              }
+            : previous,
+        )
+      })
+
+      const unsubscribePhaseChanged = addListener("phase_changed", ({ currentPhase, phaseStartTime, version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                phaseStartTime,
+                version,
+                currentPhase,
+              }
+            : previous,
+        )
       })
 
       return [
@@ -324,6 +379,7 @@ export default function VotePage() {
         unsubscribeReady,
         unsubscribePlayerJoined,
         unsubscribePlayerLeft,
+        unsubscribeStatusChanged,
         unsubscribePhaseChanged,
       ]
     },
@@ -380,7 +436,6 @@ export default function VotePage() {
 
         <div className="grid gap-6 md:grid-cols-2">
           {game.adlobs.map((adlob) => {
-            const isOwnCampaign = adlob.assignedPresenterId === storedPlayer.id
             const isSelected = selectedAdLob === adlob.id
             const campaignCanvas = adlob.headlineCanvas ?? adlob.visualCanvas
 
@@ -389,20 +444,20 @@ export default function VotePage() {
                 key={adlob.id}
                 type="button"
                 onClick={() => {
-                  if (hasVoted || isOwnCampaign) return
+                  if (hasVoted) return
                   setError(null)
                   setSelectedAdLob(adlob.id)
                 }}
-                disabled={hasVoted || isOwnCampaign}
+                disabled={hasVoted}
                 aria-pressed={isSelected}
                 className={cn(
                   "retro-border flex h-full flex-col gap-4 text-left transition-all p-6",
                   isSelected
                     ? "bg-primary text-primary-foreground shadow-lg"
-                    : hasVoted || isOwnCampaign
+                    : hasVoted
                       ? "bg-muted text-muted-foreground opacity-80"
                       : "bg-card hover:-translate-y-0.5 hover:bg-muted hover:shadow-md",
-                  hasVoted || isOwnCampaign ? "cursor-not-allowed" : "cursor-pointer",
+                  hasVoted ? "cursor-not-allowed" : "cursor-pointer",
                 )}
               >
                 <p className="font-mono text-xs uppercase tracking-wider">

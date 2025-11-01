@@ -153,6 +153,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({
         success: true,
         nextPresentIndex: nextIndex,
+        phaseStartTime: now,
       })
     }
 
@@ -182,6 +183,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({
       success: true,
       status: "voting",
+      phaseStartTime: now,
     })
   } catch (error) {
     console.error("Failed to update presentation flow", error)

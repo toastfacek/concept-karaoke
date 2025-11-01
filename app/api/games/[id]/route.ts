@@ -249,12 +249,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const hasPresentSequence = presentSequence.length > 0
 
+    const phaseStartTime = new Date().toISOString()
+
     const { error: updateError } = await supabase
       .from(TABLES.gameRooms)
       .update({
         status: nextState.status,
         current_phase: nextState.status === "creating" ? nextState.currentPhase : null,
-        phase_start_time: new Date().toISOString(),
+        phase_start_time: phaseStartTime,
         current_present_index: nextState.status === "presenting" ? (hasPresentSequence ? 0 : null) : null,
         present_sequence: nextState.status === "presenting" ? (hasPresentSequence ? presentSequence : null) : null,
       })
@@ -276,6 +278,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({
       success: true,
       status: nextState.status,
+      currentPhase: nextState.currentPhase ?? null,
+      phaseStartTime,
     })
   } catch (error) {
     console.error("Failed to update game", error)
