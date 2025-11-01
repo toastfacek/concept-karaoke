@@ -748,7 +748,7 @@ async function handleBroadcastRequest(req: IncomingMessage, res: ServerResponse)
     const event = payload.event
     switch (event.type) {
       case "player_joined": {
-        registry.updateRoom(payload.roomCode, (state) => {
+        const updated = registry.updateRoom(payload.roomCode, (state) => {
           const next = cloneSnapshot(state)
           const existingIndex = next.players.findIndex((p) => p.id === event.player.id)
 
@@ -775,6 +775,13 @@ async function handleBroadcastRequest(req: IncomingMessage, res: ServerResponse)
           next.version = state.version + 1
           return next
         })
+
+        // Immediately broadcast room_state to all connected clients with the updated snapshot
+        // This ensures all clients get fresh data with the new player
+        if (updated) {
+          broadcastRoomState(payload.roomCode, updated.state)
+        }
+
         logger.debug("broadcast_state_updated", {
           roomCode: payload.roomCode,
           eventType: "player_joined",
