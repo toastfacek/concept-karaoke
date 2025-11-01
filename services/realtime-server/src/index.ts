@@ -734,13 +734,14 @@ async function handleBroadcastRequest(req: IncomingMessage, res: ServerResponse)
       return
     }
 
-    const room = registry.getRoom(payload.roomCode)
+    let room = registry.getRoom(payload.roomCode)
     if (!room) {
-      metrics.increment("http_broadcast_room_not_found_total")
-      logger.warn("broadcast_room_not_found", { roomCode: payload.roomCode })
-      res.writeHead(404, { "Content-Type": "application/json" })
-      res.end(JSON.stringify({ error: "Room not found" }))
-      return
+      // Room doesn't exist yet - create it with empty snapshot
+      // This can happen when API broadcasts before any client connects
+      logger.info("broadcast_creating_room", { roomCode: payload.roomCode })
+      const emptySnapshot = createPlaceholderSnapshot(payload.roomCode)
+      room = registry.ensureRoom(payload.roomCode, emptySnapshot)
+      metrics.increment("broadcast_room_created_total")
     }
 
     // Update room state before broadcasting for stateful events
