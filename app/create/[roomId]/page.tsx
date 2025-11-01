@@ -509,7 +509,11 @@ export default function CreatePage() {
 
   const phaseIndex = useMemo(() => getPhaseIndex(game?.currentPhase ?? null), [game?.currentPhase])
 
-  const currentAdlob = useMemo(() => {
+  // Lock adlob assignment per phase to prevent mid-phase swapping
+  const [lockedAdlobId, setLockedAdlobId] = useState<string | null>(null)
+
+  // Calculate which adlob should be assigned based on rotation formula
+  const calculatedAdlob = useMemo(() => {
     if (!game || !currentPlayer) return null
     if (!game.adlobs || game.adlobs.length === 0) return null
     if (playerIndex === -1) return null
@@ -521,6 +525,19 @@ export default function CreatePage() {
     const targetIndex = ((playerIndex - phaseIndex) % totalPlayers + totalPlayers) % totalPlayers
     return game.adlobs[targetIndex] ?? null
   }, [game, currentPlayer, playerIndex, phaseIndex])
+
+  // Lock the adlob assignment when phase changes
+  useEffect(() => {
+    if (calculatedAdlob && calculatedAdlob.id !== lockedAdlobId) {
+      setLockedAdlobId(calculatedAdlob.id)
+    }
+  }, [phaseIndex, calculatedAdlob, lockedAdlobId])
+
+  // Use locked adlob reference to prevent mid-phase swapping
+  const currentAdlob = useMemo(() => {
+    if (!lockedAdlobId || !game?.adlobs) return null
+    return game.adlobs.find((adlob) => adlob.id === lockedAdlobId) ?? null
+  }, [lockedAdlobId, game?.adlobs])
 
   const visualCanvasData = useMemo(() => parseCanvasData(currentAdlob?.visualCanvasData), [currentAdlob])
   const headlineCanvasData = useMemo(() => parseCanvasData(currentAdlob?.headlineCanvasData), [currentAdlob])

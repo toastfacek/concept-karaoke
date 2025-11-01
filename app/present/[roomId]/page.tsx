@@ -569,6 +569,17 @@ export default function PresentPage() {
       )
     }
 
+    // Check for null presenter (should not happen with new assignment logic)
+    if (!currentAdlob.assignedPresenterId) {
+      return (
+        <div className="retro-border bg-destructive p-8 text-center text-destructive-foreground">
+          <p className="text-2xl font-bold mb-4">⚠️ Assignment Error</p>
+          <p className="text-lg">This campaign has no assigned presenter.</p>
+          <p className="text-sm mt-2">Please contact the host to restart the game.</p>
+        </div>
+      )
+    }
+
     return (
       <div className="retro-border bg-primary p-12 text-center text-primary-foreground">
         <p className="text-3xl font-bold leading-relaxed">

@@ -1,3 +1,4 @@
+import "dotenv/config"
 import { createServer } from "http"
 import type { IncomingMessage } from "http"
 import { randomUUID } from "node:crypto"
