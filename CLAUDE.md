@@ -137,8 +137,25 @@ return NextResponse.json({ success: true, player })
 ```
 
 **Routes with WebSocket broadcast**:
-- [app/api/games/[id]/players/[playerId]/route.ts](app/api/games/[id]/players/[playerId]/route.ts) - Ready state changes
-- [app/api/games/[id]/phase/route.ts](app/api/games/[id]/phase/route.ts) - Phase advancement
+
+*Game Flow & Coordination:*
+- [app/api/games/join/route.ts](app/api/games/join/route.ts) - Player joins (`player_joined`)
+- [app/api/games/start/route.ts](app/api/games/start/route.ts) - Game starts (`status_changed`)
+- [app/api/games/[id]/players/[playerId]/route.ts](app/api/games/[id]/players/[playerId]/route.ts) - Ready state changes (`ready_update`)
+- [app/api/games/[id]/phase/route.ts](app/api/games/[id]/phase/route.ts) - Phase advancement (`phase_changed`)
+- [app/api/games/[id]/present/route.ts](app/api/games/[id]/present/route.ts) - Presentation flow (`status_changed`)
+- [app/api/games/[id]/route.ts](app/api/games/[id]/route.ts) - Status transitions (`status_changed`)
+- [app/api/votes/route.ts](app/api/votes/route.ts) - Vote submission & results (`status_changed`)
+
+*Settings & Configuration:*
+- [app/api/games/[id]/settings/route.ts](app/api/games/[id]/settings/route.ts) - Game settings (`settings_changed`)
+- [app/api/briefs/[id]/route.ts](app/api/briefs/[id]/route.ts) - Brief updates (`brief_updated`)
+
+*Content Creation:*
+- [app/api/adlobs/[id]/big-idea/route.ts](app/api/adlobs/[id]/big-idea/route.ts) - Big idea submission (`content_submitted`)
+- [app/api/adlobs/[id]/visual/route.ts](app/api/adlobs/[id]/visual/route.ts) - Visual submission (`content_submitted`)
+- [app/api/adlobs/[id]/headline/route.ts](app/api/adlobs/[id]/headline/route.ts) - Headline submission (`content_submitted`)
+- [app/api/adlobs/[id]/pitch/route.ts](app/api/adlobs/[id]/pitch/route.ts) - Pitch submission (`content_submitted`)
 
 **Overwrite Protection Pattern** (adlob phase routes):
 ```typescript
@@ -160,10 +177,10 @@ if (adlob.phase_created_by && adlob.phase_created_by !== createdBy) {
 // 3. Update content
 await supabase.from(TABLES.adLobs).update({ ... }).eq("id", adlobId)
 
-// 4. Increment version to trigger realtime refresh
+// 4. Increment version and broadcast
 const { data: room } = await supabase
   .from(TABLES.gameRooms)
-  .select("version")
+  .select("version, code")
   .eq("id", adlob.room_id)
   .single()
 
@@ -171,6 +188,18 @@ await supabase
   .from(TABLES.gameRooms)
   .update({ version: (room?.version ?? 0) + 1 })
   .eq("id", adlob.room_id)
+
+// 5. Broadcast to WebSocket clients
+if (room) {
+  await broadcastToRoom(room.code, {
+    type: "content_submitted",
+    roomCode: room.code,
+    adlobId: adlobId,
+    phase: "big_idea", // or "visual", "headline", "pitch"
+    playerId: createdBy,
+    version: 0,
+  })
+}
 ```
 
 ### Client Management
@@ -391,6 +420,27 @@ The realtime server exposes `POST /api/broadcast` for API routes:
 ```
 
 Secured with shared secret to prevent unauthorized broadcasts.
+
+### WebSocket Event Types
+
+All events are defined in [packages/realtime-shared/src/index.ts](packages/realtime-shared/src/index.ts).
+
+**State-Changing Events** (update server snapshot):
+- `player_joined` - New player joins game (adds to players array)
+- `ready_update` - Player ready state changes (updates player.isReady)
+- `status_changed` - Game status transitions (updates status, phase, timestamp)
+- `phase_changed` - Creation phase advances (updates currentPhase, timestamp)
+- `settings_changed` - Game settings updated (increments version for refetch)
+- `brief_updated` - Campaign brief edited (increments version for refetch)
+- `content_submitted` - Player submits work (increments version, sends notification)
+
+**Broadcast-Only Events** (no server state mutation):
+- `player_left` - Player disconnects (handled by disconnect handler)
+- `presentation_state` - Ephemeral presentation UI state
+- `room_state` - Full snapshot synchronization
+- `hello_ack` - Connection acknowledgment with current snapshot
+- `heartbeat` - Keep-alive ping
+- `error` - Error messages to client
 
 ## Key Files to Reference
 
