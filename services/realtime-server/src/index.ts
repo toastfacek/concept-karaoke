@@ -835,10 +835,51 @@ async function handleBroadcastRequest(req: IncomingMessage, res: ServerResponse)
         break
       }
 
+      case "settings_changed": {
+        registry.updateRoom(payload.roomCode, (state) => {
+          const next = cloneSnapshot(state)
+          next.version = state.version + 1
+          return next
+        })
+        logger.debug("broadcast_state_updated", {
+          roomCode: payload.roomCode,
+          eventType: "settings_changed"
+        })
+        break
+      }
+
+      case "brief_updated": {
+        registry.updateRoom(payload.roomCode, (state) => {
+          const next = cloneSnapshot(state)
+          next.version = state.version + 1
+          return next
+        })
+        logger.debug("broadcast_state_updated", {
+          roomCode: payload.roomCode,
+          eventType: "brief_updated",
+          briefId: event.briefId
+        })
+        break
+      }
+
+      case "content_submitted": {
+        registry.updateRoom(payload.roomCode, (state) => {
+          const next = cloneSnapshot(state)
+          next.version = state.version + 1
+          return next
+        })
+        logger.debug("broadcast_state_updated", {
+          roomCode: payload.roomCode,
+          eventType: "content_submitted",
+          phase: event.phase,
+          playerId: event.playerId
+        })
+        break
+      }
+
       // Broadcast-only events (no state mutation needed)
       case "player_left":
       case "presentation_state":
-      case "settings_changed":
       case "room_state":
       case "hello_ack":
       case "heartbeat":

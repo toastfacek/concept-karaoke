@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { TABLES } from "@/lib/db"
+import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 
 const requestSchema = z.object({
@@ -74,10 +75,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       throw updateError
     }
 
-    // Increment game version to trigger realtime refresh
+    // Get room code for broadcast
     const { data: room } = await supabase
       .from(TABLES.gameRooms)
-      .select("version")
+      .select("version, code")
       .eq("id", adlob.room_id)
       .single()
 
@@ -85,6 +86,18 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       .from(TABLES.gameRooms)
       .update({ version: (room?.version ?? 0) + 1 })
       .eq("id", adlob.room_id)
+
+    // Broadcast to WebSocket clients
+    if (room) {
+      await broadcastToRoom(room.code, {
+        type: "content_submitted",
+        roomCode: room.code,
+        adlobId: adlobId,
+        phase: "big_idea",
+        playerId: parsed.data.createdBy,
+        version: 0, // Version managed by WS server
+      })
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {
