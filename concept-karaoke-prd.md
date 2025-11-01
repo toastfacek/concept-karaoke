@@ -1,5 +1,7 @@
 # Concept Karaoke - Product Requirements Document
 
+> **⚠️ NOTE**: This is the original product requirements document. For current technical implementation, see [CLAUDE.md](CLAUDE.md) and [README.md](README.md).
+
 ## Overview
 
 **Concept Karaoke** is a multiplayer web-based game that combines creative collaboration with improvisational performance. Players work together in an Exquisite Corpse style to build ad campaigns piece-by-piece, then pitch the final result without having seen the complete campaign beforehand.

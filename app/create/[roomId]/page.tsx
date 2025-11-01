@@ -748,13 +748,6 @@ export default function CreatePage() {
           : previous,
       )
 
-      sendRealtime({
-        type: "set_ready",
-        roomCode,
-        playerId: currentPlayer.id,
-        isReady: true,
-      })
-
       if (realtimeStatus !== "connected") {
         await fetchGame({ silent: true })
       } else {
@@ -788,15 +781,6 @@ export default function CreatePage() {
           }
         : previous,
     )
-
-    sendRealtime({
-      type: "set_ready",
-      roomCode,
-      playerId: currentPlayer.id,
-      isReady: desiredReady,
-    })
-
-    setIsTogglingReady(false)
 
     try {
       const response = await fetch(`/api/games/${roomCode}/players/${currentPlayer.id}`, {
@@ -870,23 +854,6 @@ export default function CreatePage() {
             }
           : previous,
       )
-
-      if (nextStatus && nextStatus !== previousStatus) {
-        sendRealtime({
-          type: "set_status",
-          roomCode,
-          playerId: currentPlayer.id,
-          status: nextStatus,
-          currentPhase: nextCurrentPhase,
-          phaseStartTime,
-        })
-      }
-
-      sendRealtime({
-        type: "advance_phase",
-        roomCode,
-        playerId: currentPlayer.id,
-      })
 
       if (realtimeStatus !== "connected") {
         await fetchGame({ silent: true })

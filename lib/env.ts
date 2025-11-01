@@ -4,6 +4,7 @@ const clientSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+  NEXT_PUBLIC_REALTIME_URL: z.string().optional(),
 })
 
 const serverSchema = z.object({
@@ -13,6 +14,7 @@ const serverSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   REALTIME_SHARED_SECRET: z.string().optional(),
+  REALTIME_BROADCAST_SECRET: z.string().optional(),
 })
 
 const optional = (value: string | undefined | null) => (value && value.length > 0 ? value : undefined)
@@ -21,6 +23,7 @@ const rawClientEnv = {
   NEXT_PUBLIC_SUPABASE_URL: optional(process.env.NEXT_PUBLIC_SUPABASE_URL),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: optional(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: optional(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY),
+  NEXT_PUBLIC_REALTIME_URL: optional(process.env.NEXT_PUBLIC_REALTIME_URL),
 }
 
 const rawServerEnv = {
@@ -30,6 +33,7 @@ const rawServerEnv = {
   OPENAI_API_KEY: optional(process.env.OPENAI_API_KEY),
   GEMINI_API_KEY: optional(process.env.GEMINI_API_KEY),
   REALTIME_SHARED_SECRET: optional(process.env.REALTIME_SHARED_SECRET),
+  REALTIME_BROADCAST_SECRET: optional(process.env.REALTIME_BROADCAST_SECRET),
 }
 
 export const env = {

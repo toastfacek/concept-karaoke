@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import { TABLES } from "@/lib/db"
 import { advanceCreationPhase } from "@/lib/game-state-machine"
+import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 import type { CreationPhase, GameStatus } from "@/lib/types"
 
@@ -209,6 +210,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (resetReadyError) {
       throw resetReadyError
     }
+
+    // Broadcast status change to WebSocket clients
+    await broadcastToRoom(room.code, {
+      type: "status_changed",
+      roomCode: room.code,
+      status: nextSnapshot.status,
+      currentPhase: nextSnapshot.currentPhase ?? null,
+      phaseStartTime,
+      version: 0, // Version will be managed by WS server
+    })
 
     return NextResponse.json({
       success: true,

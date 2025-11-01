@@ -211,15 +211,6 @@ export default function LobbyPage() {
         : previous,
     )
 
-    sendRealtime({
-      type: "set_ready",
-      roomCode,
-      playerId: currentPlayer.id,
-      isReady: desiredReady,
-    })
-
-    setIsUpdatingReady(false)
-
     try {
       const response = await fetch(`/api/games/${roomCode}/players/${currentPlayer.id}`, {
         method: "PATCH",
@@ -234,8 +225,6 @@ export default function LobbyPage() {
       }
 
       const nextStatus = typeof payload.status === "string" ? payload.status : null
-      const nextCurrentPhase = payload.currentPhase ?? null
-      const phaseStartTime = typeof payload.phaseStartTime === "string" ? payload.phaseStartTime : new Date().toISOString()
 
       if (nextStatus) {
         setLobby((previous) =>
@@ -246,15 +235,6 @@ export default function LobbyPage() {
               }
             : previous,
         )
-
-        sendRealtime({
-          type: "set_status",
-          roomCode,
-          playerId: currentPlayer.id,
-          status: nextStatus,
-          currentPhase: nextCurrentPhase,
-          phaseStartTime,
-        })
       }
 
       if (realtimeStatus !== "connected") {
@@ -304,8 +284,6 @@ export default function LobbyPage() {
       }
 
       const nextStatus = typeof payload.status === "string" ? payload.status : null
-      const nextCurrentPhase = payload.currentPhase ?? null
-      const phaseStartTime = typeof payload.phaseStartTime === "string" ? payload.phaseStartTime : new Date().toISOString()
 
       if (nextStatus) {
         setLobby((previous) =>
@@ -316,15 +294,6 @@ export default function LobbyPage() {
               }
             : previous,
         )
-
-        sendRealtime({
-          type: "set_status",
-          roomCode,
-          playerId: currentPlayer.id,
-          status: nextStatus,
-          currentPhase: nextCurrentPhase,
-          phaseStartTime,
-        })
       }
 
       if (realtimeStatus !== "connected") {

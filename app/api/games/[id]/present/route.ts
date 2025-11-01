@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { TABLES } from "@/lib/db"
+import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 
 const requestSchema = z.object({
@@ -150,6 +151,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         throw advanceError
       }
 
+      // Increment version to trigger realtime refresh
+      const { data: currentRoom } = await supabase
+        .from(TABLES.gameRooms)
+        .select("version")
+        .eq("id", room.id)
+        .single()
+
+      await supabase
+        .from(TABLES.gameRooms)
+        .update({ version: (currentRoom?.version ?? 0) + 1 })
+        .eq("id", room.id)
+
+      // Broadcast presentation advance to WebSocket clients
+      await broadcastToRoom(room.code, {
+        type: "status_changed",
+        roomCode: room.code,
+        status: "presenting",
+        currentPhase: null,
+        phaseStartTime: now,
+        version: 0, // Version will be managed by WS server
+      })
+
       return NextResponse.json({
         success: true,
         nextPresentIndex: nextIndex,
@@ -179,6 +202,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (resetReadyError) {
       throw resetReadyError
     }
+
+    // Increment version to trigger realtime refresh
+    const { data: currentRoom } = await supabase
+      .from(TABLES.gameRooms)
+      .select("version")
+      .eq("id", room.id)
+      .single()
+
+    await supabase
+      .from(TABLES.gameRooms)
+      .update({ version: (currentRoom?.version ?? 0) + 1 })
+      .eq("id", room.id)
+
+    // Broadcast transition to voting to WebSocket clients
+    await broadcastToRoom(room.code, {
+      type: "status_changed",
+      roomCode: room.code,
+      status: "voting",
+      currentPhase: null,
+      phaseStartTime: now,
+      version: 0, // Version will be managed by WS server
+    })
 
     return NextResponse.json({
       success: true,

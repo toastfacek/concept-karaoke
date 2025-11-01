@@ -65,12 +65,28 @@ Key functions:
 
 ### Realtime Architecture
 
-The app uses a **hybrid realtime approach**:
+The app uses a **single source of truth architecture** with hybrid realtime delivery:
 
-1. **Supabase Realtime** - For database change events (player joins, game updates)
-2. **Custom WebSocket Server** - For time-critical coordination (timer sync, phase transitions, live canvas)
+**Architecture Pattern (API → Database → WebSocket)**:
+1. Client sends HTTP request to API route
+2. API route updates database (Supabase)
+3. API route broadcasts event to WebSocket server via HTTP
+4. WebSocket server broadcasts to all connected clients in room
+5. Clients receive realtime updates via WebSocket
 
-**Custom Realtime Client**: [lib/realtime-client.ts](lib/realtime-client.ts) provides a WebSocket client that connects to the realtime server. Events are defined in `packages/realtime-shared`.
+**Key Components**:
+- **API Routes** - Single source of truth for mutations
+- **WebSocket Server** - Broadcasts state changes to connected clients
+- **Broadcast Endpoint** - [services/realtime-server/src/index.ts:688-740](services/realtime-server/src/index.ts#L688-L740) receives HTTP POST from API routes
+- **Broadcast Helper** - [lib/realtime-broadcast.ts](lib/realtime-broadcast.ts) called by API routes after DB writes
+- **Custom Realtime Client** - [lib/realtime-client.ts](lib/realtime-client.ts) connects to WebSocket server
+- **Shared Types** - Event definitions in `packages/realtime-shared`
+
+**Security**:
+- WebSocket handlers verify player identity via connection metadata
+- `set_ready` handler checks `playerId` matches authenticated socket
+- `advance_phase` handler verifies player is host
+- Server state is authoritative - client snapshots only for version detection
 
 **Channel naming**:
 - `room:{roomId}` for game-wide events
@@ -94,11 +110,37 @@ All API routes follow this pattern:
 - Supabase admin client for database operations
 - Snake case in database, camel case in API responses
 - Consistent error handling with `{ success: false, error: "message" }`
-- Version increment after mutations to trigger realtime refresh
+- **WebSocket broadcast after DB write** (for coordination events like ready state, phase changes)
 
 Example: [app/api/games/create/route.ts](app/api/games/create/route.ts)
 
-**Realtime Optimization Pattern** (all adlob phase routes):
+**Realtime Broadcast Pattern** (coordination routes):
+```typescript
+// 1. Update database
+const { data: player } = await supabase
+  .from(TABLES.players)
+  .update({ is_ready: isReady })
+  .eq("id", playerId)
+  .single()
+
+// 2. Broadcast to WebSocket clients
+await broadcastToRoom(roomCode, {
+  type: "ready_update",
+  roomCode,
+  playerId,
+  isReady,
+  version: 0, // WS server manages version
+})
+
+// 3. Return response
+return NextResponse.json({ success: true, player })
+```
+
+**Routes with WebSocket broadcast**:
+- [app/api/games/[id]/players/[playerId]/route.ts](app/api/games/[id]/players/[playerId]/route.ts) - Ready state changes
+- [app/api/games/[id]/phase/route.ts](app/api/games/[id]/phase/route.ts) - Phase advancement
+
+**Overwrite Protection Pattern** (adlob phase routes):
 ```typescript
 // 1. Check for existing content from different creator
 const { data: adlob } = await supabase
@@ -166,11 +208,22 @@ Cassette Futurism + Classic Ogilvy Advertising aesthetic:
 ### Environment Variables
 
 Use [lib/env.ts](lib/env.ts) for runtime environment parsing. Required variables:
+
+**Next.js App** (`.env`):
 - `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anon key
 - `SUPABASE_SERVICE_ROLE_KEY` - For admin operations
 - `OPENAI_API_KEY` - For brief generation
-- `NEXT_PUBLIC_REALTIME_URL` - WebSocket server URL (defaults to `ws://localhost:8080`)
+- `NEXT_PUBLIC_REALTIME_URL` - WebSocket server URL (e.g., `http://localhost:8080` for dev, Railway URL for prod)
+- `REALTIME_SHARED_SECRET` - JWT secret for realtime token generation
+- `REALTIME_BROADCAST_SECRET` - Shared secret for API → WS server communication
+
+**Realtime Server** (`services/realtime-server/.env`):
+- `SUPABASE_URL` - Supabase project URL
+- `SUPABASE_ANON_KEY` - Supabase anon key
+- `SUPABASE_SERVICE_ROLE_KEY` - For persistence operations
+- `REALTIME_SHARED_SECRET` - JWT secret for validating client tokens (must match Next.js)
+- `REALTIME_BROADCAST_SECRET` - Shared secret for accepting broadcast requests (must match Next.js)
 
 ### Database Operations
 
@@ -268,7 +321,9 @@ The app is fully navigable with sample data. Start at `/` and follow the game fl
 - Type-safe route handling
 - Supabase client setup and database integration
 - Realtime client architecture with WebSocket server
-- Realtime synchronization with version increments
+- **Single source of truth realtime architecture (API → DB → WS broadcast)**
+- **Server-side authorization for WebSocket handlers**
+- **Eliminated dual-write pattern for consistency**
 - Deterministic presenter assignment (round-robin)
 - Adlob assignment locking to prevent mid-phase swapping
 - Overwrite protection for concurrent content creation
@@ -279,11 +334,77 @@ The app is fully navigable with sample data. Start at `/` and follow the game fl
 - AI brief generation optimization
 - Image generation for visual phase
 
+## Realtime Architecture Deep Dive
+
+### Why Single Source of Truth?
+
+**Previous Architecture (Dual-Write)**:
+- Client → WebSocket (optimistic update)
+- Client → API → Database (persistent update)
+- Problems: Race conditions, inconsistent state, complex error handling
+
+**Current Architecture (Single Source)**:
+- Client → API → Database → WebSocket broadcast
+- Benefits: Guaranteed consistency, simpler code, single error path
+
+### WebSocket Server Authorization
+
+All WebSocket handlers now verify player identity:
+
+**`set_ready` handler**:
+```typescript
+const meta = connectionMeta.get(socket)
+if (!meta || meta.playerId !== playerId) {
+  return sendError("forbidden")
+}
+```
+
+**`advance_phase` handler**:
+```typescript
+const actor = room.state.players.find(p => p.id === meta.playerId)
+if (!actor || !actor.isHost) {
+  return sendError("forbidden")
+}
+```
+
+### Client Snapshot Handling
+
+Server is authoritative - client snapshots only for version detection:
+
+```typescript
+if (clientVersion > serverVersion) {
+  logger.warn("client_version_ahead", { ... })
+  // Server state remains authoritative
+}
+```
+
+### Broadcast Endpoint
+
+The realtime server exposes `POST /api/broadcast` for API routes:
+
+```typescript
+{
+  roomCode: string,
+  event: ServerToClientEvent,
+  secret: string // REALTIME_BROADCAST_SECRET
+}
+```
+
+Secured with shared secret to prevent unauthorized broadcasts.
+
 ## Key Files to Reference
 
+**Core**:
 - [lib/types.ts](lib/types.ts) - Domain types
 - [lib/game-state-machine.ts](lib/game-state-machine.ts) - State transitions
-- [lib/realtime-client.ts](lib/realtime-client.ts) - WebSocket client
 - [lib/db.ts](lib/db.ts) - Table constants and utilities
+
+**Realtime**:
+- [lib/realtime-client.ts](lib/realtime-client.ts) - WebSocket client
+- [lib/realtime-broadcast.ts](lib/realtime-broadcast.ts) - API → WS broadcast helper
+- [services/realtime-server/src/index.ts](services/realtime-server/src/index.ts) - WebSocket server
+- [packages/realtime-shared/src/index.ts](packages/realtime-shared/src/index.ts) - Shared event types
+
+**Documentation**:
 - [SCREEN_FLOW.md](SCREEN_FLOW.md) - Detailed user flow
 - [README.md](README.md) - Project overview
