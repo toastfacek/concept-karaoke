@@ -211,15 +211,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       throw resetReadyError
     }
 
-    // Broadcast status change to WebSocket clients
-    await broadcastToRoom(room.code, {
-      type: "status_changed",
-      roomCode: room.code,
-      status: nextSnapshot.status,
-      currentPhase: nextSnapshot.currentPhase ?? null,
-      phaseStartTime,
-      version: 0, // Version will be managed by WS server
-    })
+    // Broadcast to WebSocket clients
+    // If status actually changed, send status_changed. Otherwise send phase_changed.
+    if (nextSnapshot.status !== currentSnapshot.status) {
+      await broadcastToRoom(room.code, {
+        type: "status_changed",
+        roomCode: room.code,
+        status: nextSnapshot.status,
+        currentPhase: nextSnapshot.currentPhase ?? null,
+        phaseStartTime,
+        version: 0, // Version will be managed by WS server
+      })
+    } else {
+      // Status stayed the same (still "creating"), so just phase advanced
+      await broadcastToRoom(room.code, {
+        type: "phase_changed",
+        roomCode: room.code,
+        currentPhase: nextSnapshot.currentPhase!,
+        phaseStartTime,
+        version: 0,
+      })
+    }
 
     return NextResponse.json({
       success: true,

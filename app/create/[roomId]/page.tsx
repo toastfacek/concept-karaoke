@@ -407,6 +407,10 @@ export default function CreatePage() {
           : previous,
         )
         clearPendingRefresh()
+        // Refetch to get latest game state (presenter assignments, etc.)
+        fetchGame({ silent: true }).catch((err) => {
+          console.error("Failed to refetch after status change", err)
+        })
       })
 
       const unsubscribePlayerJoined = addListener("player_joined", ({ player, version }) => {
