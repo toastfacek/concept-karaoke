@@ -119,8 +119,8 @@ export async function POST(request: Request) {
         id: player.id,
         name: player.name,
         emoji: player.emoji,
-        isReady: player.is_ready,
-        isHost: player.is_host,
+        isReady: player.is_ready ?? false,
+        isHost: player.is_host ?? false,
       },
       version: 0, // Version will be managed by WS server
     })

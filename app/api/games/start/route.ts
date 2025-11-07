@@ -228,6 +228,7 @@ export async function POST(request: Request) {
       throw briefSelectError
     }
 
+    let briefId: string
     if (existingBrief) {
       // Update existing brief with generated content
       const { error: updateBriefError } = await supabase
@@ -244,21 +245,35 @@ export async function POST(request: Request) {
       if (updateBriefError) {
         throw updateBriefError
       }
+      briefId = existingBrief.id
     } else {
       // Create new brief with generated content
-      const { error: insertBriefError } = await supabase.from(TABLES.campaignBriefs).insert({
-        room_id: room.id,
-        product_name: generatedBrief.productName,
-        product_category: generatedBrief.productCategory,
-        business_problem: generatedBrief.businessProblem,
-        target_audience: generatedBrief.targetAudience,
-        objective: generatedBrief.objective,
-      })
+      const { data: newBrief, error: insertBriefError } = await supabase
+        .from(TABLES.campaignBriefs)
+        .insert({
+          room_id: room.id,
+          product_name: generatedBrief.productName,
+          product_category: generatedBrief.productCategory,
+          business_problem: generatedBrief.businessProblem,
+          target_audience: generatedBrief.targetAudience,
+          objective: generatedBrief.objective,
+        })
+        .select("id")
+        .single()
 
-      if (insertBriefError) {
-        throw insertBriefError
+      if (insertBriefError || !newBrief) {
+        throw insertBriefError || new Error("Failed to create brief")
       }
+      briefId = newBrief.id
     }
+
+    // Broadcast brief update to all players
+    await broadcastToRoom(room.code, {
+      type: "brief_updated",
+      roomCode: room.code,
+      briefId,
+      version: 0, // Version will be managed by WS server
+    })
 
     return NextResponse.json({
       success: true,

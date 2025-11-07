@@ -67,7 +67,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       type: "ready_update",
       roomCode: room.code,
       playerId: player.id,
-      isReady: player.is_ready,
+      isReady: player.is_ready ?? false,
       version: 0, // Version will be managed by WS server
     })
 

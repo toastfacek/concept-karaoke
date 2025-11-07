@@ -720,6 +720,11 @@ async function handleBroadcastRequest(req: IncomingMessage, res: ServerResponse)
 
     if (payload.secret !== BROADCAST_SECRET) {
       metrics.increment("http_broadcast_auth_failures_total")
+      console.log("[WS DEBUG] Secret mismatch:", {
+        received: payload.secret?.slice(0, 10) + "...",
+        expected: BROADCAST_SECRET?.slice(0, 10) + "...",
+        match: payload.secret === BROADCAST_SECRET
+      })
       logger.warn("broadcast_auth_failed", { roomCode: payload.roomCode })
       res.writeHead(403, { "Content-Type": "application/json" })
       res.end(JSON.stringify({ error: "Invalid secret" }))
@@ -900,13 +905,16 @@ async function handleBroadcastRequest(req: IncomingMessage, res: ServerResponse)
         break
     }
 
+    const clientCount = room.clients.size
+    console.log(`[WS broadcast] Received ${payload.event.type} for room ${payload.roomCode}, broadcasting to ${clientCount} clients`)
+
     broadcast(payload.roomCode, payload.event)
 
     metrics.increment("http_broadcast_success_total")
-    logger.info("broadcast_success", { roomCode: payload.roomCode, eventType: payload.event.type })
+    logger.info("broadcast_success", { roomCode: payload.roomCode, eventType: payload.event.type, clientCount })
 
     res.writeHead(200, { "Content-Type": "application/json" })
-    res.end(JSON.stringify({ success: true, clientCount: room.clients.size }))
+    res.end(JSON.stringify({ success: true, clientCount }))
   } catch (error) {
     metrics.increment("http_broadcast_failures_total")
     logger.error("broadcast_error", { error: error instanceof Error ? error.message : "unknown" })

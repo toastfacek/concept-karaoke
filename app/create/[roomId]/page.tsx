@@ -387,6 +387,10 @@ export default function CreatePage() {
           : previous,
         )
         clearPendingRefresh()
+        // Refetch to get fresh adlob assignments and creator fields
+        fetchGame({ silent: true }).catch((err) => {
+          console.error("Failed to refetch after phase change", err)
+        })
       })
 
       const unsubscribeStatusChanged = addListener("status_changed", ({ status, currentPhase, phaseStartTime, version }) => {
@@ -475,6 +479,15 @@ export default function CreatePage() {
         clearPendingRefresh()
       })
 
+      const unsubscribeContentSubmitted = addListener("content_submitted", ({ adlobId, phase, playerId, version }) => {
+        console.log("[create realtime] content_submitted", { roomCode, adlobId, phase, playerId, version })
+        // Refetch game to get latest adlob content
+        fetchGame({ silent: true }).catch((err) => {
+          console.error("Failed to refetch after content submission", err)
+        })
+        clearPendingRefresh()
+      })
+
       return [
         unsubscribeHello,
         unsubscribeRoomState,
@@ -483,9 +496,10 @@ export default function CreatePage() {
         unsubscribeStatusChanged,
         unsubscribePlayerJoined,
         unsubscribePlayerLeft,
+        unsubscribeContentSubmitted,
       ]
     },
-    [clearPendingRefresh, roomCode],
+    [clearPendingRefresh, fetchGame, roomCode],
   )
 
   useRoomRealtime({
@@ -719,7 +733,12 @@ export default function CreatePage() {
       })
       const phasePayload = await response.json()
 
-      if (!response.ok || !phasePayload.success) {
+      // Allow 409 (already submitted) to pass through - player can still ready up
+      if (!response.ok && response.status !== 409) {
+        throw new Error(phasePayload.error ?? "Failed to save your work")
+      }
+
+      if (!phasePayload.success && response.status !== 409) {
         throw new Error(phasePayload.error ?? "Failed to save your work")
       }
 
