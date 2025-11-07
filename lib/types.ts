@@ -39,12 +39,18 @@ export const SPECIFIC_PRODUCT_CATEGORIES = PRODUCT_CATEGORIES.filter(cat => cat 
 export const PHASE_DURATIONS = [30, 60, 90, 120] as const
 export type PhaseDuration = (typeof PHASE_DURATIONS)[number]
 
+export const BRIEF_STYLES = ["wacky", "realistic"] as const
+export type BriefStyle = (typeof BRIEF_STYLES)[number]
+
 export interface CampaignBrief {
   productName: string
   productCategory: string
+  tagline?: string
+  productFeatures?: string
   businessProblem: string
   targetAudience: string
   objective: string
+  weirdConstraint?: string
 }
 
 export interface AdLob {
@@ -86,4 +92,5 @@ export interface GameRoom {
   hostId: string
   productCategory: string
   phaseDurationSeconds: number
+  briefStyle: BriefStyle
 }

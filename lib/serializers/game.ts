@@ -13,9 +13,12 @@ type RawBrief = {
   id: string
   product_name: string | null
   product_category: string | null
+  tagline: string | null
+  product_features: string | null
   business_problem: string | null
   target_audience: string | null
   objective: string | null
+  weird_constraint: string | null
   updated_at: string | null
 }
 
@@ -49,6 +52,7 @@ type RawGameRow = {
   present_sequence: string[] | null
   product_category: string | null
   phase_duration_seconds: number | null
+  brief_style: string | null
   version?: number | null
   players?: RawPlayer[] | null
   brief?: RawBrief[] | null
@@ -74,9 +78,12 @@ function serializeBrief(row?: RawBrief | null) {
     id: row.id,
     productName: row.product_name ?? "",
     productCategory: row.product_category ?? "All",
+    tagline: row.tagline ?? undefined,
+    productFeatures: row.product_features ?? undefined,
     businessProblem: row.business_problem ?? "",
     targetAudience: row.target_audience ?? "",
     objective: row.objective ?? "",
+    weirdConstraint: row.weird_constraint ?? undefined,
     updatedAt: row.updated_at ?? null,
   }
 }
@@ -117,6 +124,7 @@ export function serializeGameRow(row: RawGameRow) {
     presentSequence: Array.isArray(row.present_sequence) ? row.present_sequence : [],
     productCategory: row.product_category ?? "All",
     phaseDurationSeconds: row.phase_duration_seconds ?? 60,
+    briefStyle: row.brief_style ?? "wacky",
     players,
     adlobs: (row.adlobs ?? []).map(serializeAdlob),
     brief: serializeBrief(briefCandidates[0]),

@@ -6,9 +6,12 @@ import { Badge } from "@/components/ui/badge"
 interface CampaignBrief {
   productName: string
   productCategory: string
+  tagline?: string
+  productFeatures?: string
   businessProblem: string
   targetAudience: string
   objective: string
+  weirdConstraint?: string
 }
 
 interface BriefViewDialogProps {
@@ -40,10 +43,33 @@ export function BriefViewDialog({ brief, isOpen, onOpenChange }: BriefViewDialog
           {/* Product Name */}
           <div>
             <h3 className="mb-2 text-2xl font-bold">{brief.productName}</h3>
+            {brief.tagline && (
+              <p className="mb-2 text-lg italic text-muted-foreground">&ldquo;{brief.tagline}&rdquo;</p>
+            )}
             <Badge variant="secondary" className="text-sm">
               {brief.productCategory}
             </Badge>
           </div>
+
+          {/* Product Features */}
+          {brief.productFeatures && (
+            <div className="space-y-2">
+              <h4 className="font-mono text-sm font-bold uppercase text-muted-foreground">
+                Product Features
+              </h4>
+              <p className="text-sm leading-relaxed">{brief.productFeatures}</p>
+            </div>
+          )}
+
+          {/* Weird Constraint (Wacky mode) */}
+          {brief.weirdConstraint && (
+            <div className="space-y-2">
+              <h4 className="font-mono text-sm font-bold uppercase text-muted-foreground">
+                The Twist
+              </h4>
+              <p className="text-sm leading-relaxed font-medium">{brief.weirdConstraint}</p>
+            </div>
+          )}
 
           {/* Business Problem */}
           <div className="space-y-2">

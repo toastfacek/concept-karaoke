@@ -53,9 +53,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           present_sequence,
           product_category,
           phase_duration_seconds,
+          brief_style,
           version,
           players:players(id, name, emoji, is_ready, is_host, joined_at),
-          brief:campaign_briefs(id, product_name, product_category, business_problem, target_audience, objective, updated_at),
+          brief:campaign_briefs(id, product_name, product_category, tagline, product_features, business_problem, target_audience, objective, weird_constraint, updated_at),
           adlobs:adlobs(id, big_idea_text, big_idea_created_by, visual_canvas_data, visual_image_urls, visual_created_by, headline_canvas_data, headline_created_by, pitch_text, pitch_created_by, created_at, assigned_presenter, present_order, present_started_at, present_completed_at, vote_count)
         `,
       )

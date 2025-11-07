@@ -10,9 +10,12 @@ import { Textarea } from "./ui/textarea"
 interface CampaignBrief {
   productName: string
   productCategory: string
+  tagline?: string
+  productFeatures?: string
   businessProblem: string
   targetAudience: string
   objective: string
+  weirdConstraint?: string
 }
 
 interface BriefEditorProps {
@@ -27,7 +30,7 @@ interface BriefEditorProps {
   showReveal?: boolean
 }
 
-type EditableField = "productName" | "businessProblem" | "targetAudience" | "objective"
+type EditableField = "productName" | "tagline" | "productFeatures" | "businessProblem" | "targetAudience" | "objective" | "weirdConstraint"
 
 export function BriefEditor({
   initialBrief,
@@ -43,9 +46,12 @@ export function BriefEditor({
   const [brief, setBrief] = useState<CampaignBrief>({
     productName: "",
     productCategory: "",
+    tagline: "",
+    productFeatures: "",
     businessProblem: "",
     targetAudience: "",
     objective: "",
+    weirdConstraint: "",
   })
   const [editingField, setEditingField] = useState<EditableField | null>(null)
   const [editValue, setEditValue] = useState("")
@@ -59,7 +65,7 @@ export function BriefEditor({
   const startEditing = (field: EditableField) => {
     if (isLocked) return
     setEditingField(field)
-    setEditValue(brief[field])
+    setEditValue(brief[field] ?? "")
   }
 
   const cancelEditing = () => {
@@ -158,6 +164,8 @@ export function BriefEditor({
       <div className="space-y-6">
         {renderField("productName", "Product Name", brief.productName)}
 
+        {brief.tagline !== undefined && renderField("tagline", "Tagline", brief.tagline || "")}
+
         {/* Product Category is read-only and comes from game settings */}
         <div className="space-y-2">
           <h3 className="font-mono text-lg font-bold uppercase">Product Category</h3>
@@ -168,6 +176,10 @@ export function BriefEditor({
             (Set from game settings)
           </p>
         </div>
+
+        {brief.productFeatures !== undefined && renderField("productFeatures", "Product Features", brief.productFeatures || "", true)}
+
+        {brief.weirdConstraint !== undefined && renderField("weirdConstraint", "The Twist", brief.weirdConstraint || "", true)}
 
         {renderField("businessProblem", "Business Problem", brief.businessProblem, true)}
 
