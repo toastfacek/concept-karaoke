@@ -1,5 +1,13 @@
 Concept Karaoke — Technical Design Doc (Next.js + Supabase + Vercel)
 
+> **⚠️ NOTE**: This is an older planning document. For current architecture, see [CLAUDE.md](CLAUDE.md) and [README.md](README.md).
+>
+> **Key Changes Since This Doc**:
+> - Custom WebSocket server replaces Supabase Realtime for coordination
+> - Single source of truth architecture (API → DB → WS broadcast)
+> - Server-side authorization for WebSocket handlers
+> - Railway hosting for realtime server
+
 This document turns the PRD into an explicit build plan an AI (or a human) can follow step‑by‑step. Keep everything minimal and shippable; favor simple choices.
 
 ⸻

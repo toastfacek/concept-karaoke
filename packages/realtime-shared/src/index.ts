@@ -123,6 +123,20 @@ export type ServerToClientEvent =
       version: number
     }
   | {
+      type: "brief_updated"
+      roomCode: string
+      briefId: string
+      version: number
+    }
+  | {
+      type: "content_submitted"
+      roomCode: string
+      adlobId: string
+      phase: "big_idea" | "visual" | "headline" | "pitch"
+      playerId: string
+      version: number
+    }
+  | {
       type: "heartbeat"
       roomCode: string
       timestamp: number

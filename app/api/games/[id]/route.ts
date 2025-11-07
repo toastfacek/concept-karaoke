@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import { TABLES } from "@/lib/db"
 import { getInitialCreationPhase, transitionGameState } from "@/lib/game-state-machine"
+import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 import type { CreationPhase, GameStatus } from "@/lib/types"
 import { serializeGameRow } from "@/lib/serializers/game"
@@ -274,6 +275,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (resetReadyError) {
       throw resetReadyError
     }
+
+    // Increment version to trigger realtime refresh
+    const { data: currentRoom } = await supabase
+      .from(TABLES.gameRooms)
+      .select("version")
+      .eq("id", room.id)
+      .single()
+
+    await supabase
+      .from(TABLES.gameRooms)
+      .update({ version: (currentRoom?.version ?? 0) + 1 })
+      .eq("id", room.id)
+
+    // Broadcast status change to WebSocket clients
+    await broadcastToRoom(room.code, {
+      type: "status_changed",
+      roomCode: room.code,
+      status: nextState.status,
+      currentPhase: nextState.currentPhase ?? null,
+      phaseStartTime,
+      version: 0, // Version will be managed by WS server
+    })
 
     return NextResponse.json({
       success: true,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { TABLES } from "@/lib/db"
+import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 import { PRODUCT_CATEGORIES } from "@/lib/types"
 
@@ -93,6 +94,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (updateError) {
       throw updateError
     }
+
+    // Increment version to trigger realtime refresh
+    const { data: currentRoom } = await supabase
+      .from(TABLES.gameRooms)
+      .select("version, code")
+      .eq("id", room.id)
+      .single()
+
+    await supabase
+      .from(TABLES.gameRooms)
+      .update({ version: (currentRoom?.version ?? 0) + 1 })
+      .eq("id", room.id)
+
+    // Broadcast to WebSocket clients
+    await broadcastToRoom(currentRoom?.code ?? roomCode, {
+      type: "settings_changed",
+      roomCode: currentRoom?.code ?? roomCode,
+      productCategory: updatedRoom.product_category ?? "All",
+      phaseDurationSeconds: updatedRoom.phase_duration_seconds ?? 60,
+      version: 0, // Version managed by WS server
+    })
 
     return NextResponse.json({
       success: true,

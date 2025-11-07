@@ -1,6 +1,6 @@
 import "dotenv/config"
 import { createServer } from "http"
-import type { IncomingMessage } from "http"
+import type { IncomingMessage, ServerResponse } from "http"
 import { randomUUID } from "node:crypto"
 
 import {
@@ -28,6 +28,7 @@ const DEFAULT_PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080
 const HEARTBEAT_INTERVAL_MS = 15_000
 const HEARTBEAT_TIMEOUT_MS = 45_000
 const VALID_GAME_STATUSES: ReadonlyArray<GameStatus> = ["lobby", "briefing", "creating", "presenting", "voting", "results"]
+const BROADCAST_SECRET = process.env.REALTIME_BROADCAST_SECRET
 
 interface ConnectionMeta {
   roomCode?: string
@@ -181,36 +182,26 @@ async function handleJoinRoom(socket: WebSocket, payload: ClientToServerEvent & 
   let room = registry.getRoom(roomCode)
 
   if (!room) {
+    // If no room exists, create a placeholder snapshot
+    // In production, this should fetch from database instead of trusting client
     const snapshot = initialSnapshot ? cloneSnapshot(initialSnapshot) : createPlaceholderSnapshot(roomCode)
     room = registry.ensureRoom(roomCode, snapshot)
+    logger.info("room_initialized_from_client", { roomCode, version: snapshot.version })
   } else if (initialSnapshot) {
-    const snapshotVersion = initialSnapshot.version ?? 0
-    if (snapshotVersion >= room.state.version) {
-      registry.updateRoom(roomCode, (state) => {
-        const next = cloneSnapshot(state)
-        const mergedPlayers: PlayerSummary[] = []
-        const seen = new Set<string>()
+    // Client provided a snapshot, but we only use it to detect version mismatches
+    // Server state is authoritative - do not merge client data
+    const clientVersion = initialSnapshot.version ?? 0
+    const serverVersion = room.state.version
 
-        for (const player of initialSnapshot.players) {
-          mergedPlayers.push({ ...player })
-          seen.add(player.id)
-        }
-
-        for (const existing of state.players) {
-          if (seen.has(existing.id)) {
-            continue
-          }
-          mergedPlayers.push({ ...existing })
-        }
-
-        next.players = mergedPlayers
-        next.status = initialSnapshot.status
-        next.currentPhase = initialSnapshot.currentPhase
-        next.phaseStartTime = initialSnapshot.phaseStartTime
-        next.version = snapshotVersion >= state.version ? snapshotVersion : state.version + 1
-        return next
+    if (clientVersion > serverVersion) {
+      logger.warn("client_version_ahead", {
+        roomCode,
+        clientVersion,
+        serverVersion,
+        playerId,
       })
-      room = registry.getRoom(roomCode)
+      // In production, fetch latest state from database here
+      // For now, server state remains authoritative
     }
   }
 
@@ -225,26 +216,19 @@ async function handleJoinRoom(socket: WebSocket, payload: ClientToServerEvent & 
     return
   }
 
+  // Don't create placeholder players - let API broadcasts handle player creation
+  // This ensures all player data (name, emoji) comes from the authoritative source
   const playerExists = room.state.players.some((player) => player.id === playerId)
-  let didCreatePlayer = false
+
   if (!playerExists) {
-    registry.updateRoom(roomCode, (state) => {
-      const next = cloneSnapshot(state)
-      const newPlayer: PlayerSummary = {
-        id: playerId,
-        name: `Player ${state.players.length + 1}`,
-        emoji: "🤖",
-        isReady: false,
-        isHost: state.players.length === 0,
-      }
-      next.players = [...state.players, newPlayer]
-      next.version = state.version + 1
-      return next
+    logger.info("player_not_in_snapshot_yet", {
+      roomCode,
+      playerId,
+      message: "Player will be added via API broadcast"
     })
-    didCreatePlayer = true
-    metrics.increment("players_created_total")
   }
 
+  // Attach client regardless - they'll receive player data via player_joined broadcast from API
   attachClient(roomCode, socket, playerId)
 
   const currentRoom = registry.getRoom(roomCode)
@@ -253,6 +237,7 @@ async function handleJoinRoom(socket: WebSocket, payload: ClientToServerEvent & 
   metrics.increment("join_room_success_total")
   logger.info("join_room_success", { roomCode, playerId, version: currentRoom.state.version })
 
+  // Send current snapshot - player will be added when API broadcasts player_joined
   sendMessage(socket, {
     type: "hello_ack",
     roomCode,
@@ -260,35 +245,6 @@ async function handleJoinRoom(socket: WebSocket, payload: ClientToServerEvent & 
   })
 
   snapshotScheduler.schedule(currentRoom.state)
-
-  if (didCreatePlayer) {
-    try {
-      await recordRoomEventImpl({
-        roomCode,
-        eventType: "player_joined",
-        version: currentRoom.state.version,
-        payload: { playerId },
-      })
-    } catch (error) {
-      metrics.increment("event_persist_failures_total")
-      logger.error("player_joined_event_persist_failed", { error: error instanceof Error ? error.message : "unknown" })
-    }
-  }
-
-  const joinedPlayer = currentRoom.state.players.find((player) => player.id === playerId)
-  if (joinedPlayer) {
-    broadcast(
-      roomCode,
-      {
-        type: "player_joined",
-        roomCode,
-        player: joinedPlayer,
-        version: currentRoom.state.version,
-      },
-      socket,
-    )
-    logger.info("player_joined_broadcast", { roomCode, playerId, version: currentRoom.state.version })
-  }
 
   broadcastRoomState(roomCode, currentRoom.state, socket)
 }
@@ -305,6 +261,19 @@ async function handleSetReady(socket: WebSocket, payload: ClientToServerEvent & 
     return
   }
 
+  // Verify the player ID matches the authenticated socket
+  const meta = connectionMeta.get(socket)
+  if (!meta || meta.playerId !== playerId) {
+    metrics.increment("ready_update_failures_total")
+    logger.warn("ready_update_unauthorized", { roomCode, payloadPlayerId: playerId, socketPlayerId: meta?.playerId })
+    sendMessage(socket, {
+      type: "error",
+      code: "forbidden",
+      message: "Player ID does not match authenticated connection",
+    })
+    return
+  }
+
   const room = registry.getRoom(roomCode)
   if (!room) {
     metrics.increment("ready_update_failures_total")
@@ -313,6 +282,19 @@ async function handleSetReady(socket: WebSocket, payload: ClientToServerEvent & 
       type: "error",
       code: "room_not_found",
       message: "Room not initialized",
+    })
+    return
+  }
+
+  // Verify player exists in room
+  const player = room.state.players.find((p) => p.id === playerId)
+  if (!player) {
+    metrics.increment("ready_update_failures_total")
+    logger.warn("ready_update_player_not_found", { roomCode, playerId })
+    sendMessage(socket, {
+      type: "error",
+      code: "player_not_found",
+      message: "Player not found in room",
     })
     return
   }
@@ -366,6 +348,44 @@ async function handleAdvancePhase(socket: WebSocket, payload: ClientToServerEven
       type: "error",
       code: "invalid_payload",
       message: "Missing roomCode",
+    })
+    return
+  }
+
+  // Verify the player is authenticated
+  const meta = connectionMeta.get(socket)
+  if (!meta || !meta.playerId) {
+    metrics.increment("phase_change_failures_total")
+    logger.warn("phase_change_unauthorized", { roomCode, playerId: meta?.playerId })
+    sendMessage(socket, {
+      type: "error",
+      code: "forbidden",
+      message: "Player not authenticated",
+    })
+    return
+  }
+
+  const room = registry.getRoom(roomCode)
+  if (!room) {
+    metrics.increment("phase_change_failures_total")
+    logger.warn("phase_change_room_not_found", { roomCode })
+    sendMessage(socket, {
+      type: "error",
+      code: "room_not_found",
+      message: "Room not found",
+    })
+    return
+  }
+
+  // Verify player is the host
+  const actor = room.state.players.find((p) => p.id === meta.playerId)
+  if (!actor || !actor.isHost) {
+    metrics.increment("phase_change_failures_total")
+    logger.warn("phase_change_not_host", { roomCode, playerId: meta.playerId, isHost: actor?.isHost })
+    sendMessage(socket, {
+      type: "error",
+      code: "forbidden",
+      message: "Only the host can advance the phase",
     })
     return
   }
@@ -655,6 +675,254 @@ function parseMessage(raw: RawData): ClientToServerEvent | null {
   }
 }
 
+function parseRequestBody(req: IncomingMessage): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    let body = ""
+    req.on("data", (chunk) => {
+      body += chunk.toString()
+    })
+    req.on("end", () => {
+      try {
+        resolve(JSON.parse(body))
+      } catch (error) {
+        reject(error)
+      }
+    })
+    req.on("error", reject)
+  })
+}
+
+function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
+  if (req.method === "POST" && req.url === "/api/broadcast") {
+    void handleBroadcastRequest(req, res)
+  } else if (req.method === "GET" && req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json" })
+    res.end(JSON.stringify({ status: "ok", port: listeningPort }))
+  } else {
+    res.writeHead(404, { "Content-Type": "application/json" })
+    res.end(JSON.stringify({ error: "Not found" }))
+  }
+}
+
+async function handleBroadcastRequest(req: IncomingMessage, res: ServerResponse) {
+  metrics.increment("http_broadcast_attempts_total")
+
+  try {
+    const body = await parseRequestBody(req)
+    const payload = body as { roomCode?: string; event?: ServerToClientEvent; secret?: string }
+
+    if (!BROADCAST_SECRET) {
+      logger.error("broadcast_no_secret_configured")
+      res.writeHead(500, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ error: "Broadcast secret not configured" }))
+      return
+    }
+
+    if (payload.secret !== BROADCAST_SECRET) {
+      metrics.increment("http_broadcast_auth_failures_total")
+      console.log("[WS DEBUG] Secret mismatch:", {
+        received: payload.secret?.slice(0, 10) + "...",
+        expected: BROADCAST_SECRET?.slice(0, 10) + "...",
+        match: payload.secret === BROADCAST_SECRET
+      })
+      logger.warn("broadcast_auth_failed", { roomCode: payload.roomCode })
+      res.writeHead(403, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ error: "Invalid secret" }))
+      return
+    }
+
+    if (!payload.roomCode || !payload.event) {
+      metrics.increment("http_broadcast_failures_total")
+      logger.warn("broadcast_invalid_payload", { roomCode: payload.roomCode })
+      res.writeHead(400, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ error: "Missing roomCode or event" }))
+      return
+    }
+
+    let room = registry.getRoom(payload.roomCode)
+    if (!room) {
+      // Room doesn't exist yet - create it with empty snapshot
+      // This can happen when API broadcasts before any client connects
+      logger.info("broadcast_creating_room", { roomCode: payload.roomCode })
+      const emptySnapshot = createPlaceholderSnapshot(payload.roomCode)
+      room = registry.ensureRoom(payload.roomCode, emptySnapshot)
+      metrics.increment("broadcast_room_created_total")
+    }
+
+    // Update room state before broadcasting for stateful events
+    const event = payload.event
+    switch (event.type) {
+      case "player_joined": {
+        const updated = registry.updateRoom(payload.roomCode, (state) => {
+          const next = cloneSnapshot(state)
+          const existingIndex = next.players.findIndex((p) => p.id === event.player.id)
+
+          if (existingIndex >= 0) {
+            // Update existing player
+            next.players[existingIndex] = {
+              id: event.player.id,
+              name: event.player.name,
+              emoji: event.player.emoji,
+              isReady: event.player.isReady,
+              isHost: event.player.isHost,
+            }
+          } else {
+            // Add new player
+            next.players.push({
+              id: event.player.id,
+              name: event.player.name,
+              emoji: event.player.emoji,
+              isReady: event.player.isReady,
+              isHost: event.player.isHost,
+            })
+          }
+
+          next.version = state.version + 1
+          return next
+        })
+
+        // Immediately broadcast room_state to all connected clients with the updated snapshot
+        // This ensures all clients get fresh data with the new player
+        if (updated) {
+          broadcastRoomState(payload.roomCode, updated.state)
+        }
+
+        logger.debug("broadcast_state_updated", {
+          roomCode: payload.roomCode,
+          eventType: "player_joined",
+          playerId: event.player.id
+        })
+        break
+      }
+
+      case "ready_update": {
+        registry.updateRoom(payload.roomCode, (state) => {
+          const next = cloneSnapshot(state)
+          const player = next.players.find((p) => p.id === event.playerId)
+
+          if (player) {
+            player.isReady = event.isReady
+            next.version = state.version + 1
+          }
+
+          return next
+        })
+        logger.debug("broadcast_state_updated", {
+          roomCode: payload.roomCode,
+          eventType: "ready_update",
+          playerId: event.playerId
+        })
+        break
+      }
+
+      case "status_changed": {
+        registry.updateRoom(payload.roomCode, (state) => {
+          const next = cloneSnapshot(state)
+          next.status = event.status
+          next.currentPhase = event.currentPhase
+          next.phaseStartTime = event.phaseStartTime
+          next.version = state.version + 1
+          return next
+        })
+        logger.debug("broadcast_state_updated", {
+          roomCode: payload.roomCode,
+          eventType: "status_changed",
+          status: event.status
+        })
+        break
+      }
+
+      case "phase_changed": {
+        registry.updateRoom(payload.roomCode, (state) => {
+          const next = cloneSnapshot(state)
+          next.currentPhase = event.currentPhase
+          next.phaseStartTime = event.phaseStartTime
+          next.version = state.version + 1
+          return next
+        })
+        logger.debug("broadcast_state_updated", {
+          roomCode: payload.roomCode,
+          eventType: "phase_changed",
+          phase: event.currentPhase
+        })
+        break
+      }
+
+      case "settings_changed": {
+        registry.updateRoom(payload.roomCode, (state) => {
+          const next = cloneSnapshot(state)
+          next.version = state.version + 1
+          return next
+        })
+        logger.debug("broadcast_state_updated", {
+          roomCode: payload.roomCode,
+          eventType: "settings_changed"
+        })
+        break
+      }
+
+      case "brief_updated": {
+        registry.updateRoom(payload.roomCode, (state) => {
+          const next = cloneSnapshot(state)
+          next.version = state.version + 1
+          return next
+        })
+        logger.debug("broadcast_state_updated", {
+          roomCode: payload.roomCode,
+          eventType: "brief_updated",
+          briefId: event.briefId
+        })
+        break
+      }
+
+      case "content_submitted": {
+        registry.updateRoom(payload.roomCode, (state) => {
+          const next = cloneSnapshot(state)
+          next.version = state.version + 1
+          return next
+        })
+        logger.debug("broadcast_state_updated", {
+          roomCode: payload.roomCode,
+          eventType: "content_submitted",
+          phase: event.phase,
+          playerId: event.playerId
+        })
+        break
+      }
+
+      // Broadcast-only events (no state mutation needed)
+      case "player_left":
+      case "presentation_state":
+      case "room_state":
+      case "hello_ack":
+      case "heartbeat":
+      case "error":
+        // These events don't require state updates
+        logger.debug("broadcast_only_event", {
+          roomCode: payload.roomCode,
+          eventType: event.type
+        })
+        break
+    }
+
+    const clientCount = room.clients.size
+    console.log(`[WS broadcast] Received ${payload.event.type} for room ${payload.roomCode}, broadcasting to ${clientCount} clients`)
+
+    broadcast(payload.roomCode, payload.event)
+
+    metrics.increment("http_broadcast_success_total")
+    logger.info("broadcast_success", { roomCode: payload.roomCode, eventType: payload.event.type, clientCount })
+
+    res.writeHead(200, { "Content-Type": "application/json" })
+    res.end(JSON.stringify({ success: true, clientCount }))
+  } catch (error) {
+    metrics.increment("http_broadcast_failures_total")
+    logger.error("broadcast_error", { error: error instanceof Error ? error.message : "unknown" })
+    res.writeHead(500, { "Content-Type": "application/json" })
+    res.end(JSON.stringify({ error: "Internal server error" }))
+  }
+}
+
 export async function startRealtimeServer(options: StartRealtimeServerOptions = {}) {
   if (serverStarted) {
     throw new Error("Realtime server already started")
@@ -685,7 +953,7 @@ export async function startRealtimeServer(options: StartRealtimeServerOptions = 
     options.snapshotFlushDelayMs,
   )
 
-  httpServer = createServer()
+  httpServer = createServer(handleHttpRequest)
   wss = new WebSocketServer({ server: httpServer })
 
   wss.on("connection", (socket: WebSocket, request: IncomingMessage) => {

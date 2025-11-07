@@ -387,6 +387,10 @@ export default function CreatePage() {
           : previous,
         )
         clearPendingRefresh()
+        // Refetch to get fresh adlob assignments and creator fields
+        fetchGame({ silent: true }).catch((err) => {
+          console.error("Failed to refetch after phase change", err)
+        })
       })
 
       const unsubscribeStatusChanged = addListener("status_changed", ({ status, currentPhase, phaseStartTime, version }) => {
@@ -403,6 +407,10 @@ export default function CreatePage() {
           : previous,
         )
         clearPendingRefresh()
+        // Refetch to get latest game state (presenter assignments, etc.)
+        fetchGame({ silent: true }).catch((err) => {
+          console.error("Failed to refetch after status change", err)
+        })
       })
 
       const unsubscribePlayerJoined = addListener("player_joined", ({ player, version }) => {
@@ -475,6 +483,15 @@ export default function CreatePage() {
         clearPendingRefresh()
       })
 
+      const unsubscribeContentSubmitted = addListener("content_submitted", ({ adlobId, phase, playerId, version }) => {
+        console.log("[create realtime] content_submitted", { roomCode, adlobId, phase, playerId, version })
+        // Refetch game to get latest adlob content
+        fetchGame({ silent: true }).catch((err) => {
+          console.error("Failed to refetch after content submission", err)
+        })
+        clearPendingRefresh()
+      })
+
       return [
         unsubscribeHello,
         unsubscribeRoomState,
@@ -483,9 +500,10 @@ export default function CreatePage() {
         unsubscribeStatusChanged,
         unsubscribePlayerJoined,
         unsubscribePlayerLeft,
+        unsubscribeContentSubmitted,
       ]
     },
-    [clearPendingRefresh, roomCode],
+    [clearPendingRefresh, fetchGame, roomCode],
   )
 
   useRoomRealtime({
@@ -522,7 +540,8 @@ export default function CreatePage() {
     const totalPlayers = game.players.length
     if (totalPlayers === 0) return null
 
-    const targetIndex = ((playerIndex - phaseIndex) % totalPlayers + totalPlayers) % totalPlayers
+    // "Passing to the left" - each phase, adlobs rotate one position
+    const targetIndex = (playerIndex + phaseIndex) % totalPlayers
     return game.adlobs[targetIndex] ?? null
   }, [game, currentPlayer, playerIndex, phaseIndex])
 
@@ -719,7 +738,12 @@ export default function CreatePage() {
       })
       const phasePayload = await response.json()
 
-      if (!response.ok || !phasePayload.success) {
+      // Allow 409 (already submitted) to pass through - player can still ready up
+      if (!response.ok && response.status !== 409) {
+        throw new Error(phasePayload.error ?? "Failed to save your work")
+      }
+
+      if (!phasePayload.success && response.status !== 409) {
         throw new Error(phasePayload.error ?? "Failed to save your work")
       }
 
@@ -747,13 +771,6 @@ export default function CreatePage() {
             }
           : previous,
       )
-
-      sendRealtime({
-        type: "set_ready",
-        roomCode,
-        playerId: currentPlayer.id,
-        isReady: true,
-      })
 
       if (realtimeStatus !== "connected") {
         await fetchGame({ silent: true })
@@ -788,15 +805,6 @@ export default function CreatePage() {
           }
         : previous,
     )
-
-    sendRealtime({
-      type: "set_ready",
-      roomCode,
-      playerId: currentPlayer.id,
-      isReady: desiredReady,
-    })
-
-    setIsTogglingReady(false)
 
     try {
       const response = await fetch(`/api/games/${roomCode}/players/${currentPlayer.id}`, {
@@ -870,23 +878,6 @@ export default function CreatePage() {
             }
           : previous,
       )
-
-      if (nextStatus && nextStatus !== previousStatus) {
-        sendRealtime({
-          type: "set_status",
-          roomCode,
-          playerId: currentPlayer.id,
-          status: nextStatus,
-          currentPhase: nextCurrentPhase,
-          phaseStartTime,
-        })
-      }
-
-      sendRealtime({
-        type: "advance_phase",
-        roomCode,
-        playerId: currentPlayer.id,
-      })
 
       if (realtimeStatus !== "connected") {
         await fetchGame({ silent: true })

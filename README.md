@@ -6,9 +6,10 @@ The Exquisite Corpse Ad Game - A multiplayer web game where players collaborativ
 
 - **Frontend**: Next.js 15 (App Router), React, TypeScript, Shadcn UI
 - **Design**: Cassette Futurism + Classic Ogilvy Advertising aesthetic
-- **Database**: Supabase (PostgreSQL + Realtime + Storage) - TODO
-- **AI**: OpenAI (brief generation) + Nano Banana (image generation) - TODO
-- **Hosting**: Vercel
+- **Database**: Supabase (PostgreSQL + Storage)
+- **Realtime**: Custom WebSocket server (Node.js) + Supabase Realtime
+- **AI**: OpenAI (brief generation) + Nano Banana (image generation)
+- **Hosting**: Vercel (frontend) + Railway (realtime server)
 
 ## Project Structure
 
@@ -68,15 +69,36 @@ See `SCREEN_FLOW.md` for detailed navigation and features.
 ## Getting Started
 
 \`\`\`bash
-npm install
-npm run dev
+# Install dependencies
+pnpm install
+
+# Start the realtime server (Terminal 1)
+cd services/realtime-server
+pnpm dev
+
+# Start the Next.js app (Terminal 2)
+pnpm dev
 \`\`\`
 
 Open [http://localhost:3000](http://localhost:3000)
 
 ### Environment Variables
 
-Copy `.env.example` to `.env` and populate the Supabase keys. At a minimum, set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` so the app can connect to Supabase locally. Add `OPENAI_API_KEY` if you want server routes to generate campaign briefs via OpenAI.
+**Required for Next.js** (`.env`):
+- `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anonymous key
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
+- `NEXT_PUBLIC_REALTIME_URL` - WebSocket server URL (default: `http://localhost:8080`)
+- `REALTIME_SHARED_SECRET` - JWT secret for realtime tokens
+- `REALTIME_BROADCAST_SECRET` - Shared secret for API → WS communication
+- `OPENAI_API_KEY` - (Optional) For AI brief generation
+
+**Required for Realtime Server** (`services/realtime-server/.env`):
+- `SUPABASE_URL` - Your Supabase project URL
+- `SUPABASE_ANON_KEY` - Supabase anonymous key
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
+- `REALTIME_SHARED_SECRET` - JWT secret (must match Next.js)
+- `REALTIME_BROADCAST_SECRET` - Shared secret (must match Next.js)
 
 ### Useful Scripts
 
@@ -85,35 +107,39 @@ Copy `.env.example` to `.env` and populate the Supabase keys. At a minimum, set 
 
 ## Current Status
 
-All screens are built with:
-- Clean, retro-styled layouts
+✅ **Complete**:
+- All UI screens with cassette futurism design
+- Game state machine with phase transitions
+- Supabase database integration
+- **Single source of truth realtime architecture**
+- **WebSocket server with authorization**
+- **API → Database → WebSocket broadcast pattern**
+- Deterministic presenter assignment
+- Overwrite protection for concurrent edits
 - Sample data for testing
-- Full navigation flow
-- Placeholder components
 
-### TODO: Database Integration
+🚧 **In Progress**:
+- Canvas integration (Excalidraw/tldraw)
+- AI brief generation optimization
+- Image generation for visual phase
 
-All API routes in `app/api/` have comprehensive TODO comments for:
-- Supabase database operations
-- Realtime subscriptions
-- AI API integration
-- File storage
+## Realtime Architecture
 
-### TODO: Canvas Integration
+The app uses a **single source of truth pattern**:
 
-The Canvas component (`components/canvas.tsx`) needs integration with:
-- Excalidraw, tldraw, or Fabric.js
-- Drawing tools (pen, shapes, text)
-- Image generation (Gemini Nano Banana)
-- State serialization for database
+1. Client sends HTTP request to API route
+2. API route updates database (Supabase)
+3. API route broadcasts event to WebSocket server
+4. WebSocket server broadcasts to all clients in room
+5. Clients receive instant updates
 
-### TODO: Real-time Features
+**Key Features**:
+- Eliminates dual-write race conditions
+- Guaranteed consistency between DB and WebSocket
+- Server-side authorization for all WebSocket events
+- Clients cannot spoof player IDs or manipulate other players
 
-Implement Supabase Realtime for:
-- Player joins/leaves
-- Phase transitions
-- Timer synchronization
-- Live canvas updates
+See [CLAUDE.md](CLAUDE.md) for detailed architecture documentation.
 
 ## Design System
 

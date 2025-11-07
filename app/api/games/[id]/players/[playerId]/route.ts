@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { TABLES } from "@/lib/db"
+import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 
 const updateSchema = z.object({
@@ -60,6 +61,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!player) {
       return NextResponse.json({ success: false, error: "Player not found" }, { status: 404 })
     }
+
+    // Broadcast to WebSocket clients
+    await broadcastToRoom(room.code, {
+      type: "ready_update",
+      roomCode: room.code,
+      playerId: player.id,
+      isReady: player.is_ready ?? false,
+      version: 0, // Version will be managed by WS server
+    })
 
     return NextResponse.json({
       success: true,
