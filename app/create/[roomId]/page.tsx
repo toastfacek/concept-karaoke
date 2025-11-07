@@ -536,7 +536,8 @@ export default function CreatePage() {
     const totalPlayers = game.players.length
     if (totalPlayers === 0) return null
 
-    const targetIndex = ((playerIndex - phaseIndex) % totalPlayers + totalPlayers) % totalPlayers
+    // "Passing to the left" - each phase, adlobs rotate one position
+    const targetIndex = (playerIndex + phaseIndex) % totalPlayers
     return game.adlobs[targetIndex] ?? null
   }, [game, currentPlayer, playerIndex, phaseIndex])
 
