@@ -23,12 +23,12 @@ const requestSchema = z.object({
 const briefSchema = z.object({
   productName: z.string().min(1),
   productCategory: z.string().min(1),
-  tagline: z.string().optional(),
-  productFeatures: z.string().optional(),
+  mainPoint: z.string().min(1),
+  audience: z.string().min(1),
   businessProblem: z.string().min(1),
-  targetAudience: z.string().min(1),
   objective: z.string().min(1),
-  weirdConstraint: z.string().optional(),
+  strategy: z.string().min(1),
+  productFeatures: z.string().min(1),
 })
 
 const GEMINI_GENERATE_URL =
@@ -202,11 +202,14 @@ export async function POST(request: Request) {
       console.error("Failed to generate brief, using empty brief as fallback", briefError)
       // Fallback to empty brief if generation fails
       generatedBrief = {
-        productName: "",
+        productName: "Untitled Product",
         productCategory: room.product_category ?? "All",
-        businessProblem: "",
-        targetAudience: "",
-        objective: "",
+        mainPoint: "Deliver a surprising benefit",
+        audience: "General audience",
+        businessProblem: "No business problem provided",
+        objective: "Create an engaging concept",
+        strategy: "Lean into humor and over-the-top claims",
+        productFeatures: "Feature 1, Feature 2, Feature 3",
       }
     }
 
@@ -214,7 +217,7 @@ export async function POST(request: Request) {
     let coverImageUrl: string | null = null
     try {
       const geminiKey = env.server.GEMINI_API_KEY ?? requireServerEnv("GEMINI_API_KEY")
-      const imagePrompt = `Professional product photograph for ${generatedBrief.productName}, a ${generatedBrief.productCategory} product. ${generatedBrief.productFeatures || generatedBrief.tagline || ""}. High-quality marketing image, clean composition, modern aesthetic.`
+      const imagePrompt = `Professional product photograph for ${generatedBrief.productName}, a ${generatedBrief.productCategory} product. ${generatedBrief.mainPoint}. ${generatedBrief.productFeatures}. High-quality marketing image, clean composition, modern aesthetic.`
       coverImageUrl = await generateProductImage(imagePrompt, geminiKey)
       if (!coverImageUrl) {
         console.warn("[Game Start] Failed to generate cover image, continuing without image")
@@ -242,12 +245,12 @@ export async function POST(request: Request) {
         .update({
           product_name: generatedBrief.productName,
           product_category: generatedBrief.productCategory,
-          tagline: generatedBrief.tagline ?? null,
-          product_features: generatedBrief.productFeatures ?? null,
+          main_point: generatedBrief.mainPoint,
+          audience: generatedBrief.audience,
           business_problem: generatedBrief.businessProblem,
-          target_audience: generatedBrief.targetAudience,
           objective: generatedBrief.objective,
-          weird_constraint: generatedBrief.weirdConstraint ?? null,
+          strategy: generatedBrief.strategy,
+          product_features: generatedBrief.productFeatures,
           cover_image_url: coverImageUrl,
         })
         .eq("id", existingBrief.id)
@@ -264,12 +267,12 @@ export async function POST(request: Request) {
           room_id: room.id,
           product_name: generatedBrief.productName,
           product_category: generatedBrief.productCategory,
-          tagline: generatedBrief.tagline ?? null,
-          product_features: generatedBrief.productFeatures ?? null,
+          main_point: generatedBrief.mainPoint,
+          audience: generatedBrief.audience,
           business_problem: generatedBrief.businessProblem,
-          target_audience: generatedBrief.targetAudience,
           objective: generatedBrief.objective,
-          weird_constraint: generatedBrief.weirdConstraint ?? null,
+          strategy: generatedBrief.strategy,
+          product_features: generatedBrief.productFeatures,
           cover_image_url: coverImageUrl,
         })
         .select("id")
