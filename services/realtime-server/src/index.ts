@@ -7,7 +7,6 @@ import {
   verifyRealtimeToken,
   type ClientToServerEvent,
   type GameStatus,
-  type PlayerSummary,
   type RoomSnapshot,
   type ServerToClientEvent,
 } from "@concept-karaoke/realtime-shared"

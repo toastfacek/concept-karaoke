@@ -186,7 +186,7 @@ export default function CreatePage() {
   const params = useParams()
   const roomCode = (params.roomId as string).toUpperCase()
   const realtime = useRealtime()
-  const { send: sendRealtime, status: realtimeStatus } = realtime
+  const { status: realtimeStatus } = realtime
 
   const [storedPlayer, setStoredPlayer] = useState<StoredPlayer | null>(null)
   const [game, setGame] = useState<GameState | null>(null)
@@ -866,8 +866,6 @@ export default function CreatePage() {
       const nextStatus = typeof payload.status === "string" ? payload.status : null
       const nextCurrentPhase = payload.currentPhase ?? null
       const phaseStartTime = typeof payload.phaseStartTime === "string" ? payload.phaseStartTime : new Date().toISOString()
-      const previousStatus = latestGameRef.current?.status ?? game.status
-
       setGame((previous) =>
         previous
           ? {

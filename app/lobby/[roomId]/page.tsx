@@ -13,7 +13,7 @@ import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
 import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
 import type { RealtimeStatus } from "@/lib/realtime-client"
-import type { ProductCategory, PhaseDuration } from "@/lib/types"
+import type { BriefStyle, ProductCategory, PhaseDuration } from "@/lib/types"
 
 type LobbyPlayer = {
   id: string
@@ -35,7 +35,7 @@ export default function LobbyPage() {
   const params = useParams()
   const roomCode = (params.roomId as string).toUpperCase()
   const realtime = useRealtime()
-  const { send: sendRealtime, status: realtimeStatus } = realtime
+  const { status: realtimeStatus } = realtime
 
   const [storedPlayer, setStoredPlayer] = useState<StoredPlayer | null>(null)
   const [lobby, setLobby] = useState<LobbyState | null>(null)
@@ -476,7 +476,7 @@ export default function LobbyPage() {
         unsubscribeSettingsChanged,
       ]
     },
-    [clearPendingRefresh],
+    [clearPendingRefresh, roomCode],
   )
 
   useRoomRealtime({
@@ -536,7 +536,7 @@ export default function LobbyPage() {
               <GameSettings
                 productCategory={lobby.productCategory as ProductCategory}
                 phaseDurationSeconds={lobby.phaseDurationSeconds as PhaseDuration}
-                briefStyle={lobby.briefStyle as import("@/lib/types").BriefStyle}
+                briefStyle={lobby.briefStyle as BriefStyle}
                 isHost={isHost}
                 roomCode={roomCode}
                 playerId={currentPlayer.id}
