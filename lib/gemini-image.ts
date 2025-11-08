@@ -3,7 +3,12 @@
  *
  * Reusable utility for generating images using Gemini 2.5 Flash Image model.
  * Extracted from /app/api/images/generate/route.ts for use in brief generation.
+ *
+ * Images are uploaded to Supabase Storage instead of being stored as base64
+ * data URLs in the database.
  */
+
+import { uploadProductImage } from "@/lib/supabase-storage"
 
 const GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image"
 const GEMINI_IMAGE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent`
@@ -107,11 +112,11 @@ function extractImageFromPayload(payload: unknown): ImagePayload | undefined {
 }
 
 /**
- * Generate a product image using Gemini 2.5 Flash Image
+ * Generate a product image using Gemini 2.5 Flash Image and upload to Supabase Storage
  *
  * @param prompt - The image generation prompt
  * @param geminiKey - Gemini API key
- * @returns Base64 data URL of the generated image, or null if generation fails
+ * @returns Public URL of the uploaded image, or null if generation/upload fails
  */
 export async function generateProductImage(prompt: string, geminiKey: string): Promise<string | null> {
   try {
@@ -154,11 +159,19 @@ export async function generateProductImage(prompt: string, geminiKey: string): P
     }
 
     const mimeType = image.mimeType ?? "image/png"
-    const dataUrl = `data:${mimeType};base64,${image.data}`
-
     console.log("[Gemini Image] Successfully generated image, size:", image.data.length, "characters")
 
-    return dataUrl
+    // Upload to Supabase Storage instead of returning base64 data URL
+    console.log("[Gemini Image] Uploading to Supabase Storage...")
+    const publicUrl = await uploadProductImage(image.data, mimeType)
+
+    if (!publicUrl) {
+      console.error("[Gemini Image] Failed to upload image to storage")
+      return null
+    }
+
+    console.log("[Gemini Image] Successfully uploaded to storage:", publicUrl)
+    return publicUrl
   } catch (error) {
     console.error("[Gemini Image] Error generating product image:", error)
     return null
