@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { TABLES } from "@/lib/db"
+import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 
 const briefSchema = z.object({
@@ -10,6 +11,7 @@ const briefSchema = z.object({
   businessProblem: z.string().min(1, "Business problem is required"),
   targetAudience: z.string().min(1, "Target audience is required"),
   objective: z.string().min(1, "Objective is required"),
+  playerId: z.string().min(1, "Player ID is required"),
 })
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -27,6 +29,30 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     const supabase = getSupabaseAdminClient()
 
+    // Get the brief and associated room to verify host status
+    const { data: existingBrief, error: briefError } = await supabase
+      .from(TABLES.campaignBriefs)
+      .select("id, room_id")
+      .eq("id", id)
+      .maybeSingle()
+
+    if (briefError || !existingBrief) {
+      return NextResponse.json({ success: false, error: "Brief not found" }, { status: 404 })
+    }
+
+    // Verify the player is the host
+    const { data: player } = await supabase
+      .from(TABLES.players)
+      .select("id, is_host")
+      .eq("id", parsed.data.playerId)
+      .eq("room_id", existingBrief.room_id)
+      .maybeSingle()
+
+    if (!player || !player.is_host) {
+      return NextResponse.json({ success: false, error: "Only the host can update the brief" }, { status: 403 })
+    }
+
+    // Update the brief
     const { data: brief, error: updateError } = await supabase
       .from(TABLES.campaignBriefs)
       .update({
@@ -46,6 +72,28 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     if (!brief) {
       return NextResponse.json({ success: false, error: "Brief not found" }, { status: 404 })
+    }
+
+    // Increment game version to trigger realtime refresh
+    const { data: gameRoom } = await supabase
+      .from(TABLES.gameRooms)
+      .select("version, code")
+      .eq("id", brief.room_id)
+      .single()
+
+    if (gameRoom) {
+      await supabase
+        .from(TABLES.gameRooms)
+        .update({ version: (gameRoom.version ?? 0) + 1 })
+        .eq("id", brief.room_id)
+
+      // Broadcast to WebSocket clients
+      await broadcastToRoom(gameRoom.code, {
+        type: "brief_updated",
+        roomCode: gameRoom.code,
+        briefId: brief.id,
+        version: 0, // Version managed by WS server
+      })
     }
 
     return NextResponse.json({

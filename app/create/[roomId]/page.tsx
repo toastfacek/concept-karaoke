@@ -18,6 +18,7 @@ import { useRoomRealtime, type RoomRealtimeListenerHelpers } from "@/hooks/use-r
 import { canvasHasContent, canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/canvas"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
+import { cn } from "@/lib/utils"
 import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
 import type { CreationPhase } from "@/lib/types"
 import type { RealtimeStatus } from "@/lib/realtime-client"
@@ -83,6 +84,77 @@ const PHASE_INSTRUCTIONS: Record<CreationPhase, string> = {
   headline: "Drop a headline that sings. Integrate it with the visual concept so it feels polished.",
   pitch:
     "Write a pitch that sells the campaign with swagger (aim for 50-100 words). No edits to previous work—just riff.",
+}
+
+const PHASE_SHORT_LABELS: Record<CreationPhase, string> = {
+  big_idea: "Big Idea",
+  visual: "Visual",
+  headline: "Headline",
+  pitch: "Pitch",
+}
+
+const IDEA_THEMES = [
+  {
+    gradient: "bg-gradient-to-br from-amber-400/20 via-transparent to-transparent",
+    ring: "ring-1 ring-inset ring-amber-400/40",
+    badgeShell: "border border-amber-300/60 bg-amber-400/15",
+    badgePill: "bg-amber-400 text-amber-950",
+    accentText: "text-amber-500",
+  },
+  {
+    gradient: "bg-gradient-to-br from-sky-400/20 via-transparent to-transparent",
+    ring: "ring-1 ring-inset ring-sky-400/40",
+    badgeShell: "border border-sky-300/60 bg-sky-400/15",
+    badgePill: "bg-sky-400 text-sky-950",
+    accentText: "text-sky-500",
+  },
+  {
+    gradient: "bg-gradient-to-br from-emerald-400/20 via-transparent to-transparent",
+    ring: "ring-1 ring-inset ring-emerald-400/40",
+    badgeShell: "border border-emerald-300/60 bg-emerald-400/15",
+    badgePill: "bg-emerald-400 text-emerald-950",
+    accentText: "text-emerald-500",
+  },
+  {
+    gradient: "bg-gradient-to-br from-fuchsia-400/20 via-transparent to-transparent",
+    ring: "ring-1 ring-inset ring-fuchsia-400/40",
+    badgeShell: "border border-fuchsia-300/60 bg-fuchsia-400/15",
+    badgePill: "bg-fuchsia-400 text-fuchsia-950",
+    accentText: "text-fuchsia-500",
+  },
+  {
+    gradient: "bg-gradient-to-br from-indigo-400/20 via-transparent to-transparent",
+    ring: "ring-1 ring-inset ring-indigo-400/40",
+    badgeShell: "border border-indigo-300/60 bg-indigo-400/15",
+    badgePill: "bg-indigo-400 text-indigo-50",
+    accentText: "text-indigo-500",
+  },
+] as const
+
+type IdeaTheme = (typeof IDEA_THEMES)[number]
+
+function hashToThemeIndex(value: string | null, length: number) {
+  if (!value) return 0
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(index)
+    hash |= 0
+  }
+  return Math.abs(hash) % length
+}
+
+function getIdeaTheme(adlobId: string | null): IdeaTheme {
+  const index = hashToThemeIndex(adlobId, IDEA_THEMES.length)
+  return IDEA_THEMES[index]
+}
+
+function formatIdeaLabel(index: number) {
+  if (index < 0) return "Idea"
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  if (index < alphabet.length) {
+    return `Idea ${alphabet[index]}`
+  }
+  return `Idea ${index + 1}`
 }
 
 function getPhaseIndex(phase: CreationPhase | null): number {
@@ -263,23 +335,29 @@ export default function CreatePage() {
   }, [fetchGame, realtimeStatus])
 
   const getInitialSnapshot = useCallback(() => {
+    if (game) {
+      return stateToSnapshot(game)
+    }
     const snapshotSource = latestGameRef.current
     return snapshotSource ? stateToSnapshot(snapshotSource) : null
-  }, [])
+  }, [game])
 
   const registerRealtimeListeners = useCallback(
     ({ addListener }: RoomRealtimeListenerHelpers) => {
       const unsubscribeHello = addListener("hello_ack", ({ snapshot: incoming }) => {
+        console.log("[create realtime] hello_ack", { roomCode, version: incoming.version, players: incoming.players.length })
         setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as GameState) : previous))
         clearPendingRefresh()
       })
 
       const unsubscribeRoomState = addListener("room_state", ({ snapshot: incoming }) => {
+        console.log("[create realtime] room_state", { roomCode, version: incoming.version, players: incoming.players.length })
         setGame((previous) => (previous ? (mergeSnapshotIntoState(previous, incoming) as GameState) : previous))
         clearPendingRefresh()
       })
 
       const unsubscribeReady = addListener("ready_update", ({ playerId: readyPlayerId, isReady, version }) => {
+        console.log("[create realtime] ready_update", { roomCode, playerId: readyPlayerId, isReady, version })
         setGame((previous) =>
           previous
             ? {
@@ -297,6 +375,7 @@ export default function CreatePage() {
       })
 
       const unsubscribePhase = addListener("phase_changed", ({ currentPhase, phaseStartTime, version }) => {
+        console.log("[create realtime] phase_changed", { roomCode, currentPhase, phaseStartTime, version })
         setGame((previous) =>
           previous
             ? {
@@ -304,13 +383,38 @@ export default function CreatePage() {
                 currentPhase,
                 phaseStartTime,
                 version,
-            }
+              }
           : previous,
         )
         clearPendingRefresh()
+        // Refetch to get fresh adlob assignments and creator fields
+        fetchGame({ silent: true }).catch((err) => {
+          console.error("Failed to refetch after phase change", err)
+        })
+      })
+
+      const unsubscribeStatusChanged = addListener("status_changed", ({ status, currentPhase, phaseStartTime, version }) => {
+        console.log("[create realtime] status_changed", { roomCode, status, currentPhase, phaseStartTime, version })
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                status,
+                currentPhase,
+                phaseStartTime,
+                version,
+              }
+          : previous,
+        )
+        clearPendingRefresh()
+        // Refetch to get latest game state (presenter assignments, etc.)
+        fetchGame({ silent: true }).catch((err) => {
+          console.error("Failed to refetch after status change", err)
+        })
       })
 
       const unsubscribePlayerJoined = addListener("player_joined", ({ player, version }) => {
+        console.log("[create realtime] player_joined", { roomCode, playerId: player.id, version })
         setGame((previous) => {
           if (!previous) return previous
           const exists = previous.players.some((existing) => existing.id === player.id)
@@ -358,6 +462,7 @@ export default function CreatePage() {
       })
 
       const unsubscribePlayerLeft = addListener("player_left", ({ playerId: leftPlayerId, version }) => {
+        console.log("[create realtime] player_left", { roomCode, playerId: leftPlayerId, version })
         setGame((previous) =>
           previous
             ? {
@@ -378,9 +483,27 @@ export default function CreatePage() {
         clearPendingRefresh()
       })
 
-      return [unsubscribeHello, unsubscribeRoomState, unsubscribeReady, unsubscribePhase, unsubscribePlayerJoined, unsubscribePlayerLeft]
+      const unsubscribeContentSubmitted = addListener("content_submitted", ({ adlobId, phase, playerId, version }) => {
+        console.log("[create realtime] content_submitted", { roomCode, adlobId, phase, playerId, version })
+        // Refetch game to get latest adlob content
+        fetchGame({ silent: true }).catch((err) => {
+          console.error("Failed to refetch after content submission", err)
+        })
+        clearPendingRefresh()
+      })
+
+      return [
+        unsubscribeHello,
+        unsubscribeRoomState,
+        unsubscribeReady,
+        unsubscribePhase,
+        unsubscribeStatusChanged,
+        unsubscribePlayerJoined,
+        unsubscribePlayerLeft,
+        unsubscribeContentSubmitted,
+      ]
     },
-    [clearPendingRefresh],
+    [clearPendingRefresh, fetchGame, roomCode],
   )
 
   useRoomRealtime({
@@ -404,7 +527,11 @@ export default function CreatePage() {
 
   const phaseIndex = useMemo(() => getPhaseIndex(game?.currentPhase ?? null), [game?.currentPhase])
 
-  const currentAdlob = useMemo(() => {
+  // Lock adlob assignment per phase to prevent mid-phase swapping
+  const [lockedAdlobId, setLockedAdlobId] = useState<string | null>(null)
+
+  // Calculate which adlob should be assigned based on rotation formula
+  const calculatedAdlob = useMemo(() => {
     if (!game || !currentPlayer) return null
     if (!game.adlobs || game.adlobs.length === 0) return null
     if (playerIndex === -1) return null
@@ -413,12 +540,31 @@ export default function CreatePage() {
     const totalPlayers = game.players.length
     if (totalPlayers === 0) return null
 
-    const targetIndex = ((playerIndex - phaseIndex) % totalPlayers + totalPlayers) % totalPlayers
+    // "Passing to the left" - each phase, adlobs rotate one position
+    const targetIndex = (playerIndex + phaseIndex) % totalPlayers
     return game.adlobs[targetIndex] ?? null
   }, [game, currentPlayer, playerIndex, phaseIndex])
 
+  // Lock the adlob assignment when phase changes
+  useEffect(() => {
+    if (calculatedAdlob && calculatedAdlob.id !== lockedAdlobId) {
+      setLockedAdlobId(calculatedAdlob.id)
+    }
+  }, [phaseIndex, calculatedAdlob, lockedAdlobId])
+
+  // Use locked adlob reference to prevent mid-phase swapping
+  const currentAdlob = useMemo(() => {
+    if (!lockedAdlobId || !game?.adlobs) return null
+    return game.adlobs.find((adlob) => adlob.id === lockedAdlobId) ?? null
+  }, [lockedAdlobId, game?.adlobs])
+
   const visualCanvasData = useMemo(() => parseCanvasData(currentAdlob?.visualCanvasData), [currentAdlob])
   const headlineCanvasData = useMemo(() => parseCanvasData(currentAdlob?.headlineCanvasData), [currentAdlob])
+
+  const currentAdlobIndex = useMemo(() => {
+    if (!game || !currentAdlob) return -1
+    return game.adlobs.findIndex((candidate) => candidate.id === currentAdlob.id)
+  }, [game, currentAdlob])
 
   useEffect(() => {
     const nextPhase = game?.currentPhase ?? null
@@ -483,6 +629,18 @@ export default function CreatePage() {
     return phases
   }, [currentAdlob])
 
+  const ideaTheme = useMemo(() => getIdeaTheme(currentAdlob?.id ?? null), [currentAdlob?.id])
+  const ideaLabel = useMemo(() => formatIdeaLabel(currentAdlobIndex), [currentAdlobIndex])
+  const phaseChips = useMemo(
+    () =>
+      CREATION_SEQUENCE.map((phase) => ({
+        phase,
+        isActive: game?.currentPhase === phase,
+        isCompleted: completedPhases.includes(phase),
+      })),
+    [completedPhases, game?.currentPhase],
+  )
+
   const playerStatusData = useMemo(() => {
     return (game?.players ?? []).map((p) => ({
       id: p.id,
@@ -506,7 +664,7 @@ export default function CreatePage() {
       if (game.currentPhase === "big_idea") {
         const text = bigIdeaInput.trim()
         if (text.length === 0) {
-          setError("Give your other players something to work with!")
+          setError("Big idea can't be blank.")
           setIsSubmitting(false)
           return
         }
@@ -524,8 +682,8 @@ export default function CreatePage() {
         }
 
         const notes = visualNotes.trim()
-        if (notes.length < 10) {
-          setError("Add at least one sentence (10+ characters) of visual guidance for the next teammate.")
+        if (notes.length === 0) {
+          setError("Visual notes can't be blank.")
           setIsSubmitting(false)
           return
         }
@@ -555,6 +713,11 @@ export default function CreatePage() {
         }
       } else if (game.currentPhase === "pitch") {
         const text = pitchInput.trim()
+        if (text.length === 0) {
+          setError("Pitch can't be blank.")
+          setIsSubmitting(false)
+          return
+        }
 
         submissionEndpoint = `/api/adlobs/${currentAdlob.id}/pitch`
         submissionPayload = {
@@ -575,15 +738,39 @@ export default function CreatePage() {
       })
       const phasePayload = await response.json()
 
-      if (!response.ok || !phasePayload.success) {
+      // Allow 409 (already submitted) to pass through - player can still ready up
+      if (!response.ok && response.status !== 409) {
         throw new Error(phasePayload.error ?? "Failed to save your work")
       }
 
-      await fetch(`/api/games/${roomCode}/players/${currentPlayer.id}`, {
+      if (!phasePayload.success && response.status !== 409) {
+        throw new Error(phasePayload.error ?? "Failed to save your work")
+      }
+
+      const readyResponse = await fetch(`/api/games/${roomCode}/players/${currentPlayer.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isReady: true }),
       })
+
+      const readyPayload = await readyResponse.json()
+
+      if (!readyResponse.ok || !readyPayload.success) {
+        throw new Error(readyPayload.error ?? "Unable to update ready state.")
+      }
+
+      setGame((previous) =>
+        previous
+          ? {
+              ...previous,
+              players: previous.players.map((player) =>
+                player.id === currentPlayer.id
+                  ? { ...player, isReady: true, joinedAt: player.joinedAt ?? new Date().toISOString() }
+                  : { ...player, joinedAt: player.joinedAt ?? new Date().toISOString() },
+              ),
+            }
+          : previous,
+      )
 
       if (realtimeStatus !== "connected") {
         await fetchGame({ silent: true })
@@ -619,13 +806,6 @@ export default function CreatePage() {
         : previous,
     )
 
-    sendRealtime({
-      type: "set_ready",
-      roomCode,
-      playerId: currentPlayer.id,
-      isReady: desiredReady,
-    })
-
     try {
       const response = await fetch(`/api/games/${roomCode}/players/${currentPlayer.id}`, {
         method: "PATCH",
@@ -639,7 +819,11 @@ export default function CreatePage() {
         throw new Error(payload.error ?? "Unable to update ready state.")
       }
 
-      await fetchGame({ silent: true })
+      if (realtimeStatus !== "connected") {
+        await fetchGame({ silent: true })
+      } else {
+        scheduleSnapshotFallback()
+      }
     } catch (readyError) {
       console.error(readyError)
       setGame((previous) =>
@@ -679,11 +863,21 @@ export default function CreatePage() {
         throw new Error(payload.error ?? "Failed to advance phase")
       }
 
-      sendRealtime({
-        type: "advance_phase",
-        roomCode,
-        playerId: currentPlayer.id,
-      })
+      const nextStatus = typeof payload.status === "string" ? payload.status : null
+      const nextCurrentPhase = payload.currentPhase ?? null
+      const phaseStartTime = typeof payload.phaseStartTime === "string" ? payload.phaseStartTime : new Date().toISOString()
+      const previousStatus = latestGameRef.current?.status ?? game.status
+
+      setGame((previous) =>
+        previous
+          ? {
+              ...previous,
+              status: nextStatus ?? previous.status,
+              currentPhase: nextStatus === "creating" ? nextCurrentPhase : null,
+              phaseStartTime,
+            }
+          : previous,
+      )
 
       if (realtimeStatus !== "connected") {
         await fetchGame({ silent: true })
@@ -756,12 +950,6 @@ export default function CreatePage() {
               />
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>{visualNotes.length} characters</span>
-                {visualNotes.length < 10 && (
-                  <span className="text-amber-600">Add at least 10 characters for context</span>
-                )}
-                {visualNotes.length >= 10 && canvasHasContent(visualCanvas) && (
-                  <span className="text-green-600">Complete! ✓</span>
-                )}
               </div>
             </div>
 
@@ -836,17 +1024,6 @@ export default function CreatePage() {
 
   return (
     <main className="min-h-screen bg-background">
-      {/* Simplified Header */}
-      <header className="bg-muted py-4">
-        <div className="mx-auto max-w-7xl px-6">
-          <div className="retro-border border-b-4 bg-muted p-4">
-            <h1 className="text-2xl font-bold uppercase">
-              {game?.currentPhase ? PHASE_LABELS[game.currentPhase] : "Creation Rounds"}
-            </h1>
-          </div>
-        </div>
-      </header>
-
       {/* Main 2-Column Layout */}
       <div className="mx-auto max-w-7xl p-6">
         {error && <p className="mb-4 font-mono text-sm font-medium text-destructive">{error}</p>}
@@ -854,14 +1031,51 @@ export default function CreatePage() {
         <div className="flex gap-6">
           {/* Left Column - Main Workspace */}
           <div className="flex-1 space-y-6">
-            <section className="retro-border bg-card p-6 space-y-6">
-              <p className="text-center font-mono text-lg">
-                {game?.currentPhase
-                  ? PHASE_INSTRUCTIONS[game.currentPhase]
-                  : "Waiting for the host to kick off the round."}
-              </p>
+            <section className={cn("retro-border relative overflow-hidden bg-card p-6", ideaTheme.ring)}>
+              <div className={cn("pointer-events-none absolute inset-0", ideaTheme.gradient)} />
+              <div className="relative space-y-6">
+                <div className={cn("flex items-center justify-between rounded-md px-3 py-2 text-xs font-semibold uppercase tracking-wide", ideaTheme.badgeShell)}>
+                  <span className={cn("inline-flex items-center gap-2 rounded-full px-3 py-1", ideaTheme.badgePill)}>
+                    {ideaLabel}
+                  </span>
+                  {game && (
+                    <span className={cn("font-mono text-xs", ideaTheme.accentText)}>
+                      {currentAdlobIndex >= 0 ? `Concept ${currentAdlobIndex + 1} of ${game.adlobs.length}` : `Concepts in play: ${game.adlobs.length}`}
+                    </span>
+                  )}
+                </div>
 
-              {renderPhaseContent()}
+                <h1 className="text-2xl font-bold uppercase text-center">
+                  {game?.currentPhase ? PHASE_LABELS[game.currentPhase] : "Creation Rounds"}
+                </h1>
+
+                <p className={cn("text-center font-mono text-lg", ideaTheme.accentText)}>
+                  {game?.currentPhase
+                    ? PHASE_INSTRUCTIONS[game.currentPhase]
+                    : "Waiting for the host to kick off the round."}
+                </p>
+
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  {phaseChips.map(({ phase, isActive, isCompleted }) => (
+                    <span
+                      key={phase}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-widest transition-colors",
+                        isCompleted
+                          ? "bg-emerald-500 text-emerald-950"
+                          : isActive
+                            ? ideaTheme.badgePill
+                            : cn(ideaTheme.badgeShell, "text-muted-foreground"),
+                      )}
+                    >
+                      <span aria-hidden="true">{isCompleted ? "✓" : isActive ? "•" : "○"}</span>
+                      {PHASE_SHORT_LABELS[phase]}
+                    </span>
+                  ))}
+                </div>
+
+                {renderPhaseContent()}
+              </div>
             </section>
           </div>
 

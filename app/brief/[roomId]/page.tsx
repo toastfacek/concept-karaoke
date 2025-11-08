@@ -128,17 +128,20 @@ export default function BriefPage() {
 
         setBriefDraft(briefResponse ?? EMPTY_BRIEF)
 
-        // If this is initial load and brief has content, trigger reveal animation
-        if (initialLoadRef.current && briefResponse && briefResponse.productName) {
+        // Handle loading modal and reveal animation
+        const shouldShowReveal = briefResponse && briefResponse.productName
+        if (shouldShowReveal) {
           setTimeout(() => {
             setShowLoadingModal(false)
             setTimeout(() => {
               setShowBriefReveal(true)
             }, 200)
           }, 1500) // Keep modal visible for a minimum time for better UX
-          initialLoadRef.current = false
-        } else if (initialLoadRef.current) {
+        } else {
           setShowLoadingModal(false)
+        }
+
+        if (initialLoadRef.current) {
           initialLoadRef.current = false
         }
 
@@ -213,6 +216,10 @@ export default function BriefPage() {
         throw new Error("Brief not ready yet.")
       }
 
+      if (!currentPlayer) {
+        throw new Error("Player not found")
+      }
+
       const response = await fetch(`/api/briefs/${game.brief.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -222,6 +229,7 @@ export default function BriefPage() {
           businessProblem: draft.businessProblem,
           targetAudience: draft.targetAudience,
           objective: draft.objective,
+          playerId: currentPlayer.id,
         }),
       })
 
@@ -252,7 +260,7 @@ export default function BriefPage() {
 
       return updatedBrief
     },
-    [game],
+    [game, currentPlayer],
   )
 
   const handleSaveBrief = async (draft: CampaignBrief) => {
@@ -335,6 +343,8 @@ export default function BriefPage() {
       playerId: currentPlayer.id,
       isReady: desiredReady,
     })
+
+    setIsUpdatingReady(false)
 
     try {
       const response = await fetch(`/api/games/${roomCode}/players/${currentPlayer.id}`, {
@@ -440,6 +450,30 @@ export default function BriefPage() {
         throw new Error(payload.error ?? "Failed to advance game")
       }
 
+      const nextStatus = typeof payload.status === "string" ? payload.status : null
+      const nextCurrentPhase = payload.currentPhase ?? null
+      const phaseStartTime = typeof payload.phaseStartTime === "string" ? payload.phaseStartTime : new Date().toISOString()
+
+      if (nextStatus) {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                status: nextStatus,
+              }
+            : previous,
+        )
+
+        sendRealtime({
+          type: "set_status",
+          roomCode,
+          playerId: currentPlayer.id,
+          status: nextStatus,
+          currentPhase: nextCurrentPhase,
+          phaseStartTime,
+        })
+      }
+
       if (payload.status === "creating" && game?.id) {
         const createResponse = await fetch("/api/adlobs/create", {
           method: "POST",
@@ -456,7 +490,9 @@ export default function BriefPage() {
         }
       }
 
-      await fetchGame({ silent: true })
+      if (realtimeStatus !== "connected") {
+        await fetchGame({ silent: true })
+      }
     } catch (advanceError) {
       console.error(advanceError)
       setError(advanceError instanceof Error ? advanceError.message : "Failed to advance game.")
@@ -470,9 +506,12 @@ export default function BriefPage() {
   }, [game])
 
   const getInitialSnapshot = useCallback(() => {
+    if (game) {
+      return stateToSnapshot(game)
+    }
     const snapshotSource = latestGameRef.current
     return snapshotSource ? stateToSnapshot(snapshotSource) : null
-  }, [])
+  }, [game])
 
   const registerRealtimeListeners = useCallback(
     ({ addListener }: RoomRealtimeListenerHelpers) => {
@@ -549,18 +588,39 @@ export default function BriefPage() {
         )
       })
 
+      const unsubscribeStatusChanged = addListener("status_changed", ({ status, version }) => {
+        setGame((previous) =>
+          previous
+            ? {
+                ...previous,
+                status,
+                version,
+              }
+            : previous,
+        )
+      })
+
       const unsubscribePhaseChanged = addListener("phase_changed", ({ version }) => {
         setGame((previous) =>
           previous
             ? {
                 ...previous,
                 version,
-                status: previous.status === "creating" ? previous.status : "creating",
               }
             : previous,
         )
-        fetchGame({ silent: true }).catch((error) => {
-          console.error("Failed to refresh briefing room after phase change", error)
+      })
+
+      const unsubscribeBriefUpdated = addListener("brief_updated", ({ version }) => {
+        console.log("[brief realtime] brief_updated", { roomCode, version })
+        // Show loading modal if brief is being generated for the first time
+        const hasBrief = game?.brief?.productName
+        if (!hasBrief) {
+          setShowLoadingModal(true)
+        }
+        // Refetch to get latest brief content from database
+        fetchGame({ silent: true }).catch((err) => {
+          console.error("Failed to refetch after brief update", err)
         })
       })
 
@@ -570,10 +630,12 @@ export default function BriefPage() {
         unsubscribeReady,
         unsubscribePlayerJoined,
         unsubscribePlayerLeft,
+        unsubscribeStatusChanged,
         unsubscribePhaseChanged,
+        unsubscribeBriefUpdated,
       ]
     },
-    [fetchGame, setGame],
+    [setGame, fetchGame, roomCode, game],
   )
 
   useRoomRealtime({
@@ -609,16 +671,15 @@ export default function BriefPage() {
         category={game?.brief?.productCategory ?? "All"}
       />
 
-      {/* Header */}
-      <header className="retro-border border-b-4 bg-card p-6 text-center">
-        <h1 className="text-4xl font-bold uppercase">Brief Generation</h1>
-        <p className="mt-2 font-mono text-sm text-muted-foreground">
-          Collaborate on the campaign brief, ready up, and let the host launch the creation rounds.
-        </p>
-      </header>
-
-      {/* Main 2-Column Layout */}
-      <div className="mx-auto max-w-7xl p-6">
+      {/* Main Container */}
+      <div className="mx-auto max-w-7xl p-6 space-y-6">
+        {/* Header */}
+        <div className="retro-border bg-card p-6 text-center">
+          <h1 className="text-4xl font-bold uppercase">The Brief</h1>
+          <p className="mt-2 font-mono text-sm text-muted-foreground">
+            Collaborate on the campaign brief, ready up, and let the host launch the creation rounds.
+          </p>
+        </div>
         {error && <p className="mb-4 font-mono text-sm font-medium text-destructive">{error}</p>}
 
         <div className="flex gap-6">

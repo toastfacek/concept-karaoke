@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { TABLES } from "@/lib/db"
+import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 
 const voteSchema = z.object({
@@ -143,18 +144,44 @@ export async function POST(request: Request) {
     const allVotesIn = playerCount !== null && voteCount !== null && voteCount >= playerCount
 
     // If all votes are in, transition to results
+    let phaseStartTime: string | null = null
+
     if (allVotesIn) {
+      const resultsPhaseStartTime = new Date().toISOString()
+      phaseStartTime = resultsPhaseStartTime
       const { error: statusError } = await supabase
         .from(TABLES.gameRooms)
         .update({
           status: "results",
-          phase_start_time: new Date().toISOString(),
+          phase_start_time: resultsPhaseStartTime,
         })
         .eq("id", room.id)
 
       if (statusError) {
         throw statusError
       }
+
+      // Increment version to trigger realtime refresh
+      const { data: currentRoom } = await supabase
+        .from(TABLES.gameRooms)
+        .select("version")
+        .eq("id", room.id)
+        .single()
+
+      await supabase
+        .from(TABLES.gameRooms)
+        .update({ version: (currentRoom?.version ?? 0) + 1 })
+        .eq("id", room.id)
+
+      // Broadcast transition to results to WebSocket clients
+      await broadcastToRoom(room.code, {
+        type: "status_changed",
+        roomCode: room.code,
+        status: "results",
+        currentPhase: null,
+        phaseStartTime: resultsPhaseStartTime,
+        version: 0, // Version will be managed by WS server
+      })
     }
 
     return NextResponse.json({
@@ -162,6 +189,7 @@ export async function POST(request: Request) {
       message: "Vote recorded",
       allVotesIn,
       status: allVotesIn ? "results" : "voting",
+      phaseStartTime,
     })
   } catch (error) {
     console.error("Failed to record vote", error)

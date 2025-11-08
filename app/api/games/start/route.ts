@@ -5,6 +5,7 @@ import { getBriefPrompt } from "@/lib/brief-prompts"
 import { TABLES } from "@/lib/db"
 import { env, requireServerEnv } from "@/lib/env"
 import { transitionGameState } from "@/lib/game-state-machine"
+import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 import type { BriefStyle, CreationPhase, GameStatus } from "@/lib/types"
 import { SPECIFIC_PRODUCT_CATEGORIES } from "@/lib/types"
@@ -145,12 +146,14 @@ export async function POST(request: Request) {
       "briefing",
     )
 
+    const phaseStartTime = new Date().toISOString()
+
     const { error: updateError } = await supabase
       .from(TABLES.gameRooms)
       .update({
         status: nextState.status,
         current_phase: nextState.currentPhase,
-        phase_start_time: new Date().toISOString(),
+        phase_start_time: phaseStartTime,
       })
       .eq("id", room.id)
 
@@ -166,6 +169,28 @@ export async function POST(request: Request) {
     if (resetReadyError) {
       throw resetReadyError
     }
+
+    // Increment version to trigger realtime refresh
+    const { data: currentRoom } = await supabase
+      .from(TABLES.gameRooms)
+      .select("version")
+      .eq("id", room.id)
+      .single()
+
+    await supabase
+      .from(TABLES.gameRooms)
+      .update({ version: (currentRoom?.version ?? 0) + 1 })
+      .eq("id", room.id)
+
+    // Broadcast status change to WebSocket clients
+    await broadcastToRoom(room.code, {
+      type: "status_changed",
+      roomCode: room.code,
+      status: nextState.status,
+      currentPhase: nextState.currentPhase ?? null,
+      phaseStartTime,
+      version: 0, // Version will be managed by WS server
+    })
 
     // Generate AI brief based on product category and style
     const briefStyle = (room.brief_style as BriefStyle) ?? "wacky"
@@ -194,6 +219,7 @@ export async function POST(request: Request) {
       throw briefSelectError
     }
 
+    let briefId: string
     if (existingBrief) {
       // Update existing brief with generated content
       const { error: updateBriefError } = await supabase
@@ -213,28 +239,44 @@ export async function POST(request: Request) {
       if (updateBriefError) {
         throw updateBriefError
       }
+      briefId = existingBrief.id
     } else {
       // Create new brief with generated content
-      const { error: insertBriefError } = await supabase.from(TABLES.campaignBriefs).insert({
-        room_id: room.id,
-        product_name: generatedBrief.productName,
-        product_category: generatedBrief.productCategory,
-        tagline: generatedBrief.tagline ?? null,
-        product_features: generatedBrief.productFeatures ?? null,
-        business_problem: generatedBrief.businessProblem,
-        target_audience: generatedBrief.targetAudience,
-        objective: generatedBrief.objective,
-        weird_constraint: generatedBrief.weirdConstraint ?? null,
-      })
+      const { data: newBrief, error: insertBriefError } = await supabase
+        .from(TABLES.campaignBriefs)
+        .insert({
+          room_id: room.id,
+          product_name: generatedBrief.productName,
+          product_category: generatedBrief.productCategory,
+          tagline: generatedBrief.tagline ?? null,
+          product_features: generatedBrief.productFeatures ?? null,
+          business_problem: generatedBrief.businessProblem,
+          target_audience: generatedBrief.targetAudience,
+          objective: generatedBrief.objective,
+          weird_constraint: generatedBrief.weirdConstraint ?? null,
+        })
+        .select("id")
+        .single()
 
-      if (insertBriefError) {
-        throw insertBriefError
+      if (insertBriefError || !newBrief) {
+        throw insertBriefError || new Error("Failed to create brief")
       }
+      briefId = newBrief.id
     }
+
+    // Broadcast brief update to all players
+    await broadcastToRoom(room.code, {
+      type: "brief_updated",
+      roomCode: room.code,
+      briefId,
+      version: 0, // Version will be managed by WS server
+    })
 
     return NextResponse.json({
       success: true,
       status: nextState.status,
+      currentPhase: nextState.currentPhase ?? null,
+      phaseStartTime,
       brief: generatedBrief,
     })
   } catch (error) {

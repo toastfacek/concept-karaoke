@@ -205,6 +205,208 @@ describe("realtime server integration", () => {
     })
     expect(persistRoomSnapshotMock).toHaveBeenCalled()
   })
+
+  it("broadcasts host status changes immediately", async () => {
+    const port = getRealtimeServerPort()
+    const initialSnapshot = makeSnapshot({
+      id: "snapshot-status",
+      version: 7,
+      players: [
+        makePlayer({
+          id: "player-1",
+          name: "Host Player",
+          isHost: true,
+        }),
+        makePlayer({
+          id: "player-2",
+          name: "Guest Player",
+        }),
+      ],
+    })
+
+    const hostClient = await connectClient({
+      port,
+      playerId: "player-1",
+      snapshot: initialSnapshot,
+    })
+    const hostAck = await hostClient.ack
+    assertHelloAck(hostAck)
+
+    const guestClient = await connectClient({
+      port,
+      playerId: "player-2",
+      snapshot: initialSnapshot,
+    })
+    await guestClient.ack
+
+    const statusChangedPromise = waitForMessage<Extract<ServerToClientEvent, { type: "status_changed" }>>(
+      guestClient.socket,
+      (message): message is Extract<ServerToClientEvent, { type: "status_changed" }> =>
+        message.type === "status_changed" && message.status === "briefing",
+    )
+
+    const phaseStartTime = new Date().toISOString()
+
+    hostClient.socket.send(
+      JSON.stringify({
+        type: "set_status",
+        roomCode: ROOM_CODE,
+        playerId: "player-1",
+        status: "briefing",
+        currentPhase: null,
+        phaseStartTime,
+      }),
+    )
+
+    const statusChanged = await statusChangedPromise
+    expect(statusChanged.status).toBe("briefing")
+    expect(statusChanged.phaseStartTime).toBe(phaseStartTime)
+    expect(statusChanged.version).toBeGreaterThan(hostAck.snapshot.version)
+
+    await waitForSchedulerFlush()
+
+    const statusEventCall = recordRoomEventMock.mock.calls.find((call) => call[0].eventType === "status_changed")
+    expect(statusEventCall).toBeDefined()
+    expect(statusEventCall?.[0]).toMatchObject({
+      roomCode: ROOM_CODE,
+      eventType: "status_changed",
+      payload: {
+        status: "briefing",
+        currentPhase: null,
+        phaseStartTime,
+      },
+    })
+  })
+
+  it("allows non-hosts to broadcast results status", async () => {
+    const port = getRealtimeServerPort()
+    const initialSnapshot = makeSnapshot({
+      id: "snapshot-results",
+      version: 12,
+      players: [
+        makePlayer({
+          id: "player-1",
+          name: "Host Player",
+          isHost: true,
+        }),
+        makePlayer({
+          id: "player-2",
+          name: "Guest Player",
+        }),
+      ],
+    })
+
+    const hostClient = await connectClient({
+      port,
+      playerId: "player-1",
+      snapshot: initialSnapshot,
+    })
+    await hostClient.ack
+
+    const guestClient = await connectClient({
+      port,
+      playerId: "player-2",
+      snapshot: initialSnapshot,
+    })
+    await guestClient.ack
+
+    const statusChangedPromise = waitForMessage<Extract<ServerToClientEvent, { type: "status_changed" }>>(
+      hostClient.socket,
+      (message): message is Extract<ServerToClientEvent, { type: "status_changed" }> =>
+        message.type === "status_changed" && message.status === "results",
+    )
+
+    const phaseStartTime = new Date().toISOString()
+
+    guestClient.socket.send(
+      JSON.stringify({
+        type: "set_status",
+        roomCode: ROOM_CODE,
+        playerId: "player-2",
+        status: "results",
+        currentPhase: null,
+        phaseStartTime,
+      }),
+    )
+
+    const statusChanged = await statusChangedPromise
+    expect(statusChanged.status).toBe("results")
+    expect(statusChanged.phaseStartTime).toBe(phaseStartTime)
+  })
+
+  it("does not overwrite newer room state with stale snapshot", async () => {
+    const port = getRealtimeServerPort()
+    const initialSnapshot = makeSnapshot({
+      id: "snapshot-initial",
+      version: 1,
+      players: [
+        makePlayer({
+          id: "player-1",
+          name: "Host Player",
+          isHost: true,
+        }),
+      ],
+    })
+
+    const hostClient = await connectClient({
+      port,
+      playerId: "player-1",
+      snapshot: initialSnapshot,
+    })
+    await hostClient.ack
+
+    const joinBroadcast = waitForMessage<Extract<ServerToClientEvent, { type: "player_joined" }>>(
+      hostClient.socket,
+      (message): message is Extract<ServerToClientEvent, { type: "player_joined" }> =>
+        message.type === "player_joined" && message.player.id === "player-2",
+    )
+
+    const secondSnapshot = makeSnapshot({
+      id: "snapshot-guest",
+      version: 2,
+      players: [
+        ...initialSnapshot.players,
+        makePlayer({
+          id: "player-2",
+          name: "Guest Player",
+        }),
+      ],
+    })
+
+    const guestClient = await connectClient({
+      port,
+      playerId: "player-2",
+      snapshot: secondSnapshot,
+    })
+    await guestClient.ack
+    await joinBroadcast
+
+    hostClient.socket.close()
+    await waitForSchedulerFlush()
+
+    const staleSnapshot = makeSnapshot({
+      id: "snapshot-stale",
+      version: 1,
+      players: [
+        makePlayer({
+          id: "player-1",
+          name: "Host Player",
+          isHost: true,
+        }),
+      ],
+    })
+
+    const reconnectedHost = await connectClient({
+      port,
+      playerId: "player-1",
+      snapshot: staleSnapshot,
+    })
+    const ack = await reconnectedHost.ack
+    assertHelloAck(ack)
+    expect(ack.snapshot.players).toHaveLength(2)
+    const playerIds = ack.snapshot.players.map((player) => player.id)
+    expect(playerIds).toContain("player-2")
+  })
 })
 
 async function connectClient(options: { port: number; playerId: string; snapshot?: RoomSnapshot }) {

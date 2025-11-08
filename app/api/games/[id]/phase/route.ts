@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import { TABLES } from "@/lib/db"
 import { advanceCreationPhase } from "@/lib/game-state-machine"
+import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 import type { CreationPhase, GameStatus } from "@/lib/types"
 
@@ -100,9 +101,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     let presentSequence: string[] = []
 
     if (nextSnapshot.status === "presenting") {
+      // Fetch all players ordered by join time for deterministic round-robin assignment
+      const { data: allPlayers, error: playersForPresentError } = await supabase
+        .from(TABLES.players)
+        .select("id")
+        .eq("room_id", room.id)
+        .order("joined_at", { ascending: true })
+
+      if (playersForPresentError) {
+        throw playersForPresentError
+      }
+
       const { data: adlobsForPresent, error: adlobsSelectError } = await supabase
         .from(TABLES.adLobs)
-        .select("id, assigned_presenter, pitch_created_by")
+        .select("id")
         .eq("room_id", room.id)
         .order("created_at", { ascending: true })
 
@@ -110,12 +122,39 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         throw adlobsSelectError
       }
 
+      const orderedPlayers = allPlayers ?? []
       const orderedAdlobs = adlobsForPresent ?? []
+
+      // Validate that we have the same number of players and adlobs
+      if (orderedPlayers.length !== orderedAdlobs.length) {
+        console.error(
+          `[PRESENT ASSIGNMENT] Mismatch: ${orderedPlayers.length} players vs ${orderedAdlobs.length} adlobs`,
+        )
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Cannot assign presenters: ${orderedPlayers.length} players but ${orderedAdlobs.length} campaigns`,
+          },
+          { status: 409 },
+        )
+      }
+
+      if (orderedAdlobs.length === 0) {
+        return NextResponse.json(
+          { success: false, error: "Cannot transition to presenting: no campaigns exist" },
+          { status: 409 },
+        )
+      }
+
       presentSequence = orderedAdlobs.map((item) => item.id)
 
+      // Assign presenters using round-robin: player[i] presents adlob[i]
+      // This guarantees every player presents exactly once
       for (let index = 0; index < orderedAdlobs.length; index += 1) {
         const adlob = orderedAdlobs[index]
-        const assignedPresenter = adlob.assigned_presenter ?? adlob.pitch_created_by ?? null
+        const assignedPresenter = orderedPlayers[index].id
+
+        console.log(`[PRESENT ASSIGNMENT] AdLob ${index} (${adlob.id}) → Player ${assignedPresenter}`)
 
         const { error: adlobUpdateError } = await supabase
           .from(TABLES.adLobs)
@@ -131,15 +170,30 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           throw adlobUpdateError
         }
       }
+
+      console.log(
+        `[PRESENT ASSIGNMENT] Successfully assigned ${orderedAdlobs.length} presenters for room ${room.id}`,
+      )
     }
 
     const hasPresentSequence = presentSequence.length > 0
+
+    const phaseStartTime = new Date().toISOString()
+
+    // Increment version to trigger realtime refresh for all clients
+    const { data: currentRoom } = await supabase
+      .from(TABLES.gameRooms)
+      .select("version")
+      .eq("id", room.id)
+      .single()
+
     const gameUpdate: Record<string, unknown> = {
       status: nextSnapshot.status,
       current_phase: nextSnapshot.status === "creating" ? nextSnapshot.currentPhase : null,
-      phase_start_time: new Date().toISOString(),
+      phase_start_time: phaseStartTime,
       current_present_index: nextSnapshot.status === "presenting" ? (hasPresentSequence ? 0 : null) : null,
       present_sequence: nextSnapshot.status === "presenting" ? (hasPresentSequence ? presentSequence : null) : null,
+      version: (currentRoom?.version ?? 0) + 1,
     }
 
     const { error: updateError } = await supabase.from(TABLES.gameRooms).update(gameUpdate).eq("id", room.id)
@@ -157,10 +211,33 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       throw resetReadyError
     }
 
+    // Broadcast to WebSocket clients
+    // If status actually changed, send status_changed. Otherwise send phase_changed.
+    if (nextSnapshot.status !== currentSnapshot.status) {
+      await broadcastToRoom(room.code, {
+        type: "status_changed",
+        roomCode: room.code,
+        status: nextSnapshot.status,
+        currentPhase: nextSnapshot.currentPhase ?? null,
+        phaseStartTime,
+        version: 0, // Version will be managed by WS server
+      })
+    } else {
+      // Status stayed the same (still "creating"), so just phase advanced
+      await broadcastToRoom(room.code, {
+        type: "phase_changed",
+        roomCode: room.code,
+        currentPhase: nextSnapshot.currentPhase!,
+        phaseStartTime,
+        version: 0,
+      })
+    }
+
     return NextResponse.json({
       success: true,
       status: nextSnapshot.status,
       currentPhase: nextSnapshot.currentPhase ?? null,
+      phaseStartTime,
     })
   } catch (error) {
     console.error("Failed to advance phase", error)

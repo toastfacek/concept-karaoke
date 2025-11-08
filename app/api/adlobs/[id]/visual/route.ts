@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import { canvasStateSchema } from "@/lib/canvas"
 import { TABLES } from "@/lib/db"
+import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 
 const canvasPayloadSchema = canvasStateSchema.superRefine((value, ctx) => {
@@ -40,7 +41,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     const { data: adlob, error: adlobError } = await supabase
       .from(TABLES.adLobs)
-      .select("id, room_id")
+      .select("id, room_id, visual_created_by")
       .eq("id", adlobId)
       .maybeSingle()
 
@@ -50,6 +51,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     if (!adlob) {
       return NextResponse.json({ success: false, error: "AdLob not found" }, { status: 404 })
+    }
+
+    // Prevent overwriting existing visual from a different creator (safety guard)
+    if (adlob.visual_created_by && adlob.visual_created_by !== parsed.data.createdBy) {
+      return NextResponse.json(
+        { success: false, error: "This visual was already created by another player" },
+        { status: 409 },
+      )
     }
 
     const { data: player, error: playerError } = await supabase
@@ -77,6 +86,30 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     if (updateError) {
       throw updateError
+    }
+
+    // Get room code for broadcast
+    const { data: room } = await supabase
+      .from(TABLES.gameRooms)
+      .select("version, code")
+      .eq("id", adlob.room_id)
+      .single()
+
+    await supabase
+      .from(TABLES.gameRooms)
+      .update({ version: (room?.version ?? 0) + 1 })
+      .eq("id", adlob.room_id)
+
+    // Broadcast to WebSocket clients
+    if (room) {
+      await broadcastToRoom(room.code, {
+        type: "content_submitted",
+        roomCode: room.code,
+        adlobId: adlobId,
+        phase: "visual",
+        playerId: parsed.data.createdBy,
+        version: 0,
+      })
     }
 
     return NextResponse.json({ success: true })

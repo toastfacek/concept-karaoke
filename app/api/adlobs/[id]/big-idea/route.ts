@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { TABLES } from "@/lib/db"
+import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 
 const requestSchema = z.object({
@@ -28,7 +29,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     const { data: adlob, error: adlobError } = await supabase
       .from(TABLES.adLobs)
-      .select("id, room_id")
+      .select("id, room_id, big_idea_created_by")
       .eq("id", adlobId)
       .maybeSingle()
 
@@ -38,6 +39,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     if (!adlob) {
       return NextResponse.json({ success: false, error: "AdLob not found" }, { status: 404 })
+    }
+
+    // Prevent overwriting existing big idea from a different creator (safety guard)
+    if (adlob.big_idea_created_by && adlob.big_idea_created_by !== parsed.data.createdBy) {
+      return NextResponse.json(
+        { success: false, error: "This big idea was already created by another player" },
+        { status: 409 },
+      )
     }
 
     const { data: player, error: playerError } = await supabase
@@ -64,6 +73,30 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     if (updateError) {
       throw updateError
+    }
+
+    // Get room code for broadcast
+    const { data: room } = await supabase
+      .from(TABLES.gameRooms)
+      .select("version, code")
+      .eq("id", adlob.room_id)
+      .single()
+
+    await supabase
+      .from(TABLES.gameRooms)
+      .update({ version: (room?.version ?? 0) + 1 })
+      .eq("id", adlob.room_id)
+
+    // Broadcast to WebSocket clients
+    if (room) {
+      await broadcastToRoom(room.code, {
+        type: "content_submitted",
+        roomCode: room.code,
+        adlobId: adlobId,
+        phase: "big_idea",
+        playerId: parsed.data.createdBy,
+        version: 0, // Version managed by WS server
+      })
     }
 
     return NextResponse.json({ success: true })

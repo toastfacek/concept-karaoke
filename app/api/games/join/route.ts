@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { TABLES } from "@/lib/db"
+import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 
 const MAX_PLAYERS = 8
@@ -97,6 +98,32 @@ export async function POST(request: Request) {
     if (playerError) {
       throw playerError
     }
+
+    // Increment version to trigger realtime refresh
+    const { data: currentRoom } = await supabase
+      .from(TABLES.gameRooms)
+      .select("version")
+      .eq("id", room.id)
+      .single()
+
+    await supabase
+      .from(TABLES.gameRooms)
+      .update({ version: (currentRoom?.version ?? 0) + 1 })
+      .eq("id", room.id)
+
+    // Broadcast to WebSocket clients
+    await broadcastToRoom(room.code, {
+      type: "player_joined",
+      roomCode: room.code,
+      player: {
+        id: player.id,
+        name: player.name,
+        emoji: player.emoji,
+        isReady: player.is_ready ?? false,
+        isHost: player.is_host ?? false,
+      },
+      version: 0, // Version will be managed by WS server
+    })
 
     return NextResponse.json({
       success: true,
