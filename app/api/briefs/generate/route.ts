@@ -4,6 +4,7 @@ import { z } from "zod"
 import { getBriefPrompt } from "@/lib/brief-prompts"
 import { TABLES } from "@/lib/db"
 import { env, requireServerEnv } from "@/lib/env"
+import { generateProductImage } from "@/lib/gemini-image"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 import { SPECIFIC_PRODUCT_CATEGORIES, type BriefStyle } from "@/lib/types"
 
@@ -95,6 +96,19 @@ export async function POST(request: Request) {
 
     const parsedBrief = briefSchema.parse(JSON.parse(textContent))
 
+    // Generate product cover image
+    let coverImageUrl: string | null = null
+    try {
+      const imagePrompt = `Professional product photograph for ${parsedBrief.productName}, a ${parsedBrief.productCategory} product. ${parsedBrief.productFeatures || parsedBrief.tagline || ""}. High-quality marketing image, clean composition, modern aesthetic.`
+      coverImageUrl = await generateProductImage(imagePrompt, geminiKey)
+      if (!coverImageUrl) {
+        console.warn("[Brief Generation] Failed to generate cover image, continuing without image")
+      }
+    } catch (imageError) {
+      console.error("[Brief Generation] Error generating cover image:", imageError)
+      // Continue without image - not critical
+    }
+
     const { data: existing, error: briefFetchError } = await supabase
       .from(TABLES.campaignBriefs)
       .select("id")
@@ -117,6 +131,7 @@ export async function POST(request: Request) {
           target_audience: parsedBrief.targetAudience,
           objective: parsedBrief.objective,
           weird_constraint: parsedBrief.weirdConstraint ?? null,
+          cover_image_url: coverImageUrl,
         })
         .eq("id", existing.id)
 
@@ -134,6 +149,7 @@ export async function POST(request: Request) {
         target_audience: parsedBrief.targetAudience,
         objective: parsedBrief.objective,
         weird_constraint: parsedBrief.weirdConstraint ?? null,
+        cover_image_url: coverImageUrl,
       })
 
       if (insertError) {
@@ -143,7 +159,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      brief: parsedBrief,
+      brief: {
+        ...parsedBrief,
+        coverImageUrl: coverImageUrl ?? undefined,
+      },
     })
   } catch (error) {
     console.error("Failed to generate brief", error)

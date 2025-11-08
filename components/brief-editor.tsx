@@ -16,6 +16,7 @@ interface CampaignBrief {
   targetAudience: string
   objective: string
   weirdConstraint?: string
+  coverImageUrl?: string
 }
 
 interface BriefEditorProps {
@@ -162,6 +163,22 @@ export function BriefEditor({
       </div>
 
       <div className="space-y-6">
+        {/* Cover Image */}
+        {brief.coverImageUrl && (
+          <div className="space-y-2">
+            <h3 className="font-mono text-sm font-bold uppercase text-muted-foreground">
+              Product Image
+            </h3>
+            <div className="overflow-hidden rounded border-2 border-border">
+              <img
+                src={brief.coverImageUrl}
+                alt={brief.productName || "Product"}
+                className="w-full h-auto"
+              />
+            </div>
+          </div>
+        )}
+
         {renderField("productName", "Product Name", brief.productName)}
 
         {brief.tagline !== undefined && renderField("tagline", "Tagline", brief.tagline || "")}

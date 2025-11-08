@@ -12,6 +12,7 @@ interface CampaignBrief {
   targetAudience: string
   objective: string
   weirdConstraint?: string
+  coverImageUrl?: string
 }
 
 interface BriefViewDialogProps {
@@ -40,6 +41,17 @@ export function BriefViewDialog({ brief, isOpen, onOpenChange }: BriefViewDialog
         <DialogTitle className="text-3xl font-bold uppercase">Campaign Brief</DialogTitle>
 
         <div className="space-y-6">
+          {/* Cover Image */}
+          {brief.coverImageUrl && (
+            <div className="overflow-hidden rounded border-2 border-border">
+              <img
+                src={brief.coverImageUrl}
+                alt={brief.productName}
+                className="w-full h-auto"
+              />
+            </div>
+          )}
+
           {/* Product Name */}
           <div>
             <h3 className="mb-2 text-2xl font-bold">{brief.productName}</h3>

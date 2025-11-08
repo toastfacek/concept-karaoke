@@ -5,6 +5,7 @@ import { getBriefPrompt } from "@/lib/brief-prompts"
 import { TABLES } from "@/lib/db"
 import { env, requireServerEnv } from "@/lib/env"
 import { transitionGameState } from "@/lib/game-state-machine"
+import { generateProductImage } from "@/lib/gemini-image"
 import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 import type { BriefStyle, CreationPhase, GameStatus } from "@/lib/types"
@@ -209,6 +210,20 @@ export async function POST(request: Request) {
       }
     }
 
+    // Generate product cover image
+    let coverImageUrl: string | null = null
+    try {
+      const geminiKey = env.server.GEMINI_API_KEY ?? requireServerEnv("GEMINI_API_KEY")
+      const imagePrompt = `Professional product photograph for ${generatedBrief.productName}, a ${generatedBrief.productCategory} product. ${generatedBrief.productFeatures || generatedBrief.tagline || ""}. High-quality marketing image, clean composition, modern aesthetic.`
+      coverImageUrl = await generateProductImage(imagePrompt, geminiKey)
+      if (!coverImageUrl) {
+        console.warn("[Game Start] Failed to generate cover image, continuing without image")
+      }
+    } catch (imageError) {
+      console.error("[Game Start] Error generating cover image:", imageError)
+      // Continue without image - not critical
+    }
+
     const { data: existingBrief, error: briefSelectError } = await supabase
       .from(TABLES.campaignBriefs)
       .select("id")
@@ -233,6 +248,7 @@ export async function POST(request: Request) {
           target_audience: generatedBrief.targetAudience,
           objective: generatedBrief.objective,
           weird_constraint: generatedBrief.weirdConstraint ?? null,
+          cover_image_url: coverImageUrl,
         })
         .eq("id", existingBrief.id)
 
@@ -254,6 +270,7 @@ export async function POST(request: Request) {
           target_audience: generatedBrief.targetAudience,
           objective: generatedBrief.objective,
           weird_constraint: generatedBrief.weirdConstraint ?? null,
+          cover_image_url: coverImageUrl,
         })
         .select("id")
         .single()
