@@ -22,11 +22,9 @@ interface CampaignBrief {
 interface BriefEditorProps {
   initialBrief?: CampaignBrief
   onChange?: (brief: CampaignBrief) => void
-  onSave?: (brief: CampaignBrief) => void
   onLock?: (brief: CampaignBrief) => void
   onRegenerate?: () => void
   isLocked?: boolean
-  isSaving?: boolean
   isLocking?: boolean
   showReveal?: boolean
 }
@@ -36,11 +34,9 @@ type EditableField = "productName" | "tagline" | "productFeatures" | "businessPr
 export function BriefEditor({
   initialBrief,
   onChange,
-  onSave,
   onLock,
   onRegenerate,
   isLocked = false,
-  isSaving = false,
   isLocking = false,
   showReveal = false,
 }: BriefEditorProps) {
@@ -205,29 +201,17 @@ export function BriefEditor({
         {renderField("objective", "Campaign Objective", brief.objective, true)}
       </div>
 
-      {!isLocked && (
+      {!isLocked && onLock && (
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button
             type="button"
             className="w-full sm:w-auto"
             size="lg"
-            onClick={() => onSave?.(brief)}
-            disabled={isSaving}
+            onClick={() => onLock(brief)}
+            disabled={isLocking}
           >
-            {isSaving ? "Saving..." : "Save Brief"}
+            {isLocking ? "Locking..." : "Lock Brief"}
           </Button>
-          {onLock && (
-            <Button
-              type="button"
-              className="w-full sm:w-auto"
-              size="lg"
-              variant="secondary"
-              onClick={() => onLock(brief)}
-              disabled={isLocking}
-            >
-              {isLocking ? "Locking..." : "Lock Brief"}
-            </Button>
-          )}
         </div>
       )}
     </div>

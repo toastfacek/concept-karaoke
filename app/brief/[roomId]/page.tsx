@@ -64,7 +64,6 @@ export default function BriefPage() {
   const [briefDraft, setBriefDraft] = useState<CampaignBrief>(EMPTY_BRIEF)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isSavingBrief, setIsSavingBrief] = useState(false)
   const [isLockingBrief, setIsLockingBrief] = useState(false)
   const [isUpdatingReady, setIsUpdatingReady] = useState(false)
   const [isAdvancing, setIsAdvancing] = useState(false)
@@ -278,19 +277,6 @@ export default function BriefPage() {
     },
     [game, currentPlayer],
   )
-
-  const handleSaveBrief = async (draft: CampaignBrief) => {
-    setIsSavingBrief(true)
-    setError(null)
-    try {
-      await persistBrief(draft)
-    } catch (saveError) {
-      console.error(saveError)
-      setError(saveError instanceof Error ? saveError.message : "Failed to save brief.")
-    } finally {
-      setIsSavingBrief(false)
-    }
-  }
 
   const handleLockBrief = async (draft: CampaignBrief) => {
     if (!currentPlayer) return
@@ -708,11 +694,9 @@ export default function BriefPage() {
             <BriefEditor
               initialBrief={briefDraft}
               onChange={setBriefDraft}
-              onSave={handleSaveBrief}
               onLock={currentPlayer?.isHost ? handleLockBrief : undefined}
               onRegenerate={handleRegenerate}
               isLocked={!isBriefing || loading}
-              isSaving={isSavingBrief}
               isLocking={isLockingBrief}
               showReveal={showBriefReveal}
             />
