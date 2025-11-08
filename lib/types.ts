@@ -45,13 +45,13 @@ export type BriefStyle = (typeof BRIEF_STYLES)[number]
 export interface CampaignBrief {
   productName: string
   productCategory: string
-  tagline?: string
-  productFeatures?: string
-  businessProblem: string
-  targetAudience: string
-  objective: string
-  weirdConstraint?: string
   coverImageUrl?: string
+  mainPoint: string
+  audience: string
+  businessProblem: string
+  objective: string
+  strategy: string
+  productFeatures: string
 }
 
 export interface AdLob {

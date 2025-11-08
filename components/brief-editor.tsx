@@ -10,13 +10,13 @@ import { Textarea } from "./ui/textarea"
 interface CampaignBrief {
   productName: string
   productCategory: string
-  tagline?: string
-  productFeatures?: string
-  businessProblem: string
-  targetAudience: string
-  objective: string
-  weirdConstraint?: string
   coverImageUrl?: string
+  mainPoint: string
+  audience: string
+  businessProblem: string
+  objective: string
+  strategy: string
+  productFeatures: string
 }
 
 interface BriefEditorProps {
@@ -29,7 +29,7 @@ interface BriefEditorProps {
   showReveal?: boolean
 }
 
-type EditableField = "productName" | "tagline" | "productFeatures" | "businessProblem" | "targetAudience" | "objective" | "weirdConstraint"
+type EditableField = "productName" | "mainPoint" | "audience" | "businessProblem" | "objective" | "strategy" | "productFeatures"
 
 export function BriefEditor({
   initialBrief,
@@ -43,12 +43,12 @@ export function BriefEditor({
   const [brief, setBrief] = useState<CampaignBrief>({
     productName: "",
     productCategory: "",
-    tagline: "",
-    productFeatures: "",
+    mainPoint: "",
+    audience: "",
     businessProblem: "",
-    targetAudience: "",
     objective: "",
-    weirdConstraint: "",
+    strategy: "",
+    productFeatures: "",
   })
   const [editingField, setEditingField] = useState<EditableField | null>(null)
   const [editValue, setEditValue] = useState("")
@@ -177,8 +177,6 @@ export function BriefEditor({
 
         {renderField("productName", "Product Name", brief.productName)}
 
-        {brief.tagline !== undefined && renderField("tagline", "Tagline", brief.tagline || "")}
-
         {/* Product Category is read-only and comes from game settings */}
         <div className="space-y-2">
           <h3 className="font-mono text-xs font-bold uppercase text-muted-foreground">Product Category</h3>
@@ -190,15 +188,17 @@ export function BriefEditor({
           </p>
         </div>
 
-        {brief.productFeatures !== undefined && renderField("productFeatures", "Product Features", brief.productFeatures || "", true)}
+        {renderField("mainPoint", "The Main Point", brief.mainPoint)}
 
-        {brief.weirdConstraint !== undefined && renderField("weirdConstraint", "The Twist", brief.weirdConstraint || "", true)}
+        {renderField("audience", "Audience", brief.audience, true)}
 
         {renderField("businessProblem", "Business Problem", brief.businessProblem, true)}
 
-        {renderField("targetAudience", "Target Audience", brief.targetAudience)}
+        {renderField("objective", "Objective", brief.objective, true)}
 
-        {renderField("objective", "Campaign Objective", brief.objective, true)}
+        {renderField("strategy", "Strategy", brief.strategy, true)}
+
+        {renderField("productFeatures", "Product Features", brief.productFeatures, true)}
       </div>
 
       {!isLocked && onLock && (

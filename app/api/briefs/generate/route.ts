@@ -15,12 +15,12 @@ const requestSchema = z.object({
 const briefSchema = z.object({
   productName: z.string().min(1),
   productCategory: z.string().min(1),
-  tagline: z.string().optional(),
-  productFeatures: z.string().optional(),
+  mainPoint: z.string().min(1),
+  audience: z.string().min(1),
   businessProblem: z.string().min(1),
-  targetAudience: z.string().min(1),
   objective: z.string().min(1),
-  weirdConstraint: z.string().optional(),
+  strategy: z.string().min(1),
+  productFeatures: z.string().min(1),
 })
 
 const GEMINI_GENERATE_URL =
@@ -99,7 +99,7 @@ export async function POST(request: Request) {
     // Generate product cover image
     let coverImageUrl: string | null = null
     try {
-      const imagePrompt = `Professional product photograph for ${parsedBrief.productName}, a ${parsedBrief.productCategory} product. ${parsedBrief.productFeatures || parsedBrief.tagline || ""}. High-quality marketing image, clean composition, modern aesthetic.`
+      const imagePrompt = `Professional product photograph for ${parsedBrief.productName}, a ${parsedBrief.productCategory} product. ${parsedBrief.mainPoint}. ${parsedBrief.productFeatures}. High-quality marketing image, clean composition, modern aesthetic.`
       coverImageUrl = await generateProductImage(imagePrompt, geminiKey)
       if (!coverImageUrl) {
         console.warn("[Brief Generation] Failed to generate cover image, continuing without image")
@@ -125,12 +125,12 @@ export async function POST(request: Request) {
         .update({
           product_name: parsedBrief.productName,
           product_category: parsedBrief.productCategory,
-          tagline: parsedBrief.tagline ?? null,
-          product_features: parsedBrief.productFeatures ?? null,
+          main_point: parsedBrief.mainPoint,
+          audience: parsedBrief.audience,
           business_problem: parsedBrief.businessProblem,
-          target_audience: parsedBrief.targetAudience,
           objective: parsedBrief.objective,
-          weird_constraint: parsedBrief.weirdConstraint ?? null,
+          strategy: parsedBrief.strategy,
+          product_features: parsedBrief.productFeatures,
           cover_image_url: coverImageUrl,
         })
         .eq("id", existing.id)
@@ -143,12 +143,12 @@ export async function POST(request: Request) {
         room_id: parsed.data.roomId,
         product_name: parsedBrief.productName,
         product_category: parsedBrief.productCategory,
-        tagline: parsedBrief.tagline ?? null,
-        product_features: parsedBrief.productFeatures ?? null,
+        main_point: parsedBrief.mainPoint,
+        audience: parsedBrief.audience,
         business_problem: parsedBrief.businessProblem,
-        target_audience: parsedBrief.targetAudience,
         objective: parsedBrief.objective,
-        weird_constraint: parsedBrief.weirdConstraint ?? null,
+        strategy: parsedBrief.strategy,
+        product_features: parsedBrief.productFeatures,
         cover_image_url: coverImageUrl,
       })
 

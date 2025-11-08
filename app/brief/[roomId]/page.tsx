@@ -17,13 +17,13 @@ import type { RealtimeStatus } from "@/lib/realtime-client"
 type CampaignBrief = {
   productName: string
   productCategory: string
-  tagline?: string
-  productFeatures?: string
-  businessProblem: string
-  targetAudience: string
-  objective: string
-  weirdConstraint?: string
   coverImageUrl?: string
+  mainPoint: string
+  audience: string
+  businessProblem: string
+  objective: string
+  strategy: string
+  productFeatures: string
 }
 
 type BriefRecord = CampaignBrief & {
@@ -42,9 +42,12 @@ type GamePlayer = {
 const EMPTY_BRIEF: CampaignBrief = {
   productName: "",
   productCategory: "",
+  mainPoint: "",
+  audience: "",
   businessProblem: "",
-  targetAudience: "",
   objective: "",
+  strategy: "",
+  productFeatures: "",
   coverImageUrl: undefined,
 }
 
@@ -105,13 +108,13 @@ export default function BriefPage() {
               id: payload.game.brief.id,
               productName: payload.game.brief.productName,
               productCategory: payload.game.brief.productCategory,
-              tagline: payload.game.brief.tagline,
-              productFeatures: payload.game.brief.productFeatures,
-              businessProblem: payload.game.brief.businessProblem,
-              targetAudience: payload.game.brief.targetAudience,
-              objective: payload.game.brief.objective,
-              weirdConstraint: payload.game.brief.weirdConstraint,
               coverImageUrl: payload.game.brief.coverImageUrl,
+              mainPoint: payload.game.brief.mainPoint,
+              audience: payload.game.brief.audience,
+              businessProblem: payload.game.brief.businessProblem,
+              objective: payload.game.brief.objective,
+              strategy: payload.game.brief.strategy,
+              productFeatures: payload.game.brief.productFeatures,
             }
           : null
 
@@ -233,12 +236,12 @@ export default function BriefPage() {
         body: JSON.stringify({
           productName: draft.productName,
           productCategory: draft.productCategory,
-          tagline: draft.tagline,
-          productFeatures: draft.productFeatures,
+          mainPoint: draft.mainPoint,
+          audience: draft.audience,
           businessProblem: draft.businessProblem,
-          targetAudience: draft.targetAudience,
           objective: draft.objective,
-          weirdConstraint: draft.weirdConstraint,
+          strategy: draft.strategy,
+          productFeatures: draft.productFeatures,
           coverImageUrl: draft.coverImageUrl,
           playerId: currentPlayer.id,
         }),
@@ -254,13 +257,13 @@ export default function BriefPage() {
         id: payload.brief.id,
         productName: payload.brief.productName,
         productCategory: payload.brief.productCategory,
-        tagline: payload.brief.tagline,
-        productFeatures: payload.brief.productFeatures,
-        businessProblem: payload.brief.businessProblem,
-        targetAudience: payload.brief.targetAudience,
-        objective: payload.brief.objective,
-        weirdConstraint: payload.brief.weirdConstraint,
         coverImageUrl: payload.brief.coverImageUrl,
+        mainPoint: payload.brief.mainPoint,
+        audience: payload.brief.audience,
+        businessProblem: payload.brief.businessProblem,
+        objective: payload.brief.objective,
+        strategy: payload.brief.strategy,
+        productFeatures: payload.brief.productFeatures,
       }
 
       setGame((previous) =>
@@ -399,13 +402,13 @@ export default function BriefPage() {
       const generated: CampaignBrief = {
         productName: payload.brief.productName,
         productCategory: payload.brief.productCategory,
-        tagline: payload.brief.tagline,
-        productFeatures: payload.brief.productFeatures,
-        businessProblem: payload.brief.businessProblem,
-        targetAudience: payload.brief.targetAudience,
-        objective: payload.brief.objective,
-        weirdConstraint: payload.brief.weirdConstraint,
         coverImageUrl: payload.brief.coverImageUrl,
+        mainPoint: payload.brief.mainPoint,
+        audience: payload.brief.audience,
+        businessProblem: payload.brief.businessProblem,
+        objective: payload.brief.objective,
+        strategy: payload.brief.strategy,
+        productFeatures: payload.brief.productFeatures,
       }
 
       setBriefDraft(generated)
@@ -427,9 +430,12 @@ export default function BriefPage() {
       if (game.brief) {
         const hasUnsavedChanges =
           briefDraft.productName !== game.brief.productName ||
+          briefDraft.mainPoint !== game.brief.mainPoint ||
+          briefDraft.audience !== game.brief.audience ||
           briefDraft.businessProblem !== game.brief.businessProblem ||
-          briefDraft.targetAudience !== game.brief.targetAudience ||
-          briefDraft.objective !== game.brief.objective
+          briefDraft.objective !== game.brief.objective ||
+          briefDraft.strategy !== game.brief.strategy ||
+          briefDraft.productFeatures !== game.brief.productFeatures
 
         if (hasUnsavedChanges) {
           try {

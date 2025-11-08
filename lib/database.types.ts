@@ -132,49 +132,49 @@ export type Database = {
       }
       campaign_briefs: {
         Row: {
+          audience: string
           business_problem: string
           cover_image_url: string | null
           created_at: string | null
           id: string
+          main_point: string
           objective: string
           product_category: string
-          product_features: string | null
+          product_features: string
           product_name: string
           room_id: string
-          tagline: string | null
-          target_audience: string
+          strategy: string
           updated_at: string | null
-          weird_constraint: string | null
         }
         Insert: {
+          audience: string
           business_problem: string
           cover_image_url?: string | null
           created_at?: string | null
           id?: string
+          main_point: string
           objective: string
           product_category: string
-          product_features?: string | null
+          product_features: string
           product_name: string
           room_id: string
-          tagline?: string | null
-          target_audience: string
+          strategy: string
           updated_at?: string | null
-          weird_constraint?: string | null
         }
         Update: {
+          audience?: string
           business_problem?: string
           cover_image_url?: string | null
           created_at?: string | null
           id?: string
+          main_point?: string
           objective?: string
           product_category?: string
-          product_features?: string | null
+          product_features?: string
           product_name?: string
           room_id?: string
-          tagline?: string | null
-          target_audience?: string
+          strategy?: string
           updated_at?: string | null
-          weird_constraint?: string | null
         }
         Relationships: [
           {

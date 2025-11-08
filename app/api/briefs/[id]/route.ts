@@ -8,12 +8,12 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 const briefSchema = z.object({
   productName: z.string().min(1, "Product name is required").max(100),
   productCategory: z.string().min(1, "Product category is required").max(100),
-  tagline: z.string().optional(),
-  productFeatures: z.string().optional(),
+  mainPoint: z.string().min(1, "Main point is required"),
+  audience: z.string().min(1, "Audience is required"),
   businessProblem: z.string().min(1, "Business problem is required"),
-  targetAudience: z.string().min(1, "Target audience is required"),
   objective: z.string().min(1, "Objective is required"),
-  weirdConstraint: z.string().optional(),
+  strategy: z.string().min(1, "Strategy is required"),
+  productFeatures: z.string().min(1, "Product features are required"),
   coverImageUrl: z.string().optional(),
   playerId: z.string().min(1, "Player ID is required"),
 })
@@ -62,16 +62,16 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       .update({
         product_name: parsed.data.productName,
         product_category: parsed.data.productCategory,
-        tagline: parsed.data.tagline ?? null,
-        product_features: parsed.data.productFeatures ?? null,
+        main_point: parsed.data.mainPoint,
+        audience: parsed.data.audience,
         business_problem: parsed.data.businessProblem,
-        target_audience: parsed.data.targetAudience,
         objective: parsed.data.objective,
-        weird_constraint: parsed.data.weirdConstraint ?? null,
+        strategy: parsed.data.strategy,
+        product_features: parsed.data.productFeatures,
         cover_image_url: parsed.data.coverImageUrl ?? null,
       })
       .eq("id", id)
-      .select("id, room_id, product_name, product_category, tagline, product_features, business_problem, target_audience, objective, weird_constraint, cover_image_url, updated_at")
+      .select("id, room_id, product_name, product_category, main_point, audience, business_problem, objective, strategy, product_features, cover_image_url, updated_at")
       .maybeSingle()
 
     if (updateError) {
@@ -111,12 +111,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         roomId: brief.room_id,
         productName: brief.product_name,
         productCategory: brief.product_category,
-        tagline: brief.tagline,
-        productFeatures: brief.product_features,
+        mainPoint: brief.main_point,
+        audience: brief.audience,
         businessProblem: brief.business_problem,
-        targetAudience: brief.target_audience,
         objective: brief.objective,
-        weirdConstraint: brief.weird_constraint,
+        strategy: brief.strategy,
+        productFeatures: brief.product_features,
         coverImageUrl: brief.cover_image_url,
         updatedAt: brief.updated_at,
       },

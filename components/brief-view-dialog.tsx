@@ -6,13 +6,13 @@ import { Badge } from "@/components/ui/badge"
 interface CampaignBrief {
   productName: string
   productCategory: string
-  tagline?: string
-  productFeatures?: string
-  businessProblem: string
-  targetAudience: string
-  objective: string
-  weirdConstraint?: string
   coverImageUrl?: string
+  mainPoint: string
+  audience: string
+  businessProblem: string
+  objective: string
+  strategy: string
+  productFeatures: string
 }
 
 interface BriefViewDialogProps {
@@ -41,6 +41,14 @@ export function BriefViewDialog({ brief, isOpen, onOpenChange }: BriefViewDialog
         <DialogTitle className="text-3xl font-bold uppercase">Campaign Brief</DialogTitle>
 
         <div className="space-y-6">
+          {/* Product Name */}
+          <div>
+            <h3 className="mb-2 text-2xl font-bold">{brief.productName}</h3>
+            <Badge variant="secondary" className="text-sm">
+              {brief.productCategory}
+            </Badge>
+          </div>
+
           {/* Cover Image */}
           {brief.coverImageUrl && (
             <div className="overflow-hidden rounded border-2 border-border">
@@ -52,59 +60,52 @@ export function BriefViewDialog({ brief, isOpen, onOpenChange }: BriefViewDialog
             </div>
           )}
 
-          {/* Product Name */}
-          <div>
-            <h3 className="mb-2 text-2xl font-bold">{brief.productName}</h3>
-            {brief.tagline && (
-              <p className="mb-2 text-lg italic text-muted-foreground">&ldquo;{brief.tagline}&rdquo;</p>
-            )}
-            <Badge variant="secondary" className="text-sm">
-              {brief.productCategory}
-            </Badge>
+          {/* The Main Point */}
+          <div className="space-y-2">
+            <h4 className="font-mono text-sm font-bold uppercase text-muted-foreground">
+              The Main Point
+            </h4>
+            <p className="text-sm leading-relaxed font-medium">{brief.mainPoint}</p>
           </div>
 
-          {/* Product Features */}
-          {brief.productFeatures && (
-            <div className="space-y-2">
-              <h4 className="font-mono text-sm font-bold uppercase text-muted-foreground">
-                Product Features
-              </h4>
-              <p className="text-sm leading-relaxed">{brief.productFeatures}</p>
-            </div>
-          )}
-
-          {/* Weird Constraint (Wacky mode) */}
-          {brief.weirdConstraint && (
-            <div className="space-y-2">
-              <h4 className="font-mono text-sm font-bold uppercase text-muted-foreground">
-                The Twist
-              </h4>
-              <p className="text-sm leading-relaxed font-medium">{brief.weirdConstraint}</p>
-            </div>
-          )}
+          {/* Audience */}
+          <div className="space-y-2">
+            <h4 className="font-mono text-sm font-bold uppercase text-muted-foreground">
+              Audience
+            </h4>
+            <p className="whitespace-pre-line text-sm leading-relaxed">{brief.audience}</p>
+          </div>
 
           {/* Business Problem */}
           <div className="space-y-2">
             <h4 className="font-mono text-sm font-bold uppercase text-muted-foreground">
               Business Problem
             </h4>
-            <p className="text-sm leading-relaxed">{brief.businessProblem}</p>
-          </div>
-
-          {/* Target Audience */}
-          <div className="space-y-2">
-            <h4 className="font-mono text-sm font-bold uppercase text-muted-foreground">
-              Target Audience
-            </h4>
-            <p className="text-sm leading-relaxed">{brief.targetAudience}</p>
+            <p className="whitespace-pre-line text-sm leading-relaxed">{brief.businessProblem}</p>
           </div>
 
           {/* Campaign Objective */}
           <div className="space-y-2">
             <h4 className="font-mono text-sm font-bold uppercase text-muted-foreground">
-              Campaign Objective
+              Objective
             </h4>
             <p className="text-sm leading-relaxed">{brief.objective}</p>
+          </div>
+
+          {/* Strategy */}
+          <div className="space-y-2">
+            <h4 className="font-mono text-sm font-bold uppercase text-muted-foreground">
+              Strategy
+            </h4>
+            <p className="text-sm leading-relaxed">{brief.strategy}</p>
+          </div>
+
+          {/* Product Features */}
+          <div className="space-y-2">
+            <h4 className="font-mono text-sm font-bold uppercase text-muted-foreground">
+              Product Features
+            </h4>
+            <p className="whitespace-pre-line text-sm leading-relaxed">{brief.productFeatures}</p>
           </div>
         </div>
       </DialogContent>

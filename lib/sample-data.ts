@@ -42,11 +42,12 @@ export const samplePlayers: Player[] = [
 export const sampleBrief: CampaignBrief = {
   productName: "SnoozeButton Pro",
   productCategory: "Smart Home Device",
-  businessProblem:
-    "People struggle to wake up on time and often hit snooze repeatedly, leading to rushed mornings and poor sleep habits.",
-  targetAudience: "Busy professionals aged 25-40 who value productivity and better sleep",
-  objective:
-    "Position SnoozeButton Pro as the ultimate solution for morning routines, emphasizing its smart features that gradually wake users naturally.",
+  mainPoint: "Wake up naturally, not abruptly",
+  audience: "• Busy professionals aged 25-40 who value productivity\n• People with inconsistent sleep schedules who want better morning routines",
+  businessProblem: "• People struggle to wake up on time and hit snooze repeatedly\n• Rushed mornings lead to poor sleep habits and decreased productivity\n• Traditional alarms disrupt natural sleep cycles",
+  objective: "Position SnoozeButton Pro as the ultimate solution for morning routines with smart features that wake users naturally",
+  strategy: "Emphasize the health and productivity benefits of gradual wake-up technology through lifestyle-focused messaging that resonates with ambitious professionals",
+  productFeatures: "• Smart gradual wake-up using light and sound progression\n• Sleep cycle tracking with personalized wake times\n• Integration with smart home devices for seamless morning routines",
 }
 
 export const sampleAdLobs: AdLob[] = [

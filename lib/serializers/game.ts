@@ -13,12 +13,12 @@ type RawBrief = {
   id: string
   product_name: string | null
   product_category: string | null
-  tagline: string | null
-  product_features: string | null
+  main_point: string | null
+  audience: string | null
   business_problem: string | null
-  target_audience: string | null
   objective: string | null
-  weird_constraint: string | null
+  strategy: string | null
+  product_features: string | null
   cover_image_url: string | null
   updated_at: string | null
 }
@@ -79,12 +79,12 @@ function serializeBrief(row?: RawBrief | null) {
     id: row.id,
     productName: row.product_name ?? "",
     productCategory: row.product_category ?? "All",
-    tagline: row.tagline ?? undefined,
-    productFeatures: row.product_features ?? undefined,
+    mainPoint: row.main_point ?? "",
+    audience: row.audience ?? "",
     businessProblem: row.business_problem ?? "",
-    targetAudience: row.target_audience ?? "",
     objective: row.objective ?? "",
-    weirdConstraint: row.weird_constraint ?? undefined,
+    strategy: row.strategy ?? "",
+    productFeatures: row.product_features ?? "",
     coverImageUrl: row.cover_image_url ?? undefined,
     updatedAt: row.updated_at ?? null,
   }
