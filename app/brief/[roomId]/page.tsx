@@ -143,9 +143,8 @@ export default function BriefPage() {
               setShowBriefReveal(true)
             }, 200)
           }, 1500) // Keep modal visible for a minimum time for better UX
-        } else {
-          setShowLoadingModal(false)
         }
+        // If no brief content yet, keep modal visible (don't hide it)
 
         if (initialLoadRef.current) {
           initialLoadRef.current = false
