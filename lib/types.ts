@@ -51,6 +51,7 @@ export interface CampaignBrief {
   targetAudience: string
   objective: string
   weirdConstraint?: string
+  coverImageUrl?: string
 }
 
 export interface AdLob {

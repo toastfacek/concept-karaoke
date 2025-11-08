@@ -23,6 +23,7 @@ type CampaignBrief = {
   targetAudience: string
   objective: string
   weirdConstraint?: string
+  coverImageUrl?: string
 }
 
 type BriefRecord = CampaignBrief & {
@@ -44,6 +45,7 @@ const EMPTY_BRIEF: CampaignBrief = {
   businessProblem: "",
   targetAudience: "",
   objective: "",
+  coverImageUrl: undefined,
 }
 
 type BriefGameState = SnapshotDrivenState<GamePlayer> & {
@@ -110,6 +112,7 @@ export default function BriefPage() {
               targetAudience: payload.game.brief.targetAudience,
               objective: payload.game.brief.objective,
               weirdConstraint: payload.game.brief.weirdConstraint,
+              coverImageUrl: payload.game.brief.coverImageUrl,
             }
           : null
 
@@ -237,6 +240,7 @@ export default function BriefPage() {
           targetAudience: draft.targetAudience,
           objective: draft.objective,
           weirdConstraint: draft.weirdConstraint,
+          coverImageUrl: draft.coverImageUrl,
           playerId: currentPlayer.id,
         }),
       })
@@ -257,6 +261,7 @@ export default function BriefPage() {
         targetAudience: payload.brief.targetAudience,
         objective: payload.brief.objective,
         weirdConstraint: payload.brief.weirdConstraint,
+        coverImageUrl: payload.brief.coverImageUrl,
       }
 
       setGame((previous) =>
@@ -414,6 +419,7 @@ export default function BriefPage() {
         targetAudience: payload.brief.targetAudience,
         objective: payload.brief.objective,
         weirdConstraint: payload.brief.weirdConstraint,
+        coverImageUrl: payload.brief.coverImageUrl,
       }
 
       setBriefDraft(generated)

@@ -19,6 +19,7 @@ type RawBrief = {
   target_audience: string | null
   objective: string | null
   weird_constraint: string | null
+  cover_image_url: string | null
   updated_at: string | null
 }
 
@@ -84,6 +85,7 @@ function serializeBrief(row?: RawBrief | null) {
     targetAudience: row.target_audience ?? "",
     objective: row.objective ?? "",
     weirdConstraint: row.weird_constraint ?? undefined,
+    coverImageUrl: row.cover_image_url ?? undefined,
     updatedAt: row.updated_at ?? null,
   }
 }

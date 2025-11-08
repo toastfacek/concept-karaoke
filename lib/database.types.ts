@@ -133,6 +133,7 @@ export type Database = {
       campaign_briefs: {
         Row: {
           business_problem: string
+          cover_image_url: string | null
           created_at: string | null
           id: string
           objective: string
@@ -147,6 +148,7 @@ export type Database = {
         }
         Insert: {
           business_problem: string
+          cover_image_url?: string | null
           created_at?: string | null
           id?: string
           objective: string
@@ -161,6 +163,7 @@ export type Database = {
         }
         Update: {
           business_problem?: string
+          cover_image_url?: string | null
           created_at?: string | null
           id?: string
           objective?: string

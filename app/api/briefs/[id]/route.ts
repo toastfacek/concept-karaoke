@@ -14,6 +14,7 @@ const briefSchema = z.object({
   targetAudience: z.string().min(1, "Target audience is required"),
   objective: z.string().min(1, "Objective is required"),
   weirdConstraint: z.string().optional(),
+  coverImageUrl: z.string().optional(),
   playerId: z.string().min(1, "Player ID is required"),
 })
 
@@ -67,9 +68,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         target_audience: parsed.data.targetAudience,
         objective: parsed.data.objective,
         weird_constraint: parsed.data.weirdConstraint ?? null,
+        cover_image_url: parsed.data.coverImageUrl ?? null,
       })
       .eq("id", id)
-      .select("id, room_id, product_name, product_category, tagline, product_features, business_problem, target_audience, objective, weird_constraint, updated_at")
+      .select("id, room_id, product_name, product_category, tagline, product_features, business_problem, target_audience, objective, weird_constraint, cover_image_url, updated_at")
       .maybeSingle()
 
     if (updateError) {
@@ -115,6 +117,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         targetAudience: brief.target_audience,
         objective: brief.objective,
         weirdConstraint: brief.weird_constraint,
+        coverImageUrl: brief.cover_image_url,
         updatedAt: brief.updated_at,
       },
     })
