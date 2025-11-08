@@ -35,15 +35,20 @@ const GEMINI_GENERATE_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
 async function generateBrief(productCategory: string, briefStyle: BriefStyle) {
+  console.log("[generateBrief] Starting. Category:", productCategory, "Style:", briefStyle)
   const geminiKey = env.server.GEMINI_API_KEY ?? requireServerEnv("GEMINI_API_KEY")
+  console.log("[generateBrief] Gemini key exists:", !!geminiKey, "length:", geminiKey?.length)
 
   // If "All" is selected, randomly pick from specific categories
   const category = productCategory === "All"
     ? SPECIFIC_PRODUCT_CATEGORIES[Math.floor(Math.random() * SPECIFIC_PRODUCT_CATEGORIES.length)]
     : productCategory
 
+  console.log("[generateBrief] Final category:", category)
   const prompt = getBriefPrompt(category, briefStyle)
+  console.log("[generateBrief] Prompt length:", prompt.length)
 
+  console.log("[generateBrief] Calling Gemini API...")
   const completionResponse = await fetch(`${GEMINI_GENERATE_URL}?key=${geminiKey}`, {
     method: "POST",
     headers: {
@@ -65,16 +70,22 @@ async function generateBrief(productCategory: string, briefStyle: BriefStyle) {
 
   if (!completionResponse.ok) {
     const errorText = await completionResponse.text()
+    console.error("[generateBrief] Gemini API error. Status:", completionResponse.status, "Body:", errorText)
     throw new Error(`Gemini request failed: ${errorText}`)
   }
 
+  console.log("[generateBrief] Gemini API successful, parsing response...")
   const completionPayload = await completionResponse.json()
   const textContent = completionPayload?.candidates?.[0]?.content?.parts?.[0]?.text
   if (typeof textContent !== "string") {
+    console.error("[generateBrief] Unexpected response format:", JSON.stringify(completionPayload))
     throw new Error("Unexpected Gemini response format")
   }
 
-  return briefSchema.parse(JSON.parse(textContent))
+  console.log("[generateBrief] Parsing JSON response...")
+  const parsed = briefSchema.parse(JSON.parse(textContent))
+  console.log("[generateBrief] Successfully generated:", parsed.productName)
+  return parsed
 }
 
 export async function POST(request: Request) {
@@ -194,12 +205,15 @@ export async function POST(request: Request) {
     })
 
     // Generate AI brief based on product category and style
+    console.log("[Game Start] Starting brief generation...")
     const briefStyle = (room.brief_style as BriefStyle) ?? "wacky"
+    console.log("[Game Start] Category:", room.product_category, "Style:", briefStyle)
     let generatedBrief
     try {
       generatedBrief = await generateBrief(room.product_category ?? "All", briefStyle)
+      console.log("[Game Start] Brief generated successfully:", generatedBrief.productName)
     } catch (briefError) {
-      console.error("Failed to generate brief, using empty brief as fallback", briefError)
+      console.error("[Game Start] Failed to generate brief, using fallback. Error:", briefError)
       // Fallback to empty brief if generation fails
       generatedBrief = {
         productName: "Untitled Product",
