@@ -17,9 +17,12 @@ import type { RealtimeStatus } from "@/lib/realtime-client"
 type CampaignBrief = {
   productName: string
   productCategory: string
+  tagline?: string
+  productFeatures?: string
   businessProblem: string
   targetAudience: string
   objective: string
+  weirdConstraint?: string
 }
 
 type BriefRecord = CampaignBrief & {
@@ -101,9 +104,12 @@ export default function BriefPage() {
               id: payload.game.brief.id,
               productName: payload.game.brief.productName,
               productCategory: payload.game.brief.productCategory,
+              tagline: payload.game.brief.tagline,
+              productFeatures: payload.game.brief.productFeatures,
               businessProblem: payload.game.brief.businessProblem,
               targetAudience: payload.game.brief.targetAudience,
               objective: payload.game.brief.objective,
+              weirdConstraint: payload.game.brief.weirdConstraint,
             }
           : null
 
@@ -226,9 +232,12 @@ export default function BriefPage() {
         body: JSON.stringify({
           productName: draft.productName,
           productCategory: draft.productCategory,
+          tagline: draft.tagline,
+          productFeatures: draft.productFeatures,
           businessProblem: draft.businessProblem,
           targetAudience: draft.targetAudience,
           objective: draft.objective,
+          weirdConstraint: draft.weirdConstraint,
           playerId: currentPlayer.id,
         }),
       })
@@ -243,9 +252,12 @@ export default function BriefPage() {
         id: payload.brief.id,
         productName: payload.brief.productName,
         productCategory: payload.brief.productCategory,
+        tagline: payload.brief.tagline,
+        productFeatures: payload.brief.productFeatures,
         businessProblem: payload.brief.businessProblem,
         targetAudience: payload.brief.targetAudience,
         objective: payload.brief.objective,
+        weirdConstraint: payload.brief.weirdConstraint,
       }
 
       setGame((previous) =>
@@ -397,9 +409,12 @@ export default function BriefPage() {
       const generated: CampaignBrief = {
         productName: payload.brief.productName,
         productCategory: payload.brief.productCategory,
+        tagline: payload.brief.tagline,
+        productFeatures: payload.brief.productFeatures,
         businessProblem: payload.brief.businessProblem,
         targetAudience: payload.brief.targetAudience,
         objective: payload.brief.objective,
+        weirdConstraint: payload.brief.weirdConstraint,
       }
 
       setBriefDraft(generated)

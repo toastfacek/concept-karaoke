@@ -8,9 +8,12 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 const briefSchema = z.object({
   productName: z.string().min(1, "Product name is required").max(100),
   productCategory: z.string().min(1, "Product category is required").max(100),
+  tagline: z.string().optional(),
+  productFeatures: z.string().optional(),
   businessProblem: z.string().min(1, "Business problem is required"),
   targetAudience: z.string().min(1, "Target audience is required"),
   objective: z.string().min(1, "Objective is required"),
+  weirdConstraint: z.string().optional(),
   playerId: z.string().min(1, "Player ID is required"),
 })
 
@@ -58,12 +61,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       .update({
         product_name: parsed.data.productName,
         product_category: parsed.data.productCategory,
+        tagline: parsed.data.tagline ?? null,
+        product_features: parsed.data.productFeatures ?? null,
         business_problem: parsed.data.businessProblem,
         target_audience: parsed.data.targetAudience,
         objective: parsed.data.objective,
+        weird_constraint: parsed.data.weirdConstraint ?? null,
       })
       .eq("id", id)
-      .select("id, room_id, product_name, product_category, business_problem, target_audience, objective, updated_at")
+      .select("id, room_id, product_name, product_category, tagline, product_features, business_problem, target_audience, objective, weird_constraint, updated_at")
       .maybeSingle()
 
     if (updateError) {
@@ -103,9 +109,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         roomId: brief.room_id,
         productName: brief.product_name,
         productCategory: brief.product_category,
+        tagline: brief.tagline,
+        productFeatures: brief.product_features,
         businessProblem: brief.business_problem,
         targetAudience: brief.target_audience,
         objective: brief.objective,
+        weirdConstraint: brief.weird_constraint,
         updatedAt: brief.updated_at,
       },
     })
