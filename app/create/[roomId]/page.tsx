@@ -53,9 +53,13 @@ type AdLobRecord = {
 type CampaignBrief = {
   productName: string
   productCategory: string
+  coverImageUrl?: string
+  mainPoint: string
+  audience: string
   businessProblem: string
-  targetAudience: string
   objective: string
+  strategy: string
+  productFeatures: string
 }
 
 type GameState = SnapshotDrivenState<GamePlayer> & {
@@ -257,9 +261,13 @@ export default function CreatePage() {
             ? {
                 productName: gameData.brief.productName,
                 productCategory: gameData.brief.productCategory,
+                coverImageUrl: gameData.brief.coverImageUrl,
+                mainPoint: gameData.brief.mainPoint,
+                audience: gameData.brief.audience,
                 businessProblem: gameData.brief.businessProblem,
-                targetAudience: gameData.brief.targetAudience,
                 objective: gameData.brief.objective,
+                strategy: gameData.brief.strategy,
+                productFeatures: gameData.brief.productFeatures,
               }
             : null,
         })

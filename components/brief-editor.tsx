@@ -6,18 +6,7 @@ import { Pencil } from "lucide-react"
 import { Button } from "./ui/button"
 import { Input } from "./ui/input"
 import { Textarea } from "./ui/textarea"
-
-interface CampaignBrief {
-  productName: string
-  productCategory: string
-  coverImageUrl?: string
-  mainPoint: string
-  audience: string
-  businessProblem: string
-  objective: string
-  strategy: string
-  productFeatures: string
-}
+import type { CampaignBrief } from "@/lib/types"
 
 interface BriefEditorProps {
   initialBrief?: CampaignBrief
@@ -80,11 +69,20 @@ export function BriefEditor({
     }
   }
 
+  const parseBullets = (text: string): string[] => {
+    if (!text) return []
+    return text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+  }
+
   const renderField = (
     field: EditableField,
     label: string,
     value: string,
     multiline: boolean = false,
+    showBullets: boolean = false,
   ) => {
     const isEditing = editingField === field
 
@@ -132,8 +130,14 @@ export function BriefEditor({
               </Button>
             </div>
           </div>
+        ) : showBullets && value ? (
+          <ul className="list-disc space-y-1 pl-5 text-sm leading-relaxed">
+            {parseBullets(value).map((bullet, idx) => (
+              <li key={idx}>{bullet}</li>
+            ))}
+          </ul>
         ) : (
-          <p className="whitespace-pre-wrap font-mono text-sm leading-relaxed">
+          <p className="text-sm leading-relaxed">
             {value || <span className="text-muted-foreground">Not set</span>}
           </p>
         )}
@@ -158,47 +162,105 @@ export function BriefEditor({
         )}
       </div>
 
-      <div className="space-y-6">
-        {/* Cover Image */}
-        {brief.coverImageUrl && (
-          <div className="space-y-2">
-            <h3 className="font-mono text-xs font-bold uppercase text-muted-foreground">
-              Product Image
-            </h3>
+      {/* Two-column layout: Image on left, Product info on right */}
+      <div className="grid gap-6 md:grid-cols-[1fr,1fr]">
+        {/* Left Column - Product Image */}
+        <div className="space-y-2">
+          <h3 className="font-mono text-xs font-bold uppercase text-muted-foreground">
+            Product Image
+          </h3>
+          {brief.coverImageUrl ? (
             <div className="overflow-hidden rounded border-2 border-border">
               <img
                 src={brief.coverImageUrl}
                 alt={brief.productName || "Product"}
-                className="w-full h-auto"
+                className="h-auto w-full"
               />
             </div>
-          </div>
-        )}
-
-        {renderField("productName", "Product Name", brief.productName)}
-
-        {/* Product Category is read-only and comes from game settings */}
-        <div className="space-y-2">
-          <h3 className="font-mono text-xs font-bold uppercase text-muted-foreground">Product Category</h3>
-          <p className="whitespace-pre-wrap font-mono text-sm leading-relaxed">
-            {brief.productCategory || <span className="text-muted-foreground">Not set</span>}
-          </p>
-          <p className="font-mono text-xs text-muted-foreground">
-            (Set from game settings)
-          </p>
+          ) : (
+            <div className="flex aspect-[4/3] items-center justify-center rounded border-2 border-border bg-gradient-to-br from-muted/30 to-muted/10 bg-[length:10px_10px] [background-image:repeating-linear-gradient(45deg,transparent,transparent_5px,hsl(var(--muted))_5px,hsl(var(--muted))_6px)]">
+              <span className="font-mono text-sm uppercase tracking-wider text-muted-foreground/50">
+                &lt;Product Image&gt;
+              </span>
+            </div>
+          )}
         </div>
 
-        {renderField("mainPoint", "The Main Point", brief.mainPoint)}
+        {/* Right Column - Product Name, Category, Main Point, Audience */}
+        <div className="space-y-4">
+          {/* Product Name - Large heading */}
+          <div className="space-y-2">
+            {editingField === "productName" ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-mono text-xs font-bold uppercase text-muted-foreground">
+                    Product Name
+                  </h3>
+                </div>
+                <Input
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  className="text-2xl font-bold"
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" onClick={saveField}>
+                    Save
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={cancelEditing}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                    {brief.productName || (
+                      <span className="text-muted-foreground">&lt;Product Name&gt;</span>
+                    )}
+                  </h3>
+                  {!isLocked && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => startEditing("productName")}
+                      className="gap-2"
+                    >
+                      <Pencil className="size-4" />
+                      Edit
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
 
-        {renderField("audience", "Audience", brief.audience, true)}
+          {/* Product Category - Read-only */}
+          <div className="space-y-1">
+            <h3 className="font-mono text-xs font-bold uppercase text-muted-foreground">
+              Product Category
+            </h3>
+            <p className="text-sm leading-relaxed">
+              {brief.productCategory || <span className="text-muted-foreground">Not set</span>}
+            </p>
+          </div>
 
-        {renderField("businessProblem", "Business Problem", brief.businessProblem, true)}
+          {/* The Main Point */}
+          {renderField("mainPoint", "The Main Point", brief.mainPoint, false, false)}
 
-        {renderField("objective", "Objective", brief.objective, true)}
+          {/* Audience */}
+          {renderField("audience", "Audience", brief.audience, true, true)}
+        </div>
+      </div>
 
-        {renderField("strategy", "Strategy", brief.strategy, true)}
-
-        {renderField("productFeatures", "Product Features", brief.productFeatures, true)}
+      {/* Bottom Grid - Business Problem, Objective, Strategy, Product Features */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {renderField("businessProblem", "Business Problem", brief.businessProblem, true, true)}
+        {renderField("objective", "Objective", brief.objective, true, false)}
+        {renderField("strategy", "Strategy", brief.strategy, true, false)}
+        {renderField("productFeatures", "Product Features", brief.productFeatures, true, true)}
       </div>
 
       {!isLocked && onLock && (
