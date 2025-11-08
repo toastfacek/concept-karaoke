@@ -137,10 +137,13 @@ export type Database = {
           id: string
           objective: string
           product_category: string
+          product_features: string | null
           product_name: string
           room_id: string
+          tagline: string | null
           target_audience: string
           updated_at: string | null
+          weird_constraint: string | null
         }
         Insert: {
           business_problem: string
@@ -148,10 +151,13 @@ export type Database = {
           id?: string
           objective: string
           product_category: string
+          product_features?: string | null
           product_name: string
           room_id: string
+          tagline?: string | null
           target_audience: string
           updated_at?: string | null
+          weird_constraint?: string | null
         }
         Update: {
           business_problem?: string
@@ -159,10 +165,13 @@ export type Database = {
           id?: string
           objective?: string
           product_category?: string
+          product_features?: string | null
           product_name?: string
           room_id?: string
+          tagline?: string | null
           target_audience?: string
           updated_at?: string | null
+          weird_constraint?: string | null
         }
         Relationships: [
           {
@@ -176,6 +185,7 @@ export type Database = {
       }
       game_rooms: {
         Row: {
+          brief_style: string | null
           code: string
           created_at: string | null
           current_phase: string | null
@@ -191,6 +201,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          brief_style?: string | null
           code: string
           created_at?: string | null
           current_phase?: string | null
@@ -206,6 +217,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          brief_style?: string | null
           code?: string
           created_at?: string | null
           current_phase?: string | null

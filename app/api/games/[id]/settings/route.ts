@@ -4,13 +4,14 @@ import { z } from "zod"
 import { TABLES } from "@/lib/db"
 import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
-import { PRODUCT_CATEGORIES } from "@/lib/types"
+import { BRIEF_STYLES, PRODUCT_CATEGORIES } from "@/lib/types"
 
 const settingsSchema = z.object({
   productCategory: z.enum(PRODUCT_CATEGORIES).optional(),
   phaseDurationSeconds: z.number().refine((val) => [30, 60, 90, 120].includes(val), {
     message: "Phase duration must be 30, 60, 90, or 120 seconds",
   }).optional(),
+  briefStyle: z.enum(BRIEF_STYLES).optional(),
   playerId: z.string().uuid("Invalid player identifier"),
 })
 
@@ -26,10 +27,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ success: false, error: message }, { status: 400 })
     }
 
-    const { productCategory, phaseDurationSeconds, playerId } = parsed.data
+    const { productCategory, phaseDurationSeconds, briefStyle, playerId } = parsed.data
 
     // Validate at least one setting is being updated
-    if (!productCategory && !phaseDurationSeconds) {
+    if (!productCategory && !phaseDurationSeconds && !briefStyle) {
       return NextResponse.json({ success: false, error: "No settings to update" }, { status: 400 })
     }
 
@@ -82,13 +83,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (phaseDurationSeconds) {
       updates.phase_duration_seconds = phaseDurationSeconds
     }
+    if (briefStyle) {
+      updates.brief_style = briefStyle
+    }
 
     // Update settings
     const { data: updatedRoom, error: updateError } = await supabase
       .from(TABLES.gameRooms)
       .update(updates)
       .eq("id", room.id)
-      .select("product_category, phase_duration_seconds")
+      .select("product_category, phase_duration_seconds, brief_style")
       .single()
 
     if (updateError) {
@@ -121,6 +125,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       settings: {
         productCategory: updatedRoom.product_category,
         phaseDurationSeconds: updatedRoom.phase_duration_seconds,
+        briefStyle: updatedRoom.brief_style,
       },
     })
   } catch (error) {

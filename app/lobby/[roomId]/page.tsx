@@ -27,6 +27,7 @@ type LobbyPlayer = {
 type LobbyState = SnapshotDrivenState<LobbyPlayer> & {
   productCategory: string
   phaseDurationSeconds: number
+  briefStyle: string
 }
 
 export default function LobbyPage() {
@@ -93,6 +94,7 @@ export default function LobbyPage() {
           version: typeof payload.game.version === "number" ? payload.game.version : 0,
           productCategory: payload.game.productCategory ?? "All",
           phaseDurationSeconds: payload.game.phaseDurationSeconds ?? 60,
+          briefStyle: payload.game.briefStyle ?? "wacky",
         })
 
         const localPlayer = loadPlayer(roomCode)
@@ -309,13 +311,14 @@ export default function LobbyPage() {
     }
   }
 
-  const handleSettingsChange = (settings: { productCategory: string; phaseDurationSeconds: number }) => {
+  const handleSettingsChange = (settings: { productCategory: string; phaseDurationSeconds: number; briefStyle: string }) => {
     setLobby((previous) =>
       previous
         ? {
             ...previous,
             productCategory: settings.productCategory,
             phaseDurationSeconds: settings.phaseDurationSeconds,
+            briefStyle: settings.briefStyle,
           }
         : previous,
     )
@@ -533,6 +536,7 @@ export default function LobbyPage() {
               <GameSettings
                 productCategory={lobby.productCategory as ProductCategory}
                 phaseDurationSeconds={lobby.phaseDurationSeconds as PhaseDuration}
+                briefStyle={lobby.briefStyle as import("@/lib/types").BriefStyle}
                 isHost={isHost}
                 roomCode={roomCode}
                 playerId={currentPlayer.id}

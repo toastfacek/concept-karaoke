@@ -87,6 +87,7 @@ export const sampleGameRoom: GameRoom = {
   hostId: "1",
   productCategory: "Consumer Electronics",
   phaseDurationSeconds: 60,
+  briefStyle: "wacky",
 }
 
 export const emojis = [

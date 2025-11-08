@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
+import { getBriefPrompt } from "@/lib/brief-prompts"
 import { TABLES } from "@/lib/db"
 import { env, requireServerEnv } from "@/lib/env"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
-import { SPECIFIC_PRODUCT_CATEGORIES } from "@/lib/types"
+import { SPECIFIC_PRODUCT_CATEGORIES, type BriefStyle } from "@/lib/types"
 
 const requestSchema = z.object({
   roomId: z.string().uuid("Invalid room identifier"),
@@ -13,9 +14,12 @@ const requestSchema = z.object({
 const briefSchema = z.object({
   productName: z.string().min(1),
   productCategory: z.string().min(1),
+  tagline: z.string().optional(),
+  productFeatures: z.string().optional(),
   businessProblem: z.string().min(1),
   targetAudience: z.string().min(1),
   objective: z.string().min(1),
+  weirdConstraint: z.string().optional(),
 })
 
 const GEMINI_GENERATE_URL =
@@ -37,7 +41,7 @@ export async function POST(request: Request) {
 
     const { data: room, error: roomError } = await supabase
       .from(TABLES.gameRooms)
-      .select("id, product_category")
+      .select("id, product_category, brief_style")
       .eq("id", parsed.data.roomId)
       .maybeSingle()
 
@@ -50,27 +54,14 @@ export async function POST(request: Request) {
     }
 
     const selectedCategory = room.product_category ?? "All"
+    const briefStyle = (room.brief_style as BriefStyle) ?? "wacky"
 
     // If "All" is selected, randomly pick from specific categories
     const productCategory = selectedCategory === "All"
       ? SPECIFIC_PRODUCT_CATEGORIES[Math.floor(Math.random() * SPECIFIC_PRODUCT_CATEGORIES.length)]
       : selectedCategory
 
-    const prompt = [
-      `Generate a creative advertising brief for a fictional product in the "${productCategory}" category.`,
-      "Respond with valid JSON that matches this TypeScript interface:",
-      "{",
-      '  "productName": string,',
-      '  "productCategory": string,',
-      '  "businessProblem": string,',
-      '  "targetAudience": string,',
-      '  "objective": string',
-      "}",
-      `The productCategory field MUST be exactly: "${productCategory}"`,
-      "Make the productName creative and fitting for this category.",
-      "Keep it playful but useful for a collaborative online game.",
-      "Do not wrap the JSON in markdown fences or add extra text.",
-    ].join("\n")
+    const prompt = getBriefPrompt(productCategory, briefStyle)
 
     const completionResponse = await fetch(`${GEMINI_GENERATE_URL}?key=${geminiKey}`, {
       method: "POST",
@@ -120,9 +111,12 @@ export async function POST(request: Request) {
         .update({
           product_name: parsedBrief.productName,
           product_category: parsedBrief.productCategory,
+          tagline: parsedBrief.tagline ?? null,
+          product_features: parsedBrief.productFeatures ?? null,
           business_problem: parsedBrief.businessProblem,
           target_audience: parsedBrief.targetAudience,
           objective: parsedBrief.objective,
+          weird_constraint: parsedBrief.weirdConstraint ?? null,
         })
         .eq("id", existing.id)
 
@@ -134,9 +128,12 @@ export async function POST(request: Request) {
         room_id: parsed.data.roomId,
         product_name: parsedBrief.productName,
         product_category: parsedBrief.productCategory,
+        tagline: parsedBrief.tagline ?? null,
+        product_features: parsedBrief.productFeatures ?? null,
         business_problem: parsedBrief.businessProblem,
         target_audience: parsedBrief.targetAudience,
         objective: parsedBrief.objective,
+        weird_constraint: parsedBrief.weirdConstraint ?? null,
       })
 
       if (insertError) {

@@ -4,15 +4,16 @@ import { useState } from "react"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { PRODUCT_CATEGORIES, PHASE_DURATIONS, type ProductCategory, type PhaseDuration } from "@/lib/types"
+import { PRODUCT_CATEGORIES, PHASE_DURATIONS, BRIEF_STYLES, type ProductCategory, type PhaseDuration, type BriefStyle } from "@/lib/types"
 
 interface GameSettingsProps {
   productCategory: ProductCategory
   phaseDurationSeconds: PhaseDuration
+  briefStyle: BriefStyle
   isHost: boolean
   roomCode: string
   playerId: string
-  onSettingsChange?: (settings: { productCategory: ProductCategory; phaseDurationSeconds: PhaseDuration }) => void
+  onSettingsChange?: (settings: { productCategory: ProductCategory; phaseDurationSeconds: PhaseDuration; briefStyle: BriefStyle }) => void
 }
 
 const DURATION_LABELS: Record<PhaseDuration, string> = {
@@ -22,9 +23,20 @@ const DURATION_LABELS: Record<PhaseDuration, string> = {
   120: "2 minutes",
 }
 
+const BRIEF_STYLE_LABELS: Record<BriefStyle, string> = {
+  wacky: "Wacky",
+  realistic: "Realistic",
+}
+
+const BRIEF_STYLE_DESCRIPTIONS: Record<BriefStyle, string> = {
+  wacky: "Absurd, specific, and hilarious products",
+  realistic: "Professional, strategic campaigns",
+}
+
 export function GameSettings({
   productCategory,
   phaseDurationSeconds,
+  briefStyle,
   isHost,
   roomCode,
   playerId,
@@ -32,10 +44,11 @@ export function GameSettings({
 }: GameSettingsProps) {
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>(productCategory)
   const [selectedDuration, setSelectedDuration] = useState<PhaseDuration>(phaseDurationSeconds)
+  const [selectedBriefStyle, setSelectedBriefStyle] = useState<BriefStyle>(briefStyle)
   const [isUpdating, setIsUpdating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const hasChanges = selectedCategory !== productCategory || selectedDuration !== phaseDurationSeconds
+  const hasChanges = selectedCategory !== productCategory || selectedDuration !== phaseDurationSeconds || selectedBriefStyle !== briefStyle
 
   const handleSave = async () => {
     if (!hasChanges) return
@@ -50,6 +63,7 @@ export function GameSettings({
         body: JSON.stringify({
           productCategory: selectedCategory,
           phaseDurationSeconds: selectedDuration,
+          briefStyle: selectedBriefStyle,
           playerId,
         }),
       })
@@ -63,6 +77,7 @@ export function GameSettings({
       onSettingsChange?.({
         productCategory: payload.settings.productCategory,
         phaseDurationSeconds: payload.settings.phaseDurationSeconds,
+        briefStyle: payload.settings.briefStyle,
       })
     } catch (err) {
       console.error(err)
@@ -70,6 +85,7 @@ export function GameSettings({
       // Revert to original values on error
       setSelectedCategory(productCategory)
       setSelectedDuration(phaseDurationSeconds)
+      setSelectedBriefStyle(briefStyle)
     } finally {
       setIsUpdating(false)
     }
@@ -78,6 +94,7 @@ export function GameSettings({
   const handleReset = () => {
     setSelectedCategory(productCategory)
     setSelectedDuration(phaseDurationSeconds)
+    setSelectedBriefStyle(briefStyle)
     setError(null)
   }
 
@@ -91,6 +108,27 @@ export function GameSettings({
       {error && <p className="font-mono text-sm font-medium text-destructive">{error}</p>}
 
       <div className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="brief-style" className="font-mono text-sm uppercase">
+            Brief Style
+          </Label>
+          <div className="grid grid-cols-2 gap-2">
+            {BRIEF_STYLES.map((style) => (
+              <Button
+                key={style}
+                type="button"
+                variant={selectedBriefStyle === style ? "default" : "outline"}
+                className="retro-border flex flex-col items-start h-auto py-3"
+                onClick={() => setSelectedBriefStyle(style)}
+                disabled={!isHost || isUpdating}
+              >
+                <span className="font-bold">{BRIEF_STYLE_LABELS[style]}</span>
+                <span className="text-xs font-normal opacity-80">{BRIEF_STYLE_DESCRIPTIONS[style]}</span>
+              </Button>
+            ))}
+          </div>
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="product-category" className="font-mono text-sm uppercase">
             Product Category

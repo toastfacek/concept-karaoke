@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
+import { getBriefPrompt } from "@/lib/brief-prompts"
 import { TABLES } from "@/lib/db"
+import { env, requireServerEnv } from "@/lib/env"
 import { transitionGameState } from "@/lib/game-state-machine"
 import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
-import type { CreationPhase, GameStatus } from "@/lib/types"
-import { env, requireServerEnv } from "@/lib/env"
+import type { BriefStyle, CreationPhase, GameStatus } from "@/lib/types"
 import { SPECIFIC_PRODUCT_CATEGORIES } from "@/lib/types"
 
 const requestSchema = z.object({
@@ -21,15 +22,18 @@ const requestSchema = z.object({
 const briefSchema = z.object({
   productName: z.string().min(1),
   productCategory: z.string().min(1),
+  tagline: z.string().optional(),
+  productFeatures: z.string().optional(),
   businessProblem: z.string().min(1),
   targetAudience: z.string().min(1),
   objective: z.string().min(1),
+  weirdConstraint: z.string().optional(),
 })
 
 const GEMINI_GENERATE_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
-async function generateBrief(productCategory: string) {
+async function generateBrief(productCategory: string, briefStyle: BriefStyle) {
   const geminiKey = env.server.GEMINI_API_KEY ?? requireServerEnv("GEMINI_API_KEY")
 
   // If "All" is selected, randomly pick from specific categories
@@ -37,21 +41,7 @@ async function generateBrief(productCategory: string) {
     ? SPECIFIC_PRODUCT_CATEGORIES[Math.floor(Math.random() * SPECIFIC_PRODUCT_CATEGORIES.length)]
     : productCategory
 
-  const prompt = [
-    `Generate a creative advertising brief for a fictional product in the "${category}" category.`,
-    "Respond with valid JSON that matches this TypeScript interface:",
-    "{",
-    '  "productName": string,',
-    '  "productCategory": string,',
-    '  "businessProblem": string,',
-    '  "targetAudience": string,',
-    '  "objective": string',
-    "}",
-    `The productCategory field MUST be exactly: "${category}"`,
-    "Make the productName creative and fitting for this category.",
-    "Keep it playful but useful for a collaborative online game.",
-    "Do not wrap the JSON in markdown fences or add extra text.",
-  ].join("\n")
+  const prompt = getBriefPrompt(category, briefStyle)
 
   const completionResponse = await fetch(`${GEMINI_GENERATE_URL}?key=${geminiKey}`, {
     method: "POST",
@@ -101,7 +91,7 @@ export async function POST(request: Request) {
 
     const { data: room, error: roomError } = await supabase
       .from(TABLES.gameRooms)
-      .select("id, code, status, current_phase, product_category")
+      .select("id, code, status, current_phase, product_category, brief_style")
       .eq("code", code)
       .maybeSingle()
 
@@ -202,10 +192,11 @@ export async function POST(request: Request) {
       version: 0, // Version will be managed by WS server
     })
 
-    // Generate AI brief based on product category
+    // Generate AI brief based on product category and style
+    const briefStyle = (room.brief_style as BriefStyle) ?? "wacky"
     let generatedBrief
     try {
-      generatedBrief = await generateBrief(room.product_category ?? "All")
+      generatedBrief = await generateBrief(room.product_category ?? "All", briefStyle)
     } catch (briefError) {
       console.error("Failed to generate brief, using empty brief as fallback", briefError)
       // Fallback to empty brief if generation fails
@@ -236,9 +227,12 @@ export async function POST(request: Request) {
         .update({
           product_name: generatedBrief.productName,
           product_category: generatedBrief.productCategory,
+          tagline: generatedBrief.tagline ?? null,
+          product_features: generatedBrief.productFeatures ?? null,
           business_problem: generatedBrief.businessProblem,
           target_audience: generatedBrief.targetAudience,
           objective: generatedBrief.objective,
+          weird_constraint: generatedBrief.weirdConstraint ?? null,
         })
         .eq("id", existingBrief.id)
 
@@ -254,9 +248,12 @@ export async function POST(request: Request) {
           room_id: room.id,
           product_name: generatedBrief.productName,
           product_category: generatedBrief.productCategory,
+          tagline: generatedBrief.tagline ?? null,
+          product_features: generatedBrief.productFeatures ?? null,
           business_problem: generatedBrief.businessProblem,
           target_audience: generatedBrief.targetAudience,
           objective: generatedBrief.objective,
+          weird_constraint: generatedBrief.weirdConstraint ?? null,
         })
         .select("id")
         .single()
