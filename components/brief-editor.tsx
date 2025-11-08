@@ -95,7 +95,7 @@ export function BriefEditor({
     return (
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <h3 className="font-mono text-lg font-bold uppercase">{label}</h3>
+          <h3 className="font-mono text-sm font-bold uppercase">{label}</h3>
           {!isLocked && !isEditing && (
             <Button
               type="button"
@@ -154,7 +154,7 @@ export function BriefEditor({
       }`}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-3xl font-bold">Campaign Brief</h2>
+        <h2 className="text-xl font-bold">Campaign Brief</h2>
         {!isLocked && (
           <Button type="button" variant="outline" onClick={onRegenerate}>
             Regenerate Brief
@@ -185,7 +185,7 @@ export function BriefEditor({
 
         {/* Product Category is read-only and comes from game settings */}
         <div className="space-y-2">
-          <h3 className="font-mono text-lg font-bold uppercase">Product Category</h3>
+          <h3 className="font-mono text-sm font-bold uppercase">Product Category</h3>
           <p className="whitespace-pre-wrap font-mono text-sm leading-relaxed">
             {brief.productCategory || <span className="text-muted-foreground">Not set</span>}
           </p>
