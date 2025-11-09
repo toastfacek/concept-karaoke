@@ -89,7 +89,7 @@ export function BriefEditor({
     return (
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <h3 className="font-mono text-xs font-bold uppercase text-muted-foreground">{label}</h3>
+          <h3 className="font-mono text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</h3>
           {!isLocked && !isEditing && (
             <Button
               type="button"
@@ -154,7 +154,9 @@ export function BriefEditor({
       }`}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-lg font-bold">Campaign Brief</h2>
+        <h2 className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+          {brief.productName || "Campaign Brief"}
+        </h2>
         {!isLocked && (
           <Button type="button" variant="outline" onClick={onRegenerate}>
             Regenerate Brief
@@ -165,10 +167,7 @@ export function BriefEditor({
       {/* Two-column layout: Image on left, Product info on right */}
       <div className="grid gap-6 md:grid-cols-[1fr,1fr]">
         {/* Left Column - Product Image */}
-        <div className="space-y-2">
-          <h3 className="font-mono text-xs font-bold uppercase text-muted-foreground">
-            Product Image
-          </h3>
+        <div>
           {brief.coverImageUrl ? (
             <div className="overflow-hidden rounded border-2 border-border">
               <img
@@ -239,7 +238,7 @@ export function BriefEditor({
 
           {/* Product Category - Read-only */}
           <div className="space-y-1">
-            <h3 className="font-mono text-xs font-bold uppercase text-muted-foreground">
+            <h3 className="font-mono text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               Product Category
             </h3>
             <p className="text-sm leading-relaxed">
