@@ -549,16 +549,19 @@ export default function CreatePage() {
     if (totalPlayers === 0) return null
 
     // "Passing to the left" - each phase, adlobs rotate one position
-    const targetIndex = (playerIndex + phaseIndex) % totalPlayers
+    // Use adlobs.length for modulo to handle cases where player count != adlob count
+    const targetIndex = (playerIndex + phaseIndex) % game.adlobs.length
     return game.adlobs[targetIndex] ?? null
   }, [game, currentPlayer, playerIndex, phaseIndex])
 
   // Lock the adlob assignment when phase changes
+  // CRITICAL: Only depend on phaseIndex to prevent mid-phase reassignment
+  // when realtime events trigger game state updates
   useEffect(() => {
-    if (calculatedAdlob && calculatedAdlob.id !== lockedAdlobId) {
+    if (phaseIndex !== -1 && calculatedAdlob) {
       setLockedAdlobId(calculatedAdlob.id)
     }
-  }, [phaseIndex, calculatedAdlob, lockedAdlobId])
+  }, [phaseIndex, calculatedAdlob])
 
   // Use locked adlob reference to prevent mid-phase swapping
   const currentAdlob = useMemo(() => {

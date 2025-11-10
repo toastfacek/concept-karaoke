@@ -80,7 +80,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         room.adlobs.sort((a, b) => {
           const timeA = a.created_at ? new Date(a.created_at).getTime() : 0
           const timeB = b.created_at ? new Date(b.created_at).getTime() : 0
-          return timeA - timeB
+          // If timestamps are equal, use ID for stable sort
+          if (timeA !== timeB) return timeA - timeB
+          return a.id.localeCompare(b.id)
         })
       }
     }
