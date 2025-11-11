@@ -530,7 +530,16 @@ export default function CreatePage() {
 
   const playerIndex = useMemo(() => {
     if (!game || !currentPlayer) return -1
-    return game.players.findIndex((player) => player.id === currentPlayer.id)
+
+    // CRITICAL: Always sort players by joinedAt to ensure stable index
+    // Realtime events may reorder the array, causing playerIndex to change
+    const sortedPlayers = [...game.players].sort((a, b) => {
+      const timeA = new Date(a.joinedAt).getTime()
+      const timeB = new Date(b.joinedAt).getTime()
+      return timeA - timeB
+    })
+
+    return sortedPlayers.findIndex((player) => player.id === currentPlayer.id)
   }, [game, currentPlayer])
 
   const phaseIndex = useMemo(() => getPhaseIndex(game?.currentPhase ?? null), [game?.currentPhase])
@@ -548,10 +557,20 @@ export default function CreatePage() {
     const totalPlayers = game.players.length
     if (totalPlayers === 0) return null
 
+    // CRITICAL: Always sort adlobs by createdAt to ensure stable ordering
+    // Realtime events may reorder the array, causing different assignments
+    const sortedAdlobs = [...game.adlobs].sort((a, b) => {
+      const timeA = new Date(a.createdAt).getTime()
+      const timeB = new Date(b.createdAt).getTime()
+      // If timestamps are equal, use ID for stable sort
+      if (timeA !== timeB) return timeA - timeB
+      return a.id.localeCompare(b.id)
+    })
+
     // "Passing to the left" - each phase, adlobs rotate one position
     // Use adlobs.length for modulo to handle cases where player count != adlob count
-    const targetIndex = (playerIndex + phaseIndex) % game.adlobs.length
-    return game.adlobs[targetIndex] ?? null
+    const targetIndex = (playerIndex + phaseIndex) % sortedAdlobs.length
+    return sortedAdlobs[targetIndex] ?? null
   }, [game, currentPlayer, playerIndex, phaseIndex])
 
   // Lock the adlob assignment when phase changes
