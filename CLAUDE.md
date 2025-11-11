@@ -63,6 +63,39 @@ Key functions:
 - `getNextCreationPhase()` - Advances through creation phases
 - `advanceCreationPhase()` - Transitions to next phase or "presenting" status
 
+### Adlob Assignment & Rotation Logic
+
+During the creation phase, players rotate through different adlobs using a **stable, deterministic assignment system**:
+
+**Rotation Formula**: `(playerIndex + phaseIndex) % adlobs.length`
+
+This creates a Latin square where:
+- Each player works on different adlobs across phases
+- Each adlob is worked on by different players in each phase
+- No collisions (two players on same adlob)
+
+**Critical Implementation Details** ([app/create/[roomId]/page.tsx:531-574](app/create/[roomId]/page.tsx#L531-L574)):
+
+1. **Stable Player Indexing**: Always sorts players by `joinedAt` before calculating `playerIndex`
+   - Prevents realtime events from reordering arrays and changing player indices mid-session
+   - Ensures same player always has same index throughout game
+
+2. **Stable Adlob Ordering**: Always sorts adlobs by `createdAt` (with ID fallback) before indexing
+   - Matches API sorting behavior exactly
+   - Prevents array reordering from affecting assignments
+
+3. **Phase Locking**: `lockedAdlobId` only updates when `phaseIndex` changes
+   - Prevents mid-phase swapping when realtime events fire
+   - Content (big idea + visual + headline + pitch) always travels with correct adlob
+
+**Example for 3 players, 3 adlobs:**
+| Phase | P0 | P1 | P2 |
+|-------|----|----|-----|
+| big_idea (0) | Adlob A | Adlob B | Adlob C |
+| visual (1) | Adlob B | Adlob C | Adlob A |
+| headline (2) | Adlob C | Adlob A | Adlob B |
+| pitch (3) | Adlob A | Adlob B | Adlob C |
+
 ### Realtime Architecture
 
 The app uses a **single source of truth architecture** with hybrid realtime delivery:
@@ -98,7 +131,16 @@ Core types in [lib/types.ts](lib/types.ts):
 
 - **GameRoom** - Game instance with status, phase timing, settings
 - **Player** - User in a game with name, emoji, ready state
-- **CampaignBrief** - AI-generated product brief (5 fields)
+- **CampaignBrief** - AI-generated product brief with 9 fields:
+  - `productName` - Product name
+  - `productCategory` - Product category (from game settings)
+  - `coverImageUrl` - Optional product image URL
+  - `mainPoint` - The main campaign message (4-8 words)
+  - `audience` - Target audience (1-2 bullet points, newline-separated)
+  - `businessProblem` - Business problem (1-3 bullet points, newline-separated)
+  - `objective` - Campaign objective (single paragraph)
+  - `strategy` - Campaign strategy (1-2 sentences)
+  - `productFeatures` - Key product features (exactly 3 bullet points, newline-separated)
 - **AdLob** - A campaign with 4 phases: `bigIdea`, `visual`, `headline`, `pitch`
 
 Database table constants in [lib/db.ts](lib/db.ts): `game_rooms`, `players`, `campaign_briefs`, `adlobs`, `votes`
@@ -232,6 +274,32 @@ Cassette Futurism + Classic Ogilvy Advertising aesthetic:
 - **Style**: Retro borders, hard shadows, bold typography, scanline effects
 - 30+ cartoony game icons in [components/game-icons.tsx](components/game-icons.tsx)
 
+### Brief UI Components
+
+The campaign brief is displayed using two specialized components with a consistent layout:
+
+**[components/brief-editor.tsx](components/brief-editor.tsx)** - Editable brief interface used during briefing stage:
+- **Two-column layout**: Product image (left) with hatched placeholder pattern when no image; Product name, category, main point, and audience (right)
+- **Bottom grid**: Business Problem, Objective, Strategy, and Product Features in 2x2 responsive grid
+- **Bullet parsing**: Newline-separated text (`\n`) automatically renders as proper `<ul>` lists for: Audience, Business Problem, Product Features
+- **Typography hierarchy**:
+  - Product Name: Large purple heading (text-2xl, purple-600)
+  - Section headings: Monospace uppercase labels (font-mono text-xs)
+  - Body text: Readable size with proper spacing (text-sm)
+- **Edit functionality**: Inline editing with pencil icons, preserves all edits until "Lock Brief"
+- **Product Category**: Read-only field (set from game settings)
+
+**[components/brief-view-dialog.tsx](components/brief-view-dialog.tsx)** - Read-only brief modal used during creation/presentation:
+- **Same layout structure** as BriefEditor for consistency
+- **No edit controls**: Clean, distraction-free view
+- **Bullet rendering**: Same newline parsing for bulleted fields
+
+**Key design decisions**:
+1. **Newline-separated bullets**: Brief generation creates bullet points separated by `\n`. Components split on newlines and render as `<li>` elements.
+2. **Image placeholder**: Diagonal stripe pattern using CSS gradients when `coverImageUrl` is null
+3. **Responsive grid**: Two-column layout on desktop (`md:grid-cols-[1fr,1fr]`), stacked on mobile
+4. **Cassette aesthetic**: Maintains retro borders, monospace labels, and bold typography throughout
+
 ## Important Patterns
 
 ### Environment Variables
@@ -291,10 +359,12 @@ router.push(routes.create(roomId))
 
 [lib/sample-data.ts](lib/sample-data.ts) provides mock data for testing UI without database:
 - `samplePlayers` - 4 test players
-- `sampleBrief` - Pre-filled campaign brief
+- `sampleBrief` - Pre-filled campaign brief with all 9 fields (uses newline-separated bullets)
 - `sampleAdLobs` - Complete AdLob examples
 - `sampleGameRoom` - Game state
 - `emojis` - 24 emoji options
+
+**Note**: `sampleBrief` demonstrates the correct format for bullet points - fields like `audience`, `businessProblem`, and `productFeatures` use `\n` characters to separate individual bullet points.
 
 ## Supabase Schema
 
@@ -332,11 +402,15 @@ To work on the realtime server, navigate to `services/realtime-server` and run c
 
 7. **Adlob Assignment Locking** - During creation phases, adlob assignments are locked when a phase starts to prevent mid-phase swapping. The assignment uses `lockedAdlobId` state that only updates when `phaseIndex` changes.
 
-8. **Presenter Assignment** - Presenters are assigned deterministically via round-robin when transitioning to "presenting" status. `player[i]` always presents `adlob[i]` (both ordered by creation time). Never rely on `pitch_created_by` for presenter assignment.
+8. **Stable Player/Adlob Indexing** - Both `playerIndex` and adlob calculations use stable sorting (by `joinedAt` and `createdAt` respectively) to ensure deterministic assignment even when realtime events reorder arrays. This prevents collision bugs where multiple players get assigned the same adlob. See [app/create/[roomId]/page.tsx:531-574](app/create/[roomId]/page.tsx#L531-L574).
 
-9. **Version Increments** - All adlob phase update routes (big-idea, visual, headline, pitch) increment `game_rooms.version` to trigger realtime refresh. This ensures all clients see updates immediately.
+9. **Presenter Assignment** - Presenters are assigned deterministically via round-robin when transitioning to "presenting" status. `player[i]` always presents `adlob[i]` (both ordered by creation time). Never rely on `pitch_created_by` for presenter assignment.
 
-10. **Overwrite Protection** - Each phase route checks if content was already created by a different player and returns 409 conflict to prevent overwrites. First player to submit "wins" and locks that phase.
+10. **Version Increments** - All adlob phase update routes (big-idea, visual, headline, pitch) increment `game_rooms.version` to trigger realtime refresh. This ensures all clients see updates immediately.
+
+11. **Overwrite Protection** - Each phase route checks if content was already created by a different player and returns 409 conflict to prevent overwrites. First player to submit "wins" and locks that phase.
+
+12. **Winner Display** - Results page displays the winning campaign's big idea text rather than the presenter's name, reflecting the collaborative nature of campaign creation across multiple players. See [app/results/[roomId]/page.tsx:367](app/results/[roomId]/page.tsx#L367).
 
 ## Testing the Application
 
@@ -354,8 +428,10 @@ The app is fully navigable with sample data. Start at `/` and follow the game fl
 - **Server-side authorization for WebSocket handlers**
 - **Eliminated dual-write pattern for consistency**
 - Deterministic presenter assignment (round-robin)
+- **Stable adlob assignment with collision prevention** (fixed rotation formula + stable sorting)
 - Adlob assignment locking to prevent mid-phase swapping
 - Overwrite protection for concurrent content creation
+- Winner display shows big idea instead of player name
 - Sample data for testing
 
 🚧 In Progress:
@@ -454,6 +530,11 @@ All events are defined in [packages/realtime-shared/src/index.ts](packages/realt
 - [lib/realtime-broadcast.ts](lib/realtime-broadcast.ts) - API → WS broadcast helper
 - [services/realtime-server/src/index.ts](services/realtime-server/src/index.ts) - WebSocket server
 - [packages/realtime-shared/src/index.ts](packages/realtime-shared/src/index.ts) - Shared event types
+
+**Brief Components**:
+- [components/brief-editor.tsx](components/brief-editor.tsx) - Editable brief display with two-column layout
+- [components/brief-view-dialog.tsx](components/brief-view-dialog.tsx) - Read-only brief modal dialog
+- [app/api/briefs/generate/route.ts](app/api/briefs/generate/route.ts) - AI brief generation endpoint
 
 **Documentation**:
 - [SCREEN_FLOW.md](SCREEN_FLOW.md) - Detailed user flow
