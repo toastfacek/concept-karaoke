@@ -364,7 +364,7 @@ export default function ResultsPage() {
               <Trophy className="mx-auto mb-4 size-16" />
               <h1 className="mb-2 text-5xl font-bold uppercase">Winner!</h1>
               <p className="text-3xl font-bold">
-                <span className="text-4xl">{winnerPresenter?.emoji}</span> {winnerPresenter?.name}
+                {winner.bigIdea.text}
               </p>
               <p className="mt-4 font-mono text-lg">
                 {winner.voteCount} vote{winner.voteCount !== 1 ? "s" : ""}
