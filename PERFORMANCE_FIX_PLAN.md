@@ -234,10 +234,11 @@ This will restore original behavior while preserving all other changes.
 **Status**: Investigated, fix pending
 **See**: `ADLOB_COLLISION_FIX.md`
 
-### 2. Brief Regeneration Overwrite (HIGH)
+### 2. Brief Regeneration Overwrite (FIXED)
 **Symptom**: Browser back → regenerate overwrites locked brief
 **Solution**: Add status guard to `/api/briefs/generate`
-**Status**: Not yet implemented
+**Status**: ✅ Fixed - Returns 409 conflict if game status is not "lobby" or "briefing"
+**Commit**: Added in upcoming commit
 
 ### 3. Phase Rollback Bug (MEDIUM)
 **Symptom**: WebSocket server phase wraps to null

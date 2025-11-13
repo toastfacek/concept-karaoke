@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     console.log("[Brief Generate] Fetching room...")
     const { data: room, error: roomError } = await supabase
       .from(TABLES.gameRooms)
-      .select("id, product_category, brief_style")
+      .select("id, product_category, brief_style, status")
       .eq("id", parsed.data.roomId)
       .maybeSingle()
 
@@ -61,6 +61,15 @@ export async function POST(request: Request) {
     if (!room) {
       console.error("[Brief Generate] Room not found for ID:", parsed.data.roomId)
       return NextResponse.json({ success: false, error: "Room not found" }, { status: 404 })
+    }
+
+    // Prevent brief regeneration once game has started (status guard)
+    if (room.status !== "lobby" && room.status !== "briefing") {
+      console.error("[Brief Generate] Cannot regenerate brief - game already in progress. Status:", room.status)
+      return NextResponse.json(
+        { success: false, error: "Cannot regenerate brief after game has started" },
+        { status: 409 },
+      )
     }
 
     const selectedCategory = room.product_category ?? "All"
