@@ -606,7 +606,23 @@ export default function CreatePage() {
     // "Passing to the left" - each phase, adlobs rotate one position
     // Use adlobs.length for modulo to handle cases where player count != adlob count
     const targetIndex = (playerIndex + phaseIndex) % sortedAdlobs.length
-    return sortedAdlobs[targetIndex] ?? null
+    const assignedAdlob = sortedAdlobs[targetIndex] ?? null
+
+    // Log assignment for debugging collisions
+    console.log("[create] Adlob assignment", {
+      playerName: currentPlayer.name,
+      playerId: currentPlayer.id,
+      playerIndex,
+      phase: game.currentPhase,
+      phaseIndex,
+      totalPlayers,
+      totalAdlobs: sortedAdlobs.length,
+      targetIndex,
+      assignedAdlobId: assignedAdlob?.id,
+      formula: `(${playerIndex} + ${phaseIndex}) % ${sortedAdlobs.length} = ${targetIndex}`,
+    })
+
+    return assignedAdlob
   }, [game, currentPlayer, playerIndex, phaseIndex])
 
   // Lock the adlob assignment when phase changes
@@ -654,6 +670,7 @@ export default function CreatePage() {
       return
     }
 
+    // Update refs FIRST (before any state changes)
     lastPhaseRef.current = nextPhase
     lastAdlobIdRef.current = nextAdlobId
 
@@ -665,16 +682,41 @@ export default function CreatePage() {
       setHeadlineCanvas(null)
     } else if (nextPhase === "visual") {
       setVisualNotes(extractNotes(currentAdlob.visualCanvasData))
-      setVisualCanvas(parseCanvasData(currentAdlob.visualCanvasData))
+
+      // Preserve local canvas edits during same phase
+      setVisualCanvas((prev) => {
+        const hasLocalContent = prev && canvasHasContent(prev)
+        const dbContent = parseCanvasData(currentAdlob.visualCanvasData)
+
+        if (hasLocalContent && !adlobChanged) {
+          console.log("[create] Preserving local visual canvas edits")
+          return prev
+        }
+
+        return dbContent
+      })
+
       setPitchInput("")
       setHeadlineCanvas(null)
     } else if (nextPhase === "headline") {
-      setHeadlineCanvas(parseCanvasData(currentAdlob.headlineCanvasData))
+      // Preserve local canvas edits during same phase
+      setHeadlineCanvas((prev) => {
+        const hasLocalContent = prev && canvasHasContent(prev)
+        const dbContent = parseCanvasData(currentAdlob.headlineCanvasData)
+
+        if (hasLocalContent && !adlobChanged) {
+          console.log("[create] Preserving local headline canvas edits")
+          return prev
+        }
+
+        return dbContent
+      })
+
       setPitchInput("")
     } else if (nextPhase === "pitch") {
       setPitchInput(currentAdlob.pitch ?? "")
     }
-  }, [game, currentAdlob])
+  }, [game?.currentPhase, currentAdlob?.id, currentAdlob])
 
   const readyCount = useMemo(() => game?.players.filter((player) => player.isReady).length ?? 0, [game])
   const totalPlayers = game?.players.length ?? 0
