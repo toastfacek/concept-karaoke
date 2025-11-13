@@ -5,7 +5,7 @@ import { TABLES } from "@/lib/db"
 import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 
-const MAX_PLAYERS = 8
+const MAX_PLAYERS = 12
 
 const requestSchema = z.object({
   code: z
