@@ -211,6 +211,8 @@ export default function CreatePage() {
   const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
   const latestGameRef = useRef<GameState | null>(null)
   const pendingRefreshTimeoutRef = useRef<number | null>(null)
+  const pendingFetchRef = useRef<Promise<void> | null>(null)
+  const lastFetchVersionRef = useRef<number>(0)
 
   const clearPendingRefresh = useCallback(() => {
     if (pendingRefreshTimeoutRef.current !== null) {
@@ -224,14 +226,21 @@ export default function CreatePage() {
   }, [roomCode])
 
   const fetchGame = useCallback(
-    async ({ silent = false }: { silent?: boolean } = {}) => {
+    async ({ silent = false, force = false }: { silent?: boolean; force?: boolean } = {}) => {
+      // Deduplicate concurrent requests - reuse existing pending fetch
+      if (pendingFetchRef.current && !force) {
+        console.log("[create] Deduplicating concurrent fetchGame call")
+        return pendingFetchRef.current
+      }
+
       if (!silent) {
         setError(null)
       }
 
-      try {
-        const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
-        const payload = await response.json()
+      const fetchPromise = (async () => {
+        try {
+          const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
+          const payload = await response.json()
 
         if (!response.ok || !payload.success) {
           setError(payload.error ?? "Unable to load creation round.")
@@ -240,6 +249,18 @@ export default function CreatePage() {
         }
 
         const gameData = payload.game
+        const newVersion = typeof gameData.version === "number" ? gameData.version : 0
+
+        // Ignore stale responses (version guard)
+        if (newVersion < lastFetchVersionRef.current) {
+          console.warn("[create] Ignoring stale response", {
+            received: newVersion,
+            current: lastFetchVersionRef.current,
+          })
+          return
+        }
+
+        lastFetchVersionRef.current = newVersion
 
         setGame({
           id: gameData.id,
@@ -255,7 +276,7 @@ export default function CreatePage() {
             joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
           })),
           adlobs: gameData.adlobs,
-          version: typeof gameData.version === "number" ? gameData.version : 0,
+          version: newVersion,
           phaseDurationSeconds: gameData.phaseDurationSeconds ?? 60,
           brief: gameData.brief
             ? {
@@ -291,8 +312,12 @@ export default function CreatePage() {
         setError("Unable to load creation round.")
         setGame(null)
       } finally {
-        // no-op
+        pendingFetchRef.current = null
       }
+      })()
+
+      pendingFetchRef.current = fetchPromise
+      return fetchPromise
     },
     [roomCode],
   )
@@ -491,12 +516,23 @@ export default function CreatePage() {
         clearPendingRefresh()
       })
 
+      // Debounced fetch for high-frequency events
+      let contentSubmitDebounceTimer: number | null = null
       const unsubscribeContentSubmitted = addListener("content_submitted", ({ adlobId, phase, playerId, version }) => {
         console.log("[create realtime] content_submitted", { roomCode, adlobId, phase, playerId, version })
-        // Refetch game to get latest adlob content
-        fetchGame({ silent: true }).catch((err) => {
-          console.error("Failed to refetch after content submission", err)
-        })
+
+        // Debounce: max 1 fetch per 300ms for content_submitted events
+        if (contentSubmitDebounceTimer !== null) {
+          window.clearTimeout(contentSubmitDebounceTimer)
+        }
+
+        contentSubmitDebounceTimer = window.setTimeout(() => {
+          fetchGame({ silent: true }).catch((err) => {
+            console.error("Failed to refetch after content submission", err)
+          })
+          contentSubmitDebounceTimer = null
+        }, 300)
+
         clearPendingRefresh()
       })
 

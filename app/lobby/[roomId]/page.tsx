@@ -47,6 +47,8 @@ export default function LobbyPage() {
   const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
   const latestLobbyRef = useRef<LobbyState | null>(null)
   const pendingRefreshTimeoutRef = useRef<number | null>(null)
+  const pendingFetchRef = useRef<Promise<void> | null>(null)
+  const lastFetchVersionRef = useRef<number>(0)
 
   const clearPendingRefresh = useCallback(() => {
     if (pendingRefreshTimeoutRef.current !== null) {
@@ -60,66 +62,91 @@ export default function LobbyPage() {
   }, [roomCode])
 
   const fetchLobby = useCallback(
-    async ({ silent = false }: { silent?: boolean } = {}) => {
+    async ({ silent = false, force = false }: { silent?: boolean; force?: boolean } = {}) => {
+      // Deduplicate concurrent requests
+      if (pendingFetchRef.current && !force) {
+        console.log("[lobby] Deduplicating concurrent fetchLobby call")
+        return pendingFetchRef.current
+      }
+
       if (!silent) {
         setLoading(true)
         setError(null)
       }
 
-      try {
-        const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
-        const payload = await response.json()
+      const fetchPromise = (async () => {
+        try {
+          const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
+          const payload = await response.json()
 
-        if (!response.ok || !payload.success) {
-          setError(payload.error ?? "Unable to load lobby.")
-          setLobby(null)
-          return
-        }
-
-        const players: LobbyPlayer[] = (payload.game.players ?? []).map((player: LobbyPlayer & { joined_at?: string }) => ({
-          id: player.id,
-          name: player.name,
-          emoji: player.emoji,
-          isReady: player.isReady,
-          isHost: player.isHost,
-          joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
-        }))
-
-        setLobby({
-          id: payload.game.id,
-          code: payload.game.code,
-          status: payload.game.status,
-          hostId: payload.game.hostId,
-          players,
-          version: typeof payload.game.version === "number" ? payload.game.version : 0,
-          productCategory: payload.game.productCategory ?? "All",
-          phaseDurationSeconds: payload.game.phaseDurationSeconds ?? 60,
-          briefStyle: payload.game.briefStyle ?? "wacky",
-        })
-
-        const localPlayer = loadPlayer(roomCode)
-        if (localPlayer) {
-          const latestPlayer = players.find((player) => player.id === localPlayer.id)
-          if (latestPlayer) {
-            const syncedPlayer: StoredPlayer = {
-              id: latestPlayer.id,
-              name: latestPlayer.name,
-              emoji: latestPlayer.emoji,
-              isHost: latestPlayer.isHost,
-            }
-            savePlayer(roomCode, syncedPlayer)
-            setStoredPlayer(syncedPlayer)
+          if (!response.ok || !payload.success) {
+            setError(payload.error ?? "Unable to load lobby.")
+            setLobby(null)
+            return
           }
+
+          const newVersion = typeof payload.game.version === "number" ? payload.game.version : 0
+
+          // Ignore stale responses
+          if (newVersion < lastFetchVersionRef.current) {
+            console.warn("[lobby] Ignoring stale response", {
+              received: newVersion,
+              current: lastFetchVersionRef.current,
+            })
+            return
+          }
+
+          lastFetchVersionRef.current = newVersion
+
+          const players: LobbyPlayer[] = (payload.game.players ?? []).map((player: LobbyPlayer & { joined_at?: string }) => ({
+            id: player.id,
+            name: player.name,
+            emoji: player.emoji,
+            isReady: player.isReady,
+            isHost: player.isHost,
+            joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
+          }))
+
+          setLobby({
+            id: payload.game.id,
+            code: payload.game.code,
+            status: payload.game.status,
+            hostId: payload.game.hostId,
+            players,
+            version: newVersion,
+            productCategory: payload.game.productCategory ?? "All",
+            phaseDurationSeconds: payload.game.phaseDurationSeconds ?? 60,
+            briefStyle: payload.game.briefStyle ?? "wacky",
+          })
+
+          const localPlayer = loadPlayer(roomCode)
+          if (localPlayer) {
+            const latestPlayer = players.find((player) => player.id === localPlayer.id)
+            if (latestPlayer) {
+              const syncedPlayer: StoredPlayer = {
+                id: latestPlayer.id,
+                name: latestPlayer.name,
+                emoji: latestPlayer.emoji,
+                isHost: latestPlayer.isHost,
+              }
+              savePlayer(roomCode, syncedPlayer)
+              setStoredPlayer(syncedPlayer)
+            }
+          }
+        } catch (fetchError) {
+          console.error(fetchError)
+          setError("Unable to load lobby.")
+          setLobby(null)
+        } finally {
+          if (!silent) {
+            setLoading(false)
+          }
+          pendingFetchRef.current = null
         }
-      } catch (fetchError) {
-        console.error(fetchError)
-        setError("Unable to load lobby.")
-        setLobby(null)
-      } finally {
-        if (!silent) {
-          setLoading(false)
-        }
-      }
+      })()
+
+      pendingFetchRef.current = fetchPromise
+      return fetchPromise
     },
     [roomCode],
   )

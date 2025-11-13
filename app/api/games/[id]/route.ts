@@ -95,10 +95,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ success: false, error: "Game not found" }, { status: 404 })
     }
 
-    return NextResponse.json({
-      success: true,
-      game: serializeGameRow(room),
-    })
+    return NextResponse.json(
+      {
+        success: true,
+        game: serializeGameRow(room),
+      },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=0, stale-while-revalidate=2",
+          "CDN-Cache-Control": "max-age=0",
+        },
+      },
+    )
   } catch (error) {
     console.error("Failed to fetch game", error)
     return NextResponse.json({ success: false, error: "Failed to fetch game" }, { status: 500 })
