@@ -79,30 +79,51 @@ export default function VotePage() {
   const [isVoting, setIsVoting] = useState(false)
   const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
   const latestGameRef = useRef<VoteGameState | null>(null)
+  const pendingFetchRef = useRef<Promise<void> | null>(null)
+  const lastFetchVersionRef = useRef<number>(0)
 
   useEffect(() => {
     setStoredPlayer(loadPlayer(roomCode))
   }, [roomCode])
 
   const fetchGame = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    // Deduplicate concurrent requests
+    if (pendingFetchRef.current) {
+      console.log("[vote] Deduplicating concurrent fetchGame call")
+      return pendingFetchRef.current
+    }
+
     if (!silent) {
       setLoading(true)
       setError(null)
     }
 
-    try {
-      const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
-      const payload = await response.json()
+    const fetchPromise = (async () => {
+      try {
+        const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
+        const payload = await response.json()
 
-      if (!response.ok || !payload.success) {
-        setError(payload.error ?? "Unable to load voting data")
-        setGame(null)
-        return
-      }
+        if (!response.ok || !payload.success) {
+          setError(payload.error ?? "Unable to load voting data")
+          setGame(null)
+          return
+        }
 
-      const gameData = payload.game
+        const gameData = payload.game
+        const newVersion = typeof gameData.version === "number" ? gameData.version : 0
 
-      // Map the API response to our game state format
+        // Ignore stale responses (version guard)
+        if (newVersion < lastFetchVersionRef.current) {
+          console.warn("[vote] Ignoring stale response", {
+            received: newVersion,
+            current: lastFetchVersionRef.current,
+          })
+          return
+        }
+
+        lastFetchVersionRef.current = newVersion
+
+        // Map the API response to our game state format
       const mappedAdlobs: AdLob[] = (gameData.adlobs ?? []).map((adlob: any) => ({
         id: adlob.id,
         bigIdea: {
@@ -154,16 +175,21 @@ export default function VotePage() {
           return { ...previous, isHost: latestPlayer.isHost, emoji: latestPlayer.emoji, name: latestPlayer.name }
         }
         return previous
-      })
-    } catch (fetchError) {
-      console.error("Failed to fetch voting data", fetchError)
-      setError("Unable to load voting data")
-      setGame(null)
-    } finally {
-      if (!silent) {
-        setLoading(false)
+        })
+      } catch (fetchError) {
+        console.error("Failed to fetch voting data", fetchError)
+        setError("Unable to load voting data")
+        setGame(null)
+      } finally {
+        if (!silent) {
+          setLoading(false)
+        }
+        pendingFetchRef.current = null
       }
-    }
+    })()
+
+    pendingFetchRef.current = fetchPromise
+    return fetchPromise
   }, [roomCode])
 
   useEffect(() => {

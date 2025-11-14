@@ -76,6 +76,8 @@ export default function BriefPage() {
   const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
   const latestGameRef = useRef<BriefGameState | null>(null)
   const initialLoadRef = useRef(true)
+  const pendingFetchRef = useRef<Promise<void> | null>(null)
+  const lastFetchVersionRef = useRef<number>(0)
 
   useEffect(() => {
     setStoredPlayer(loadPlayer(roomCode))
@@ -83,6 +85,12 @@ export default function BriefPage() {
 
   const fetchGame = useCallback(
     async ({ silent = false }: { silent?: boolean } = {}) => {
+      // Deduplicate concurrent requests
+      if (pendingFetchRef.current) {
+        console.log("[brief] Deduplicating concurrent fetchGame call")
+        return pendingFetchRef.current
+      }
+
       if (!silent) {
         setLoading(true)
         setError(null)
@@ -93,11 +101,12 @@ export default function BriefPage() {
         setShowLoadingModal(true)
       }
 
-      try {
-        const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
-        const payload = await response.json()
+      const fetchPromise = (async () => {
+        try {
+          const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
+          const payload = await response.json()
 
-        if (!response.ok || !payload.success) {
+          if (!response.ok || !payload.success) {
           setError(payload.error ?? "Unable to load briefing room.")
           setGame(null)
           setShowLoadingModal(false)
@@ -119,7 +128,21 @@ export default function BriefPage() {
             }
           : null
 
-        const players: GamePlayer[] = (payload.game.players ?? []).map(
+        const gameData = payload.game
+        const newVersion = typeof gameData.version === "number" ? gameData.version : 0
+
+        // Ignore stale responses (version guard)
+        if (newVersion < lastFetchVersionRef.current) {
+          console.warn("[brief] Ignoring stale response", {
+            received: newVersion,
+            current: lastFetchVersionRef.current,
+          })
+          return
+        }
+
+        lastFetchVersionRef.current = newVersion
+
+        const players: GamePlayer[] = (gameData.players ?? []).map(
           (player: Partial<GamePlayer> & { joined_at?: string; seat_index?: number }) => ({
             id: player.id ?? "",
             name: player.name ?? "",
@@ -178,16 +201,21 @@ export default function BriefPage() {
             setStoredPlayer(synced)
           }
         }
-      } catch (fetchError) {
-        console.error(fetchError)
-        setError("Unable to load briefing room.")
-        setGame(null)
-        setShowLoadingModal(false)
-      } finally {
-        if (!silent) {
-          setLoading(false)
+        } catch (fetchError) {
+          console.error(fetchError)
+          setError("Unable to load briefing room.")
+          setGame(null)
+          setShowLoadingModal(false)
+        } finally {
+          if (!silent) {
+            setLoading(false)
+          }
+          pendingFetchRef.current = null
         }
-      }
+      })()
+
+      pendingFetchRef.current = fetchPromise
+      return fetchPromise
     },
     [roomCode],
   )

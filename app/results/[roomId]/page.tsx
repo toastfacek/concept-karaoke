@@ -77,30 +77,51 @@ export default function ResultsPage() {
   const [error, setError] = useState<string | null>(null)
   const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
   const latestGameRef = useRef<ResultsGameState | null>(null)
+  const pendingFetchRef = useRef<Promise<void> | null>(null)
+  const lastFetchVersionRef = useRef<number>(0)
 
   useEffect(() => {
     setStoredPlayer(loadPlayer(roomCode))
   }, [roomCode])
 
   const fetchGame = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    // Deduplicate concurrent requests
+    if (pendingFetchRef.current) {
+      console.log("[results] Deduplicating concurrent fetchGame call")
+      return pendingFetchRef.current
+    }
+
     if (!silent) {
       setLoading(true)
       setError(null)
     }
 
-    try {
-      const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
-      const payload = await response.json()
+    const fetchPromise = (async () => {
+      try {
+        const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
+        const payload = await response.json()
 
-      if (!response.ok || !payload.success) {
-        setError(payload.error ?? "Unable to load results")
-        setGame(null)
-        return
-      }
+        if (!response.ok || !payload.success) {
+          setError(payload.error ?? "Unable to load results")
+          setGame(null)
+          return
+        }
 
-      const gameData = payload.game
+        const gameData = payload.game
+        const newVersion = typeof gameData.version === "number" ? gameData.version : 0
 
-      const mappedAdlobs: AdLob[] = (gameData.adlobs ?? []).map((adlob: any) => ({
+        // Ignore stale responses (version guard)
+        if (newVersion < lastFetchVersionRef.current) {
+          console.warn("[results] Ignoring stale response", {
+            received: newVersion,
+            current: lastFetchVersionRef.current,
+          })
+          return
+        }
+
+        lastFetchVersionRef.current = newVersion
+
+        const mappedAdlobs: AdLob[] = (gameData.adlobs ?? []).map((adlob: any) => ({
         id: adlob.id,
         bigIdea: {
           text: adlob.bigIdea ?? "",
@@ -142,16 +163,21 @@ export default function ResultsPage() {
         version: typeof gameData.version === "number" ? gameData.version : 0,
         players: mappedPlayers,
         adlobs: mappedAdlobs,
-      })
-    } catch (fetchError) {
-      console.error("Failed to fetch results", fetchError)
-      setError("Unable to load results")
-      setGame(null)
-    } finally {
-      if (!silent) {
-        setLoading(false)
+        })
+      } catch (fetchError) {
+        console.error("Failed to fetch results", fetchError)
+        setError("Unable to load results")
+        setGame(null)
+      } finally {
+        if (!silent) {
+          setLoading(false)
+        }
+        pendingFetchRef.current = null
       }
-    }
+    })()
+
+    pendingFetchRef.current = fetchPromise
+    return fetchPromise
   }, [roomCode])
 
   useEffect(() => {
