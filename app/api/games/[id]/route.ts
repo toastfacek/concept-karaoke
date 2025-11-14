@@ -39,38 +39,68 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const identifier = normalizeId(rawId)
     const supabase = getSupabaseAdminClient()
 
-    const matchByCode = /^[A-Z0-9]{6}$/.test(identifier)
-    let query = supabase
-      .from(TABLES.gameRooms)
-      .select(
-        `
-          id,
-          code,
-          status,
-          current_phase,
-          phase_start_time,
-          host_id,
-          current_present_index,
-          present_sequence,
-          product_category,
-          phase_duration_seconds,
-          brief_style,
-          version,
-          players:players(id, name, emoji, is_ready, is_host, joined_at, seat_index),
-          brief:campaign_briefs(id, product_name, product_category, main_point, audience, business_problem, objective, strategy, product_features, cover_image_url, updated_at),
-          adlobs:adlobs(id, big_idea_text, big_idea_created_by, visual_canvas_data, visual_image_urls, visual_created_by, headline_canvas_data, headline_created_by, pitch_text, pitch_created_by, created_at, assigned_presenter, present_order, present_started_at, present_completed_at, vote_count)
-        `,
+    // Parse query parameters for conditional loading
+    const url = new URL(request.url)
+    const includeParam = url.searchParams.get("include") ?? "all"
+    const includes = includeParam.split(",").map((s) => s.trim())
+
+    // Determine what to include based on query parameter
+    const includePlayers = includes.includes("all") || includes.includes("players")
+    const includeBrief = includes.includes("all") || includes.includes("brief")
+    const includeAdlobs = includes.includes("all") || includes.includes("adlobs")
+
+    // Build SELECT clause based on what's requested
+    const selectParts = [
+      "id",
+      "code",
+      "status",
+      "current_phase",
+      "phase_start_time",
+      "host_id",
+      "current_present_index",
+      "present_sequence",
+      "product_category",
+      "phase_duration_seconds",
+      "brief_style",
+      "version",
+    ]
+
+    if (includePlayers) {
+      selectParts.push("players:players(id, name, emoji, is_ready, is_host, joined_at, seat_index)")
+    }
+
+    if (includeBrief) {
+      selectParts.push(
+        "brief:campaign_briefs(id, product_name, product_category, main_point, audience, business_problem, objective, strategy, product_features, cover_image_url, updated_at)",
       )
-      .limit(1)
+    }
+
+    if (includeAdlobs) {
+      selectParts.push(
+        "adlobs:adlobs(id, big_idea_text, big_idea_created_by, visual_canvas_data, visual_image_urls, visual_created_by, headline_canvas_data, headline_created_by, pitch_text, pitch_created_by, created_at, assigned_presenter, present_order, present_started_at, present_completed_at, vote_count)",
+      )
+    }
+
+    const matchByCode = /^[A-Z0-9]{6}$/.test(identifier)
+    let query = supabase.from(TABLES.gameRooms).select(selectParts.join(", ")).limit(1)
 
     query = matchByCode ? query.eq("code", identifier) : query.eq("id", identifier)
 
     const { data: room, error: roomError } = await query.maybeSingle()
 
+    if (roomError) {
+      throw roomError
+    }
+
+    if (!room) {
+      return NextResponse.json({ success: false, error: "Game not found" }, { status: 404 })
+    }
+
     // Sort players and adlobs arrays client-side to ensure consistent ordering
-    if (room) {
-      if (room.players) {
-        room.players.sort((a, b) => {
+    // Only sort arrays that were actually included in the query
+    // TypeScript: At this point room is guaranteed to be non-null
+    if (includePlayers && (room as any).players) {
+      ;(room as any).players.sort((a: any, b: any) => {
           const seatA = typeof a.seat_index === "number" ? a.seat_index : Number.MAX_SAFE_INTEGER
           const seatB = typeof b.seat_index === "number" ? b.seat_index : Number.MAX_SAFE_INTEGER
           if (seatA !== seatB) {
@@ -84,29 +114,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           return a.id.localeCompare(b.id)
         })
       }
-      if (room.adlobs) {
-        room.adlobs.sort((a, b) => {
-          const timeA = a.created_at ? new Date(a.created_at).getTime() : 0
-          const timeB = b.created_at ? new Date(b.created_at).getTime() : 0
-          // If timestamps are equal, use ID for stable sort
-          if (timeA !== timeB) return timeA - timeB
-          return a.id.localeCompare(b.id)
-        })
-      }
-    }
-
-    if (roomError) {
-      throw roomError
-    }
-
-    if (!room) {
-      return NextResponse.json({ success: false, error: "Game not found" }, { status: 404 })
+    if (includeAdlobs && (room as any).adlobs) {
+      ;(room as any).adlobs.sort((a: any, b: any) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0
+        // If timestamps are equal, use ID for stable sort
+        if (timeA !== timeB) return timeA - timeB
+        return a.id.localeCompare(b.id)
+      })
     }
 
     return NextResponse.json(
       {
         success: true,
-        game: serializeGameRow(room),
+        game: serializeGameRow(room as any),
       },
       {
         headers: {

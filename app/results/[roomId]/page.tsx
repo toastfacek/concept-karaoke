@@ -99,7 +99,8 @@ export default function ResultsPage() {
 
     const fetchPromise = (async () => {
       try {
-        const response = await fetchWithRetry(`/api/games/${roomCode}`, { cache: "no-store" })
+        // Results page needs players and adlobs to display final results
+        const response = await fetchWithRetry(`/api/games/${roomCode}?include=players,adlobs`, { cache: "no-store" })
         const payload = await response.json()
 
         if (!response.ok || !payload.success) {

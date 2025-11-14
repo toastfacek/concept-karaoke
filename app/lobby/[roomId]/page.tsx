@@ -78,7 +78,8 @@ export default function LobbyPage() {
 
       const fetchPromise = (async () => {
         try {
-          const response = await fetchWithRetry(`/api/games/${roomCode}`, { cache: "no-store" })
+          // Lobby page only needs players data, not brief or adlobs
+          const response = await fetchWithRetry(`/api/games/${roomCode}?include=players`, { cache: "no-store" })
           const payload = await response.json()
 
           if (!response.ok || !payload.success) {

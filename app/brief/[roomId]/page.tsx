@@ -104,7 +104,8 @@ export default function BriefPage() {
 
       const fetchPromise = (async () => {
         try {
-          const response = await fetchWithRetry(`/api/games/${roomCode}`, { cache: "no-store" })
+          // Brief page only needs players and brief data, not heavy adlobs
+          const response = await fetchWithRetry(`/api/games/${roomCode}?include=players,brief`, { cache: "no-store" })
           const payload = await response.json()
 
           if (!response.ok || !payload.success) {
