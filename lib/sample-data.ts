@@ -8,6 +8,7 @@ export const samplePlayers: Player[] = [
     emoji: "🎨",
     isReady: true,
     isHost: true,
+    seatIndex: 0,
     joinedAt: new Date(),
   },
   {
@@ -17,6 +18,7 @@ export const samplePlayers: Player[] = [
     emoji: "✏️",
     isReady: true,
     isHost: false,
+    seatIndex: 1,
     joinedAt: new Date(),
   },
   {
@@ -26,6 +28,7 @@ export const samplePlayers: Player[] = [
     emoji: "💡",
     isReady: false,
     isHost: false,
+    seatIndex: 2,
     joinedAt: new Date(),
   },
   {
@@ -35,6 +38,7 @@ export const samplePlayers: Player[] = [
     emoji: "🚀",
     isReady: true,
     isHost: false,
+    seatIndex: 3,
     joinedAt: new Date(),
   },
 ]

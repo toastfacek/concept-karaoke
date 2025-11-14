@@ -435,6 +435,7 @@ export default function PresentPage() {
                       emoji: player.emoji,
                       isReady: player.isReady,
                       isHost: player.isHost,
+                      seatIndex: player.seatIndex,
                     }
                   : candidate,
               )
@@ -446,6 +447,7 @@ export default function PresentPage() {
                   emoji: player.emoji,
                   isReady: player.isReady,
                   isHost: player.isHost,
+                  seatIndex: player.seatIndex,
                   joinedAt: new Date().toISOString(),
                 },
               ]

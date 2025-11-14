@@ -472,6 +472,7 @@ export default function CreatePage() {
                     emoji: player.emoji,
                     isReady: player.isReady,
                     isHost: player.isHost,
+                    seatIndex: player.seatIndex,
                     joinedAt: existing.joinedAt ?? new Date().toISOString(),
                   }
                 : { ...existing, joinedAt: existing.joinedAt ?? new Date().toISOString() },
@@ -492,6 +493,7 @@ export default function CreatePage() {
               emoji: player.emoji,
               isReady: player.isReady,
               isHost: player.isHost,
+              seatIndex: player.seatIndex,
               joinedAt: new Date().toISOString(),
             },
           ]

@@ -413,6 +413,7 @@ export default function LobbyPage() {
                       emoji: player.emoji,
                       isReady: player.isReady,
                       isHost: player.isHost,
+                      seatIndex: player.seatIndex,
                     }
                   : candidate,
               )
@@ -425,6 +426,7 @@ export default function LobbyPage() {
                   isReady: player.isReady,
                   isHost: player.isHost,
                   joinedAt: new Date().toISOString(),
+                  seatIndex: player.seatIndex,
                 },
               ]
           const hostId = players.find((candidate) => candidate.isHost)?.id ?? previous.hostId

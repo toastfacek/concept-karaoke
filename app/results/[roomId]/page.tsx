@@ -257,6 +257,7 @@ export default function ResultsPage() {
                       emoji: player.emoji,
                       isReady: player.isReady,
                       isHost: player.isHost,
+                      seatIndex: player.seatIndex,
                     }
                   : candidate,
               )
@@ -268,6 +269,7 @@ export default function ResultsPage() {
                   emoji: player.emoji,
                   isReady: player.isReady,
                   isHost: player.isHost,
+                  seatIndex: player.seatIndex,
                   joinedAt: new Date().toISOString(),
                 },
               ]
