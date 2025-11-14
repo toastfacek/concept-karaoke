@@ -21,6 +21,7 @@ interface GamePlayer {
   isReady: boolean
   isHost: boolean
   joinedAt: string
+  seatIndex: number
 }
 
 interface AdLob {
@@ -116,14 +117,22 @@ export default function ResultsPage() {
         voteCount: adlob.voteCount ?? 0,
       }))
 
-      const mappedPlayers: GamePlayer[] = (gameData.players ?? []).map((player: any) => ({
-        id: player.id,
-        name: player.name,
-        emoji: player.emoji,
-        isReady: player.isReady ?? false,
-        isHost: player.isHost ?? false,
-        joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
-      }))
+      const mappedPlayers: GamePlayer[] = (gameData.players ?? []).map(
+        (player: Partial<GamePlayer> & { joined_at?: string; seat_index?: number }) => ({
+          id: player.id ?? "",
+          name: player.name ?? "",
+          emoji: player.emoji ?? "",
+          isReady: Boolean(player.isReady),
+          isHost: Boolean(player.isHost),
+          joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
+          seatIndex:
+            typeof player.seatIndex === "number"
+              ? player.seatIndex
+              : typeof player.seat_index === "number"
+                ? player.seat_index
+                : 0,
+        }),
+      )
 
       setGame({
         id: gameData.id,
@@ -352,7 +361,6 @@ export default function ResultsPage() {
 
   const sortedAdLobs = [...game.adlobs].sort((a, b) => b.voteCount - a.voteCount)
   const winner = sortedAdLobs[0]
-  const winnerPresenter = winner ? getPresenter(winner.assignedPresenterId) : null
   const winnerCanvas = winner ? winner.headlineCanvas ?? winner.visualCanvas : null
 
   return (

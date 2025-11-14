@@ -764,17 +764,21 @@ async function handleBroadcastRequest(req: IncomingMessage, res: ServerResponse)
               emoji: event.player.emoji,
               isReady: event.player.isReady,
               isHost: event.player.isHost,
+              seatIndex: event.player.seatIndex,
             }
           } else {
             // Add new player
-            next.players.push({
-              id: event.player.id,
-              name: event.player.name,
-              emoji: event.player.emoji,
-              isReady: event.player.isReady,
-              isHost: event.player.isHost,
-            })
-          }
+          next.players.push({
+            id: event.player.id,
+            name: event.player.name,
+            emoji: event.player.emoji,
+            isReady: event.player.isReady,
+            isHost: event.player.isHost,
+            seatIndex: event.player.seatIndex,
+          })
+        }
+
+        next.players.sort((playerA, playerB) => playerA.seatIndex - playerB.seatIndex)
 
           next.version = state.version + 1
           return next

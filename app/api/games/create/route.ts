@@ -72,6 +72,8 @@ export async function POST(request: Request) {
       throw roomError
     }
 
+    const hostSeatIndex = 0
+
     const { data: player, error: playerError } = await supabase
       .from(TABLES.players)
       .insert({
@@ -81,8 +83,9 @@ export async function POST(request: Request) {
         emoji: body.emoji,
         is_ready: false,
         is_host: true,
+        seat_index: hostSeatIndex,
       })
-      .select("id, name, emoji, is_ready, is_host")
+      .select("id, name, emoji, is_ready, is_host, seat_index")
       .single()
 
     if (playerError) {
@@ -101,6 +104,7 @@ export async function POST(request: Request) {
         emoji: player.emoji,
         isReady: player.is_ready,
         isHost: player.is_host,
+        seatIndex: player.seat_index,
       },
     })
   } catch (error) {

@@ -30,6 +30,7 @@ type GamePlayer = {
   isReady: boolean
   isHost: boolean
   joinedAt: string
+  seatIndex: number
 }
 
 type AdLobRecord = {
@@ -271,9 +272,19 @@ export default function CreatePage() {
           phaseStartTime: gameData.phaseStartTime ?? null,
           currentPresentIndex: gameData.currentPresentIndex ?? null,
           presentSequence: gameData.presentSequence ?? [],
-          players: (gameData.players ?? []).map((player: GamePlayer & { joined_at?: string }) => ({
-            ...player,
+          players: (gameData.players ?? []).map((player: Partial<GamePlayer> & { joined_at?: string; seat_index?: number }) => ({
+            id: player.id!,
+            name: player.name ?? "",
+            emoji: player.emoji ?? "",
+            isReady: Boolean(player.isReady),
+            isHost: Boolean(player.isHost),
             joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
+            seatIndex:
+              typeof player.seatIndex === "number"
+                ? player.seatIndex
+                : typeof player.seat_index === "number"
+                  ? player.seat_index
+                  : 0,
           })),
           adlobs: gameData.adlobs,
           version: newVersion,
@@ -566,15 +577,7 @@ export default function CreatePage() {
 
   const playerIndex = useMemo(() => {
     if (!game || !currentPlayer) return -1
-
-    // CRITICAL: Always sort players by joinedAt to ensure stable index
-    // Realtime events may reorder the array, causing playerIndex to change
-    const sortedPlayers = [...game.players].sort((a, b) => {
-      const timeA = new Date(a.joinedAt).getTime()
-      const timeB = new Date(b.joinedAt).getTime()
-      return timeA - timeB
-    })
-
+    const sortedPlayers = [...game.players].sort((a, b) => a.seatIndex - b.seatIndex)
     return sortedPlayers.findIndex((player) => player.id === currentPlayer.id)
   }, [game, currentPlayer])
 
@@ -716,7 +719,7 @@ export default function CreatePage() {
     } else if (nextPhase === "pitch") {
       setPitchInput(currentAdlob.pitch ?? "")
     }
-  }, [game?.currentPhase, currentAdlob?.id, currentAdlob])
+  }, [game, currentAdlob])
 
   const readyCount = useMemo(() => game?.players.filter((player) => player.isReady).length ?? 0, [game])
   const totalPlayers = game?.players.length ?? 0
@@ -750,13 +753,15 @@ export default function CreatePage() {
   )
 
   const playerStatusData = useMemo(() => {
-    return (game?.players ?? []).map((p) => ({
-      id: p.id,
-      name: p.name,
-      emoji: p.emoji,
-      isReady: p.isReady,
-      isYou: p.id === currentPlayer?.id,
-    }))
+    return [...(game?.players ?? [])]
+      .sort((a, b) => a.seatIndex - b.seatIndex)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        emoji: p.emoji,
+        isReady: p.isReady,
+        isYou: p.id === currentPlayer?.id,
+      }))
   }, [game?.players, currentPlayer?.id])
 
   const handleSubmitWork = async () => {

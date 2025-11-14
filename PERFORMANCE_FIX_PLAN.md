@@ -252,3 +252,128 @@ This will restore original behavior while preserving all other changes.
 Contact: Your development team
 Last Updated: 2025-01-13
 Phase 1 Commit: c578abb
+
+---
+
+## 🧠 2025-02-?? Stability Audit Notes
+
+### Top Failure Modes (Observed Feb 2025)
+1. **AdLob Reassignment Glitch**
+   - `lockedAdlobId` is overwritten anytime `calculatedAdlob` recomputes, so players hop between canvases whenever the player list reorders. Preserve the lock until the phase genuinely advances (compare against `previousPhaseRef`) before accepting a new assignment.
+2. **Non-deterministic Player Ordering**
+   - Both API and client sort by `joined_at` without a secondary key; ties are common, so two devices derive different `playerIndex` values and collide on the same AdLob. Persist a `seat_index` (set at join time) or at least sort by `(joined_at, id)` everywhere so rotation math is deterministic.
+3. **Realtime Cold-start Drift**
+   - Railway’s process sleeps, the in-memory registry is lost, and the next connecting client supplies an arbitrary snapshot (`room_initialized_from_client`). Fetch the authoritative state from Supabase (or cached `room_snapshots`) before rehydrating rooms, and keep the dyno warm via cron hits or “always on” tiers.
+4. **Unreliable Broadcasts**
+   - `broadcastToRoom` fire-and-forgets. If the realtime server is waking up or the POST temporarily fails, the event is dropped forever and clients never refetch. Add exponential retry + queuing so every state change is confirmed by the realtime server.
+5. **Heavy `/api/games/:id` Payloads**
+   - Every poll pulls the full room graph (players + brief + all AdLobs ≈ 1.2 MB), regularly tripping Supabase’s 10 s statement timeout on free tier. Ship Phase 2 (split lightweight vs heavy queries or `include` params) so most requests fetch just room + players.
+6. **Missing Dedup/Retry on Other Pages**
+   - Only Create has `pendingFetchRef`/version guards. Present/Vote/Results fire overlapping fetches and accept stale responses, contributing to “kicked back” phases. Phase 5 should copy the same dedupe/debounce logic everywhere.
+7. **No Fetch Retry/Backoff**
+   - Transient 500s from Vercel/Supabase immediately surface as “Failed to fetch game.” Implement Phase 3’s `fetchWithRetry`, use it for all game/AdLob/vote mutations, and raise the Supabase statement timeout/enable PgBouncer (Phase 4).
+
+### Immediate Actions
+- Lock AdLob selections per phase, introduce deterministic player/adlob ordering, and add a migration for `players.seat_index`.
+- Hydrate the realtime server from Supabase (or `room_snapshots`) on startup/join and queue/retry outbound broadcasts.
+- Finish Phase 2–5 roadmap: split `/api/games`, add fetch dedupe + retries everywhere, and extend Supabase timeout/pooling.
+- Layer basic observability (Sentry, Supabase query metrics, Vercel Analytics) to prove improvements before moving off free tiers.
+
+### ✅ Progress Log
+- **2025-02-14 – Seat Index Slice**
+  - Added `seat_index` column + backfill migration and exposed it through Supabase types.
+  - Game creation/join APIs now assign deterministic seat numbers with collision retries and broadcast them to realtime clients.
+  - All pages (Lobby, Brief, Create, Present, Vote, Results) and realtime snapshots sort players by seat order, keeping AdLob rotation stable mid-phase.
+
+---
+
+## 🧱 Game Re-Architecture Proposal (Jackbox-Class Stability)
+
+### 1. Target Topology
+
+```mermaid
+flowchart LR
+    subgraph Client
+      UI[Next.js Pages] --> Hook[useRoomState hook]
+      Hook -->|REST + WS| Gateway
+    end
+
+    subgraph Platform
+      Gateway[Next.js API / Game Service]
+      EventLog[(room_events table)]
+      Snapshot[(room_snapshots table)]
+      Supabase[(Postgres)]
+      Queue[(Background Worker / Cron)]
+      Realtime[Railway WS Server]
+    end
+
+    Gateway -->|Validate + Write| Supabase
+    Gateway -->|Append| EventLog
+    Gateway -->|Emit Domain Events| Queue
+    Queue -->|fan-out| Realtime
+    Realtime -->|Snapshots + Events| Hook
+    Queue -->|Snapshot refresh| Snapshot
+    Hook -->|Optimistic actions| Gateway
+    Realtime -->|Ack| Gateway
+```
+
+**Key principles**
+- **Single source of truth**: Game Service (Next API routes/server actions) is the only code that mutates Supabase. Every mutation produces both a durable DB row and an event in `room_events`.
+- **Replayable realtime**: The WS server never trusts clients. On startup/join it fetches the latest snapshot from Supabase (or `room_snapshots`) and replays any newer `room_events`. Cold starts become “replay logs” instead of “accept whatever the first client says.”
+- **Deterministic ordering**: `players` gain a `seat_index`, `present_sequence`, and phase timers recorded in the database so all clients derive the same rotation.
+- **Shared client hook**: `useRoomState` handles optimistic updates, deduped fetches, and reconciliation against websocket payloads for **all** phases, so behaviours stay consistent.
+- **Backpressure + retries**: `broadcastToRoom` is replaced by a queued delivery (or at least exponential retry with acknowledgement) so realtime fan-out never silently drops messages.
+
+### 2. Implementation Plan
+
+1. **Domain Layer (Gateway)**
+   - Wrap all game mutations (join, ready, submit adlob, advance phase, vote) in service functions that:
+     1. Validate input/state using a shared state machine.
+     2. Perform Supabase writes in a transaction (room + related table).
+     3. Append a domain event row (`room_events`) capturing intent + payload.
+   - Expose these via Next.js Route Handlers / server actions to keep client code thin.
+
+2. **Event + Snapshot Pipeline**
+   - Extend existing `room_events` and `room_snapshots` tables to store version numbers and checksums.
+   - Background worker (can be a simple cron hitting a Next route or a Supabase function) tails new events and:
+     - Updates cached snapshots (one per room) for fast hydration.
+     - Pushes events to the realtime server (HTTP POST with retries + ack).
+   - Add idempotent logic so reprocessing an event twice has no effect (use event IDs or version counters).
+
+3. **Realtime Server Hardening**
+   - On `join_room`, load the latest snapshot from Supabase (or `room_snapshots`) and replay any events newer than snapshot.version before accepting the client.
+   - Persist in-memory state only as a cache; never trust client-provided snapshots.
+   - Maintain an outbound queue so HTTP broadcast retries continue until the WS server returns 200.
+   - Track metrics (join success, heartbeat timeouts, queue depth) for monitoring dashboards.
+
+4. **Client State Layer**
+   - Implement a shared `useRoomState` hook used by Lobby/Brief/Create/Present/Vote/Results.
+   - Responsibilities: fetch dedupe, version guards, optimistic updates, websocket listener registration, retry/backoff, and automatic fallbacks when WS disconnects.
+   - Normalize all API responses to shared TypeScript models (imported from `@concept-karaoke/realtime-shared`).
+
+5. **Deterministic Scheduling**
+   - Migration: add `seat_index` column to `players`, assigned at join time (incremental counter).
+   - Store `present_sequence`, `phase_start_time`, and timers as columns on `game_rooms`; expose them via `/api/games`.
+   - Client rotation math uses only these persisted fields, eliminating per-client divergence.
+
+6. **Reliability Enhancements**
+   - `fetchWithRetry` utility for every REST call.
+   - Supabase statement timeout set to 30s + PgBouncer for connection reuse (or upgrade plan).
+   - Deploy realtime server on an “always on” tier (or ping it every minute) to avoid cold starts.
+   - Instrumentation: Sentry for client/server, Supabase query dashboards, Vercel Analytics for latency/error tracking.
+
+### 3. Deliverables Checklist
+
+- [ ] Domain service layer with transactional writes + event append.
+- [ ] Shared TypeScript schemas for events/snapshots.
+- [ ] Background worker/cron that replays `room_events` to snapshots + realtime.
+- [ ] Hardened realtime server hydration logic with retrying broadcast queue.
+- [ ] `useRoomState` hook adopted across every phase page.
+- [ ] Player/adlob deterministic ordering (schema + API + client usage).
+- [ ] Observability + runbooks (how to replay events, inspect queue, etc.).
+
+### 4. Open Design Questions
+1. **Event transport:** Are you comfortable adding a lightweight queue/worker (e.g., Supabase Edge Function, Cloudflare Worker, or background Next route), or should we keep it inside the Next app for now?
+2. **Snapshot frequency:** How fresh do snapshots need to be (per mutation vs batched every few seconds)?
+3. **Latency budget:** What round-trip target (ms) do you want for critical actions (submit sketch, advance phase) so we can size retries/timeouts accordingly?
+4. **Hosting tiers:** Are we staying on free Vercel/Railway/Supabase for the next milestone, or can we budget for at least “hobby” tiers to guarantee warm instances?

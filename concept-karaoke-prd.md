@@ -163,9 +163,13 @@ interface Player {
 interface CampaignBrief {
   productName: string;
   productCategory: string;
-  businessProblem: string;
-  targetAudience: string;
-  objective: string;
+  coverImageUrl?: string;
+  mainPoint: string;           // 4-8 word campaign message
+  audience: string;             // 1-2 bullet points (newline-separated)
+  businessProblem: string;      // 1-3 bullet points (newline-separated)
+  objective: string;            // Single paragraph
+  strategy: string;             // 1-2 sentences
+  productFeatures: string;      // 3 bullet points (newline-separated)
 }
 
 // AdLob (Ad-Like Object)

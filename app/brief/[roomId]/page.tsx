@@ -37,6 +37,7 @@ type GamePlayer = {
   isReady: boolean
   isHost: boolean
   joinedAt: string
+  seatIndex: number
 }
 
 const EMPTY_BRIEF: CampaignBrief = {
@@ -118,14 +119,22 @@ export default function BriefPage() {
             }
           : null
 
-        const players: GamePlayer[] = (payload.game.players ?? []).map((player: GamePlayer & { joined_at?: string }) => ({
-          id: player.id,
-          name: player.name,
-          emoji: player.emoji,
-          isReady: player.isReady,
-          isHost: player.isHost,
-          joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
-        }))
+        const players: GamePlayer[] = (payload.game.players ?? []).map(
+          (player: Partial<GamePlayer> & { joined_at?: string; seat_index?: number }) => ({
+            id: player.id ?? "",
+            name: player.name ?? "",
+            emoji: player.emoji ?? "",
+            isReady: Boolean(player.isReady),
+            isHost: Boolean(player.isHost),
+            joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
+            seatIndex:
+              typeof player.seatIndex === "number"
+                ? player.seatIndex
+                : typeof player.seat_index === "number"
+                  ? player.seat_index
+                  : 0,
+          }),
+        )
 
         setGame({
           id: payload.game.id,
@@ -211,13 +220,15 @@ export default function BriefPage() {
   const isBriefing = game?.status === "briefing"
 
   const playerStatusData = useMemo(() => {
-    return (game?.players ?? []).map((p) => ({
-      id: p.id,
-      name: p.name,
-      emoji: p.emoji,
-      isReady: p.isReady,
-      isYou: p.id === currentPlayer?.id,
-    }))
+    return [...(game?.players ?? [])]
+      .sort((a, b) => a.seatIndex - b.seatIndex)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        emoji: p.emoji,
+        isReady: p.isReady,
+        isYou: p.id === currentPlayer?.id,
+      }))
   }, [game?.players, currentPlayer?.id])
 
   const persistBrief = useCallback(

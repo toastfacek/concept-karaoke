@@ -21,6 +21,7 @@ type GamePlayer = {
   isReady: boolean
   isHost: boolean
   joinedAt: string
+  seatIndex: number
 }
 
 type PresentAdlob = {
@@ -107,14 +108,22 @@ export default function PresentPage() {
 
         const gameData = payload.game
 
-        const players: GamePlayer[] = (gameData.players ?? []).map((player: GamePlayer & { joined_at?: string }) => ({
-          id: player.id,
-          name: player.name,
-          emoji: player.emoji,
-          isReady: player.isReady,
-          isHost: player.isHost,
-          joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
-        }))
+        const players: GamePlayer[] = (gameData.players ?? []).map(
+          (player: Partial<GamePlayer> & { joined_at?: string; seat_index?: number }) => ({
+            id: player.id ?? "",
+            name: player.name ?? "",
+            emoji: player.emoji ?? "",
+            isReady: Boolean(player.isReady),
+            isHost: Boolean(player.isHost),
+            joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
+            seatIndex:
+              typeof player.seatIndex === "number"
+                ? player.seatIndex
+                : typeof player.seat_index === "number"
+                  ? player.seat_index
+                  : 0,
+          }),
+        )
 
         setGame({
           id: gameData.id,
@@ -182,10 +191,14 @@ export default function PresentPage() {
     lastRealtimeStatusRef.current = realtimeStatus
   }, [fetchGame, realtimeStatus])
 
+  const orderedPlayers = useMemo(() => {
+    return [...(game?.players ?? [])].sort((a, b) => a.seatIndex - b.seatIndex)
+  }, [game?.players])
+
   const currentPlayer = useMemo(() => {
-    if (!storedPlayer || !game) return null
-    return game.players.find((player) => player.id === storedPlayer.id) ?? null
-  }, [storedPlayer, game])
+    if (!storedPlayer) return null
+    return orderedPlayers.find((player) => player.id === storedPlayer.id) ?? null
+  }, [orderedPlayers, storedPlayer])
 
   const orderedAdlobs = useMemo(() => {
     if (!game) return []
@@ -658,7 +671,7 @@ export default function PresentPage() {
 
             <section className="retro-border bg-card p-6">
               <h2 className="mb-4 text-2xl font-bold uppercase">Players</h2>
-              <PlayerList players={game.players} />
+              <PlayerList players={orderedPlayers} />
             </section>
           </>
         )}

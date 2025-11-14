@@ -7,6 +7,7 @@ type RawPlayer = {
   is_ready: boolean | null
   is_host: boolean | null
   joined_at: string | null
+  seat_index: number | null
 }
 
 type RawBrief = {
@@ -69,6 +70,7 @@ function serializePlayer(row: RawPlayer) {
     isReady: Boolean(row.is_ready),
     isHost: Boolean(row.is_host),
     joinedAt: row.joined_at ?? new Date().toISOString(),
+    seatIndex: typeof row.seat_index === "number" ? row.seat_index : 0,
   }
 }
 
@@ -133,4 +135,3 @@ export function serializeGameRow(row: RawGameRow) {
     version: typeof row.version === "number" ? row.version : 0,
   }
 }
-
