@@ -18,6 +18,7 @@ import { useRoomRealtime, type RoomRealtimeListenerHelpers } from "@/hooks/use-r
 import { canvasHasContent, canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/canvas"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
+import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import { cn } from "@/lib/utils"
 import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
 import type { CreationPhase } from "@/lib/types"
@@ -240,7 +241,7 @@ export default function CreatePage() {
 
       const fetchPromise = (async () => {
         try {
-          const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
+          const response = await fetchWithRetry(`/api/games/${roomCode}`, { cache: "no-store" })
           const payload = await response.json()
 
         if (!response.ok || !payload.success) {

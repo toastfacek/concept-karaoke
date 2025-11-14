@@ -9,6 +9,7 @@ import { PlayerList } from "@/components/player-list"
 import { canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/canvas"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
+import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import { useRealtime } from "@/components/realtime-provider"
 import { useRoomRealtime, type RoomRealtimeListenerHelpers } from "@/hooks/use-room-realtime"
 import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
@@ -106,7 +107,7 @@ export default function PresentPage() {
 
       const fetchPromise = (async () => {
         try {
-          const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
+          const response = await fetchWithRetry(`/api/games/${roomCode}`, { cache: "no-store" })
           const payload = await response.json()
 
           if (!response.ok || !payload.success) {
@@ -271,7 +272,7 @@ export default function PresentPage() {
     setError(null)
 
     try {
-      await fetch(`/api/games/${roomCode}/present`, {
+      await fetchWithRetry(`/api/games/${roomCode}/present`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -308,7 +309,7 @@ export default function PresentPage() {
 
     try {
       console.log("[PRESENT DEBUG] Calling advance API...")
-      const response = await fetch(`/api/games/${roomCode}/present`, {
+      const response = await fetchWithRetry(`/api/games/${roomCode}/present`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

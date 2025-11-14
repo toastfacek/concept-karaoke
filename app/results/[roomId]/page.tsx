@@ -13,6 +13,7 @@ import { loadPlayer, type StoredPlayer } from "@/lib/player-storage"
 import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
 import type { RealtimeStatus } from "@/lib/realtime-client"
 import { routes } from "@/lib/routes"
+import { fetchWithRetry } from "@/lib/fetch-with-retry"
 
 interface GamePlayer {
   id: string
@@ -98,7 +99,7 @@ export default function ResultsPage() {
 
     const fetchPromise = (async () => {
       try {
-        const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
+        const response = await fetchWithRetry(`/api/games/${roomCode}`, { cache: "no-store" })
         const payload = await response.json()
 
         if (!response.ok || !payload.success) {

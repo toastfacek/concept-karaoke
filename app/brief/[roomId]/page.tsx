@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { PlayerStatus } from "@/components/player-status"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
+import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import { useRealtime } from "@/components/realtime-provider"
 import { useRoomRealtime, type RoomRealtimeListenerHelpers } from "@/hooks/use-room-realtime"
 import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
@@ -103,7 +104,7 @@ export default function BriefPage() {
 
       const fetchPromise = (async () => {
         try {
-          const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
+          const response = await fetchWithRetry(`/api/games/${roomCode}`, { cache: "no-store" })
           const payload = await response.json()
 
           if (!response.ok || !payload.success) {

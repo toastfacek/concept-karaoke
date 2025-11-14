@@ -11,6 +11,7 @@ import { GameSettings } from "@/components/game-settings"
 import { useRoomRealtime, type RoomRealtimeListenerHelpers } from "@/hooks/use-room-realtime"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
+import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
 import type { RealtimeStatus } from "@/lib/realtime-client"
 import type { BriefStyle, ProductCategory, PhaseDuration } from "@/lib/types"
@@ -77,7 +78,7 @@ export default function LobbyPage() {
 
       const fetchPromise = (async () => {
         try {
-          const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
+          const response = await fetchWithRetry(`/api/games/${roomCode}`, { cache: "no-store" })
           const payload = await response.json()
 
           if (!response.ok || !payload.success) {

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Canvas } from "@/components/canvas"
 import { loadPlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
+import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import { canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/canvas"
 import { cn } from "@/lib/utils"
 import { useRealtime } from "@/components/realtime-provider"
@@ -100,7 +101,7 @@ export default function VotePage() {
 
     const fetchPromise = (async () => {
       try {
-        const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
+        const response = await fetchWithRetry(`/api/games/${roomCode}`, { cache: "no-store" })
         const payload = await response.json()
 
         if (!response.ok || !payload.success) {
@@ -231,7 +232,7 @@ export default function VotePage() {
     setError(null)
 
     try {
-      const response = await fetch("/api/votes", {
+      const response = await fetchWithRetry("/api/votes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
