@@ -60,18 +60,27 @@
 **Purpose**: Generate and edit campaign brief
 
 **Features**:
-- Editable brief fields:
+- Two-column layout with responsive design
+- **Left column**: Product image (with diagonal stripe placeholder)
+- **Right column**: Product Name (large purple heading), Category, Main Point, Audience
+- **Bottom grid** (2x2): Business Problem, Objective, Strategy, Product Features
+- Editable brief fields (9 total):
   - Product Name
-  - Product Category
-  - Business Problem
-  - Target Audience
-  - Campaign Objective
-- AI generation (TODO: Gemini API)
-- All players can edit simultaneously
+  - Product Category (read-only, from game settings)
+  - Cover Image URL (optional)
+  - Main Point (4-8 word campaign message)
+  - Audience (1-2 bullet points, renders as list)
+  - Business Problem (1-3 bullet points, renders as list)
+  - Objective (single paragraph)
+  - Strategy (1-2 sentences)
+  - Product Features (3 bullet points, renders as list)
+- AI generation via OpenAI API
+- Inline editing with pencil icons
+- Bullet points automatically parse newline-separated text (`\n`) into HTML lists
 
 **Buttons**:
-- **Regenerate Brief** (calls AI API)
-- **Lock Brief & Start** (marks player ready)
+- **Regenerate Brief** (calls AI API for new brief)
+- **Lock Brief** (marks player ready)
 
 **Flow**:
 - When all players lock → `/create/[roomId]`

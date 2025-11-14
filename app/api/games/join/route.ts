@@ -6,6 +6,7 @@ import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 
 const MAX_PLAYERS = 12
+const MAX_SEAT_ASSIGN_ATTEMPTS = 3
 
 const requestSchema = z.object({
   code: z
@@ -82,21 +83,59 @@ export async function POST(request: Request) {
 
     const playerId = crypto.randomUUID()
 
-    const { data: player, error: playerError } = await supabase
-      .from(TABLES.players)
-      .insert({
-        id: playerId,
-        room_id: room.id,
-        name,
-        emoji,
-        is_ready: false,
-        is_host: false,
-      })
-      .select("id, name, emoji, is_ready, is_host")
-      .single()
+    let playerSeatIndex = 0
+    let createdPlayer: {
+      id: string
+      name: string
+      emoji: string
+      is_ready: boolean | null
+      is_host: boolean | null
+      seat_index: number
+    } | null = null
 
-    if (playerError) {
-      throw playerError
+    for (let attempt = 0; attempt < MAX_SEAT_ASSIGN_ATTEMPTS; attempt += 1) {
+      const { data: highestSeat, error: highestSeatError } = await supabase
+        .from(TABLES.players)
+        .select("seat_index")
+        .eq("room_id", room.id)
+        .order("seat_index", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (highestSeatError) {
+        throw highestSeatError
+      }
+
+      playerSeatIndex = typeof highestSeat?.seat_index === "number" ? highestSeat.seat_index + 1 : 0
+
+      const { data: player, error: playerError } = await supabase
+        .from(TABLES.players)
+        .insert({
+          id: playerId,
+          room_id: room.id,
+          name,
+          emoji,
+          is_ready: false,
+          is_host: false,
+          seat_index: playerSeatIndex,
+        })
+        .select("id, name, emoji, is_ready, is_host, seat_index")
+        .single()
+
+      if (!playerError) {
+        createdPlayer = player
+        break
+      }
+
+      const isSeatCollision = playerError.code === "23505"
+
+      if (!isSeatCollision || attempt === MAX_SEAT_ASSIGN_ATTEMPTS - 1) {
+        throw playerError
+      }
+    }
+
+    if (!createdPlayer) {
+      return NextResponse.json({ success: false, error: "Failed to assign player seat" }, { status: 500 })
     }
 
     // Increment version to trigger realtime refresh
@@ -116,11 +155,12 @@ export async function POST(request: Request) {
       type: "player_joined",
       roomCode: room.code,
       player: {
-        id: player.id,
-        name: player.name,
-        emoji: player.emoji,
-        isReady: player.is_ready ?? false,
-        isHost: player.is_host ?? false,
+        id: createdPlayer.id,
+        name: createdPlayer.name,
+        emoji: createdPlayer.emoji,
+        isReady: createdPlayer.is_ready ?? false,
+        isHost: createdPlayer.is_host ?? false,
+        seatIndex: createdPlayer.seat_index,
       },
       version: 0, // Version will be managed by WS server
     })
@@ -132,11 +172,12 @@ export async function POST(request: Request) {
         code: room.code,
       },
       player: {
-        id: player.id,
-        name: player.name,
-        emoji: player.emoji,
-        isReady: player.is_ready,
-        isHost: player.is_host,
+        id: createdPlayer.id,
+        name: createdPlayer.name,
+        emoji: createdPlayer.emoji,
+        isReady: createdPlayer.is_ready,
+        isHost: createdPlayer.is_host,
+        seatIndex: createdPlayer.seat_index,
       },
     })
   } catch (error) {

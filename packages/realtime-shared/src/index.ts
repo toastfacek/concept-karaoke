@@ -9,6 +9,7 @@ export interface PlayerSummary {
   emoji: string
   isReady: boolean
   isHost: boolean
+  seatIndex: number
 }
 
 export interface RoomSnapshot {

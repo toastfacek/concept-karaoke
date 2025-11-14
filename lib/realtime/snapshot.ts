@@ -9,6 +9,7 @@ export type SnapshotPlayer = {
   isReady: boolean
   isHost: boolean
   joinedAt: string
+  seatIndex: number
 }
 
 export interface SnapshotDrivenState<TPlayer extends SnapshotPlayer = SnapshotPlayer> {
@@ -39,6 +40,7 @@ export function stateToSnapshot<TState extends SnapshotDrivenState>(state: TStat
       emoji: player.emoji,
       isReady: player.isReady,
       isHost: player.isHost,
+      seatIndex: player.seatIndex,
     })),
     version: state.version,
   }
@@ -55,7 +57,14 @@ export function mergeSnapshotIntoState<TState extends SnapshotDrivenState>(
   const existingPlayers = new Map(state.players.map((player) => [player.id, player]))
   const players = snapshot.players.map((player) => {
     const existing = existingPlayers.get(player.id)
-    if (existing && existing.name === player.name && existing.emoji === player.emoji && existing.isReady === player.isReady && existing.isHost === player.isHost) {
+    if (
+      existing &&
+      existing.name === player.name &&
+      existing.emoji === player.emoji &&
+      existing.isReady === player.isReady &&
+      existing.isHost === player.isHost &&
+      existing.seatIndex === player.seatIndex
+    ) {
       return existing
     }
 
@@ -66,6 +75,7 @@ export function mergeSnapshotIntoState<TState extends SnapshotDrivenState>(
       isReady: player.isReady,
       isHost: player.isHost,
       joinedAt: existing?.joinedAt ?? new Date().toISOString(),
+      seatIndex: player.seatIndex,
     } as TState["players"][number]
   }) as TState["players"]
 

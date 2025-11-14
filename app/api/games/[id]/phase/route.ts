@@ -106,7 +106,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         .from(TABLES.players)
         .select("id")
         .eq("room_id", room.id)
-        .order("joined_at", { ascending: true })
+        .order("seat_index", { ascending: true })
 
       if (playersForPresentError) {
         throw playersForPresentError

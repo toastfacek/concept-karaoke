@@ -9,6 +9,7 @@ import { PlayerList } from "@/components/player-list"
 import { canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/canvas"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
+import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import { useRealtime } from "@/components/realtime-provider"
 import { useRoomRealtime, type RoomRealtimeListenerHelpers } from "@/hooks/use-room-realtime"
 import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
@@ -21,6 +22,7 @@ type GamePlayer = {
   isReady: boolean
   isHost: boolean
   joinedAt: string
+  seatIndex: number
 }
 
 type PresentAdlob = {
@@ -76,6 +78,8 @@ export default function PresentPage() {
   const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
   const latestGameRef = useRef<PresentGameState | null>(null)
   const pendingRefreshTimeoutRef = useRef<number | null>(null)
+  const pendingFetchRef = useRef<Promise<void> | null>(null)
+  const lastFetchVersionRef = useRef<number>(0)
 
   const clearPendingRefresh = useCallback(() => {
     if (pendingRefreshTimeoutRef.current !== null) {
@@ -90,31 +94,58 @@ export default function PresentPage() {
 
   const fetchGame = useCallback(
     async ({ silent = false }: { silent?: boolean } = {}) => {
+      // Deduplicate concurrent requests
+      if (pendingFetchRef.current) {
+        console.log("[present] Deduplicating concurrent fetchGame call")
+        return pendingFetchRef.current
+      }
+
       if (!silent) {
         setLoading(true)
         setError(null)
       }
 
-      try {
-        const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
-        const payload = await response.json()
+      const fetchPromise = (async () => {
+        try {
+          const response = await fetchWithRetry(`/api/games/${roomCode}`, { cache: "no-store" })
+          const payload = await response.json()
 
-        if (!response.ok || !payload.success) {
-          setError(payload.error ?? "Unable to load presentation flow.")
-          setGame(null)
-          return
-        }
+          if (!response.ok || !payload.success) {
+            setError(payload.error ?? "Unable to load presentation flow.")
+            setGame(null)
+            return
+          }
 
-        const gameData = payload.game
+          const gameData = payload.game
+          const newVersion = typeof gameData.version === "number" ? gameData.version : 0
 
-        const players: GamePlayer[] = (gameData.players ?? []).map((player: GamePlayer & { joined_at?: string }) => ({
-          id: player.id,
-          name: player.name,
-          emoji: player.emoji,
-          isReady: player.isReady,
-          isHost: player.isHost,
-          joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
-        }))
+          // Ignore stale responses (version guard)
+          if (newVersion < lastFetchVersionRef.current) {
+            console.warn("[present] Ignoring stale response", {
+              received: newVersion,
+              current: lastFetchVersionRef.current,
+            })
+            return
+          }
+
+          lastFetchVersionRef.current = newVersion
+
+        const players: GamePlayer[] = (gameData.players ?? []).map(
+          (player: Partial<GamePlayer> & { joined_at?: string; seat_index?: number }) => ({
+            id: player.id ?? "",
+            name: player.name ?? "",
+            emoji: player.emoji ?? "",
+            isReady: Boolean(player.isReady),
+            isHost: Boolean(player.isHost),
+            joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
+            seatIndex:
+              typeof player.seatIndex === "number"
+                ? player.seatIndex
+                : typeof player.seat_index === "number"
+                  ? player.seat_index
+                  : 0,
+          }),
+        )
 
         setGame({
           id: gameData.id,
@@ -142,15 +173,20 @@ export default function PresentPage() {
             setStoredPlayer(synced)
           }
         }
-      } catch (fetchError) {
-        console.error(fetchError)
-        setError("Unable to load presentation flow.")
-        setGame(null)
-      } finally {
-        if (!silent) {
-          setLoading(false)
+        } catch (fetchError) {
+          console.error(fetchError)
+          setError("Unable to load presentation flow.")
+          setGame(null)
+        } finally {
+          if (!silent) {
+            setLoading(false)
+          }
+          pendingFetchRef.current = null
         }
-      }
+      })()
+
+      pendingFetchRef.current = fetchPromise
+      return fetchPromise
     },
     [roomCode],
   )
@@ -182,10 +218,14 @@ export default function PresentPage() {
     lastRealtimeStatusRef.current = realtimeStatus
   }, [fetchGame, realtimeStatus])
 
+  const orderedPlayers = useMemo(() => {
+    return [...(game?.players ?? [])].sort((a, b) => a.seatIndex - b.seatIndex)
+  }, [game?.players])
+
   const currentPlayer = useMemo(() => {
-    if (!storedPlayer || !game) return null
-    return game.players.find((player) => player.id === storedPlayer.id) ?? null
-  }, [storedPlayer, game])
+    if (!storedPlayer) return null
+    return orderedPlayers.find((player) => player.id === storedPlayer.id) ?? null
+  }, [orderedPlayers, storedPlayer])
 
   const orderedAdlobs = useMemo(() => {
     if (!game) return []
@@ -232,7 +272,7 @@ export default function PresentPage() {
     setError(null)
 
     try {
-      await fetch(`/api/games/${roomCode}/present`, {
+      await fetchWithRetry(`/api/games/${roomCode}/present`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -269,7 +309,7 @@ export default function PresentPage() {
 
     try {
       console.log("[PRESENT DEBUG] Calling advance API...")
-      const response = await fetch(`/api/games/${roomCode}/present`, {
+      const response = await fetchWithRetry(`/api/games/${roomCode}/present`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -395,6 +435,7 @@ export default function PresentPage() {
                       emoji: player.emoji,
                       isReady: player.isReady,
                       isHost: player.isHost,
+                      seatIndex: player.seatIndex,
                     }
                   : candidate,
               )
@@ -406,6 +447,7 @@ export default function PresentPage() {
                   emoji: player.emoji,
                   isReady: player.isReady,
                   isHost: player.isHost,
+                  seatIndex: player.seatIndex,
                   joinedAt: new Date().toISOString(),
                 },
               ]
@@ -658,7 +700,7 @@ export default function PresentPage() {
 
             <section className="retro-border bg-card p-6">
               <h2 className="mb-4 text-2xl font-bold uppercase">Players</h2>
-              <PlayerList players={game.players} />
+              <PlayerList players={orderedPlayers} />
             </section>
           </>
         )}

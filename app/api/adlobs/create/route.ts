@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       .from(TABLES.players)
       .select("id")
       .eq("room_id", roomId)
-      .order("joined_at", { ascending: true })
+      .order("seat_index", { ascending: true })
 
     if (playersError) {
       throw playersError

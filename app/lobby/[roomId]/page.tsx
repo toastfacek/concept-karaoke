@@ -11,6 +11,7 @@ import { GameSettings } from "@/components/game-settings"
 import { useRoomRealtime, type RoomRealtimeListenerHelpers } from "@/hooks/use-room-realtime"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
+import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
 import type { RealtimeStatus } from "@/lib/realtime-client"
 import type { BriefStyle, ProductCategory, PhaseDuration } from "@/lib/types"
@@ -22,6 +23,7 @@ type LobbyPlayer = {
   isReady: boolean
   isHost: boolean
   joinedAt: string
+  seatIndex: number
 }
 
 type LobbyState = SnapshotDrivenState<LobbyPlayer> & {
@@ -76,7 +78,7 @@ export default function LobbyPage() {
 
       const fetchPromise = (async () => {
         try {
-          const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
+          const response = await fetchWithRetry(`/api/games/${roomCode}`, { cache: "no-store" })
           const payload = await response.json()
 
           if (!response.ok || !payload.success) {
@@ -98,14 +100,22 @@ export default function LobbyPage() {
 
           lastFetchVersionRef.current = newVersion
 
-          const players: LobbyPlayer[] = (payload.game.players ?? []).map((player: LobbyPlayer & { joined_at?: string }) => ({
-            id: player.id,
-            name: player.name,
-            emoji: player.emoji,
-            isReady: player.isReady,
-            isHost: player.isHost,
-            joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
-          }))
+          const players: LobbyPlayer[] = (payload.game.players ?? []).map(
+            (player: Partial<LobbyPlayer> & { joined_at?: string; seat_index?: number }) => ({
+              id: player.id ?? "",
+              name: player.name ?? "",
+              emoji: player.emoji ?? "",
+              isReady: Boolean(player.isReady),
+              isHost: Boolean(player.isHost),
+              joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
+              seatIndex:
+                typeof player.seatIndex === "number"
+                  ? player.seatIndex
+                  : typeof player.seat_index === "number"
+                    ? player.seat_index
+                    : 0,
+            }),
+          )
 
           setLobby({
             id: payload.game.id,
@@ -207,13 +217,15 @@ export default function LobbyPage() {
   const minPlayers = (lobby?.players.length ?? 0) >= 1
 
   const playerStatusData = useMemo(() => {
-    return (lobby?.players ?? []).map((p) => ({
-      id: p.id,
-      name: p.name,
-      emoji: p.emoji,
-      isReady: p.isReady,
-      isYou: p.id === currentPlayer?.id,
-    }))
+    return [...(lobby?.players ?? [])]
+      .sort((a, b) => a.seatIndex - b.seatIndex)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        emoji: p.emoji,
+        isReady: p.isReady,
+        isYou: p.id === currentPlayer?.id,
+      }))
   }, [lobby?.players, currentPlayer?.id])
 
   const handleCopyCode = () => {
@@ -401,6 +413,7 @@ export default function LobbyPage() {
                       emoji: player.emoji,
                       isReady: player.isReady,
                       isHost: player.isHost,
+                      seatIndex: player.seatIndex,
                     }
                   : candidate,
               )
@@ -413,6 +426,7 @@ export default function LobbyPage() {
                   isReady: player.isReady,
                   isHost: player.isHost,
                   joinedAt: new Date().toISOString(),
+                  seatIndex: player.seatIndex,
                 },
               ]
           const hostId = players.find((candidate) => candidate.isHost)?.id ?? previous.hostId

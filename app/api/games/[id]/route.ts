@@ -56,7 +56,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           phase_duration_seconds,
           brief_style,
           version,
-          players:players(id, name, emoji, is_ready, is_host, joined_at),
+          players:players(id, name, emoji, is_ready, is_host, joined_at, seat_index),
           brief:campaign_briefs(id, product_name, product_category, main_point, audience, business_problem, objective, strategy, product_features, cover_image_url, updated_at),
           adlobs:adlobs(id, big_idea_text, big_idea_created_by, visual_canvas_data, visual_image_urls, visual_created_by, headline_canvas_data, headline_created_by, pitch_text, pitch_created_by, created_at, assigned_presenter, present_order, present_started_at, present_completed_at, vote_count)
         `,
@@ -71,9 +71,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (room) {
       if (room.players) {
         room.players.sort((a, b) => {
+          const seatA = typeof a.seat_index === "number" ? a.seat_index : Number.MAX_SAFE_INTEGER
+          const seatB = typeof b.seat_index === "number" ? b.seat_index : Number.MAX_SAFE_INTEGER
+          if (seatA !== seatB) {
+            return seatA - seatB
+          }
           const timeA = a.joined_at ? new Date(a.joined_at).getTime() : 0
           const timeB = b.joined_at ? new Date(b.joined_at).getTime() : 0
-          return timeA - timeB
+          if (timeA !== timeB) {
+            return timeA - timeB
+          }
+          return a.id.localeCompare(b.id)
         })
       }
       if (room.adlobs) {
@@ -184,12 +192,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     let presentSequence: string[] = []
 
     if (nextState.status === "presenting") {
-      // Fetch all players ordered by join time for deterministic round-robin assignment
+      // Fetch all players ordered by seat index for deterministic round-robin assignment
       const { data: allPlayers, error: playersForPresentError } = await supabase
         .from(TABLES.players)
         .select("id")
         .eq("room_id", room.id)
-        .order("joined_at", { ascending: true })
+        .order("seat_index", { ascending: true })
 
       if (playersForPresentError) {
         throw playersForPresentError
