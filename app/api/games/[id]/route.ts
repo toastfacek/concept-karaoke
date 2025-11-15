@@ -7,6 +7,7 @@ import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 import type { CreationPhase, GameStatus } from "@/lib/types"
 import { serializeGameRow } from "@/lib/serializers/game"
+import { measure, metrics } from "@/lib/metrics"
 
 function normalizeId(id: string) {
   const trimmed = id.trim()
@@ -34,6 +35,8 @@ async function resolveRoom(identifier: string) {
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const apiStartTime = performance.now()
+
   try {
     const { id: rawId } = await params
     const identifier = normalizeId(rawId)
@@ -86,13 +89,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     query = matchByCode ? query.eq("code", identifier) : query.eq("id", identifier)
 
-    const { data: room, error: roomError } = await query.maybeSingle()
+    const { data: room, error: roomError } = await measure(
+      "db_query",
+      "game_fetch",
+      async () => query.maybeSingle(),
+      { identifier, matchByCode }
+    )
 
     if (roomError) {
       throw roomError
     }
 
     if (!room) {
+      metrics.record({
+        type: "api_request",
+        name: "GET /api/games/[id]",
+        duration: performance.now() - apiStartTime,
+        metadata: { status: 404 },
+      })
       return NextResponse.json({ success: false, error: "Game not found" }, { status: 404 })
     }
 
@@ -124,6 +138,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       })
     }
 
+    const apiDuration = performance.now() - apiStartTime
+    metrics.record({
+      type: "api_request",
+      name: "GET /api/games/[id]",
+      duration: apiDuration,
+      metadata: { status: 200, gameStatus: (room as any).status },
+    })
+
     return NextResponse.json(
       {
         success: true,
@@ -138,6 +160,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     )
   } catch (error) {
     console.error("Failed to fetch game", error)
+    metrics.record({
+      type: "error",
+      name: "GET /api/games/[id]",
+      duration: performance.now() - apiStartTime,
+      metadata: { error: String(error) },
+    })
     return NextResponse.json({ success: false, error: "Failed to fetch game" }, { status: 500 })
   }
 }

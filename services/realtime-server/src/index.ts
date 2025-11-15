@@ -697,6 +697,16 @@ function handleHttpRequest(req: IncomingMessage, res: ServerResponse) {
   } else if (req.method === "GET" && req.url === "/health") {
     res.writeHead(200, { "Content-Type": "application/json" })
     res.end(JSON.stringify({ status: "ok", port: listeningPort }))
+  } else if (req.method === "GET" && req.url === "/api/metrics") {
+    const stats = metrics.getStats()
+    const activeRooms = Array.from(registry.listRooms()).length
+    res.writeHead(200, { "Content-Type": "application/json" })
+    res.end(JSON.stringify({
+      success: true,
+      stats,
+      activeRooms,
+      timestamp: Date.now()
+    }))
   } else {
     res.writeHead(404, { "Content-Type": "application/json" })
     res.end(JSON.stringify({ error: "Not found" }))

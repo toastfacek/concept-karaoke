@@ -1,5 +1,16 @@
 # Performance & Stability Fix Plan
 
+## 📊 Overall Progress
+
+- ✅ **Phase 1**: Database Timeout Prevention (COMPLETED - PR #9 merged)
+- ✅ **Phase 2**: Database Query Optimization (COMPLETED - PR #10 merged)
+- ✅ **Phase 3**: Retry Logic with Exponential Backoff (COMPLETED - PR #9 merged)
+- ⏸️ **Phase 4**: Increase Supabase Timeout (DEFERRED - requires manual SQL execution)
+- ✅ **Phase 5**: Apply Deduplication to All Pages (COMPLETED - PR #9 merged)
+- ✅ **Phase 6**: Monitoring & Observability (COMPLETED - Ready for PR)
+
+---
+
 ## ✅ Phase 1: COMPLETED (Database Timeout Prevention)
 
 ### Fixes Applied
@@ -157,29 +168,60 @@ ALTER DATABASE postgres SET statement_timeout = '30s';
 
 ---
 
-## 🚧 Phase 6: Monitoring & Observability (TODO)
+## ✅ Phase 6: COMPLETED (Monitoring & Observability)
 
-### Add Metrics Dashboard
-1. **Database Query Performance**
-   - Query count per minute
-   - Average query duration
-   - Timeout rate
-   - Connection pool utilization
+### Fixes Applied
 
-2. **API Response Times**
-   - P50, P95, P99 latencies
-   - Error rates by endpoint
-   - Cache hit rate
+1. **Sentry Integration**
+   - Installed `@sentry/nextjs` and `@sentry/node`
+   - Configured client, server, and edge runtime monitoring
+   - Added instrumentation hook for automatic error tracking
+   - Session replay for debugging production issues
 
-3. **Realtime Event Metrics**
-   - Events per second
-   - Fetch trigger frequency
-   - Deduplication rate
+2. **Custom Metrics System**
+   - Created `lib/metrics.ts` - In-memory metrics collector
+   - Tracks database queries, API requests, realtime events, cache hits/misses, errors
+   - Provides P50/P95/P99 latency percentiles
+   - Circular buffer (10k metrics max) to prevent memory leaks
 
-### Tools
-- Sentry for error tracking
-- Supabase Analytics for query monitoring
-- Custom metrics in Vercel Analytics
+3. **API Metrics Tracking**
+   - Added metrics to `/api/games/[id]` route
+   - Tracks query duration, API latency, error rates
+   - `/api/metrics` endpoint exposes stats with configurable time window
+
+4. **Realtime Server Metrics**
+   - Enhanced `MetricsRecorder` class with lifetime counters
+   - Added `GET /api/metrics` HTTP endpoint
+   - Tracks WebSocket connections, messages, broadcasts, errors
+   - Exposes active room count and uptime
+
+5. **Admin Dashboard**
+   - Created `/admin/metrics` page with real-time visualization
+   - Auto-refreshes every 5 seconds
+   - Shows both API server and WebSocket server metrics
+   - Displays:
+     - Database query rate & latency (P50/P95/P99)
+     - API request rate & error rate
+     - Cache hit/miss ratio
+     - WebSocket connections & message rate
+     - Active game rooms
+
+### Results
+- **Visibility**: Real-time performance monitoring across all layers
+- **Error Tracking**: Automatic Sentry integration for production debugging
+- **Metrics API**: Programmatic access to performance data for alerting
+- **Admin Dashboard**: Human-readable metrics at `/admin/metrics`
+
+### Environment Variables Required
+```bash
+# .env
+NEXT_PUBLIC_SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
+```
+
+### Commits
+```
+[TBD] Implement Phase 6: Monitoring & Observability with Sentry + Custom Metrics
+```
 
 ---
 
