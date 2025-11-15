@@ -29,8 +29,9 @@ components/
 ├── ui/                        # shadcn components
 ├── timer.tsx                  # 60-second countdown
 ├── player-list.tsx            # Player display with emojis
-├── canvas.tsx                 # Drawing canvas (TODO: integrate library)
-├── brief-editor.tsx           # Campaign brief form
+├── canvas.tsx                 # Drawing canvas (Excalidraw integration)
+├── brief-editor.tsx           # Editable campaign brief (two-column layout)
+├── brief-view-dialog.tsx      # Read-only brief modal dialog
 └── game-icons.tsx             # 30+ cartoony game icons
 
 lib/
@@ -154,7 +155,22 @@ The app uses a cassette futurism aesthetic with:
 Navigate through the complete flow using sample data:
 - Game code: `ABC123`
 - 4 sample players with emojis
-- Pre-filled campaign brief
+- Pre-filled campaign brief (9 fields with newline-separated bullets)
 - Mock AdLobs and votes
 
 All screens are functional and demonstrate the complete user experience.
+
+### Campaign Brief Structure
+
+The campaign brief contains 9 fields:
+- **Product Name** - Main product name
+- **Product Category** - Category from game settings
+- **Cover Image URL** - Optional product image
+- **Main Point** - 4-8 word campaign message
+- **Audience** - 1-2 bullet points (newline-separated)
+- **Business Problem** - 1-3 bullet points (newline-separated)
+- **Objective** - Single paragraph
+- **Strategy** - 1-2 sentences
+- **Product Features** - 3 bullet points (newline-separated)
+
+Bullet fields use `\n` to separate individual points, which are automatically rendered as proper HTML lists in the UI.

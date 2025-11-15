@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { PlayerStatus } from "@/components/player-status"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
+import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import { useRealtime } from "@/components/realtime-provider"
 import { useRoomRealtime, type RoomRealtimeListenerHelpers } from "@/hooks/use-room-realtime"
 import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
@@ -37,6 +38,7 @@ type GamePlayer = {
   isReady: boolean
   isHost: boolean
   joinedAt: string
+  seatIndex: number
 }
 
 const EMPTY_BRIEF: CampaignBrief = {
@@ -75,6 +77,8 @@ export default function BriefPage() {
   const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
   const latestGameRef = useRef<BriefGameState | null>(null)
   const initialLoadRef = useRef(true)
+  const pendingFetchRef = useRef<Promise<void> | null>(null)
+  const lastFetchVersionRef = useRef<number>(0)
 
   useEffect(() => {
     setStoredPlayer(loadPlayer(roomCode))
@@ -82,6 +86,12 @@ export default function BriefPage() {
 
   const fetchGame = useCallback(
     async ({ silent = false }: { silent?: boolean } = {}) => {
+      // Deduplicate concurrent requests
+      if (pendingFetchRef.current) {
+        console.log("[brief] Deduplicating concurrent fetchGame call")
+        return pendingFetchRef.current
+      }
+
       if (!silent) {
         setLoading(true)
         setError(null)
@@ -92,11 +102,13 @@ export default function BriefPage() {
         setShowLoadingModal(true)
       }
 
-      try {
-        const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
-        const payload = await response.json()
+      const fetchPromise = (async () => {
+        try {
+          // Brief page only needs players and brief data, not heavy adlobs
+          const response = await fetchWithRetry(`/api/games/${roomCode}?include=players,brief`, { cache: "no-store" })
+          const payload = await response.json()
 
-        if (!response.ok || !payload.success) {
+          if (!response.ok || !payload.success) {
           setError(payload.error ?? "Unable to load briefing room.")
           setGame(null)
           setShowLoadingModal(false)
@@ -118,14 +130,36 @@ export default function BriefPage() {
             }
           : null
 
-        const players: GamePlayer[] = (payload.game.players ?? []).map((player: GamePlayer & { joined_at?: string }) => ({
-          id: player.id,
-          name: player.name,
-          emoji: player.emoji,
-          isReady: player.isReady,
-          isHost: player.isHost,
-          joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
-        }))
+        const gameData = payload.game
+        const newVersion = typeof gameData.version === "number" ? gameData.version : 0
+
+        // Ignore stale responses (version guard)
+        if (newVersion < lastFetchVersionRef.current) {
+          console.warn("[brief] Ignoring stale response", {
+            received: newVersion,
+            current: lastFetchVersionRef.current,
+          })
+          return
+        }
+
+        lastFetchVersionRef.current = newVersion
+
+        const players: GamePlayer[] = (gameData.players ?? []).map(
+          (player: Partial<GamePlayer> & { joined_at?: string; seat_index?: number }) => ({
+            id: player.id ?? "",
+            name: player.name ?? "",
+            emoji: player.emoji ?? "",
+            isReady: Boolean(player.isReady),
+            isHost: Boolean(player.isHost),
+            joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
+            seatIndex:
+              typeof player.seatIndex === "number"
+                ? player.seatIndex
+                : typeof player.seat_index === "number"
+                  ? player.seat_index
+                  : 0,
+          }),
+        )
 
         setGame({
           id: payload.game.id,
@@ -169,16 +203,21 @@ export default function BriefPage() {
             setStoredPlayer(synced)
           }
         }
-      } catch (fetchError) {
-        console.error(fetchError)
-        setError("Unable to load briefing room.")
-        setGame(null)
-        setShowLoadingModal(false)
-      } finally {
-        if (!silent) {
-          setLoading(false)
+        } catch (fetchError) {
+          console.error(fetchError)
+          setError("Unable to load briefing room.")
+          setGame(null)
+          setShowLoadingModal(false)
+        } finally {
+          if (!silent) {
+            setLoading(false)
+          }
+          pendingFetchRef.current = null
         }
-      }
+      })()
+
+      pendingFetchRef.current = fetchPromise
+      return fetchPromise
     },
     [roomCode],
   )
@@ -211,13 +250,15 @@ export default function BriefPage() {
   const isBriefing = game?.status === "briefing"
 
   const playerStatusData = useMemo(() => {
-    return (game?.players ?? []).map((p) => ({
-      id: p.id,
-      name: p.name,
-      emoji: p.emoji,
-      isReady: p.isReady,
-      isYou: p.id === currentPlayer?.id,
-    }))
+    return [...(game?.players ?? [])]
+      .sort((a, b) => a.seatIndex - b.seatIndex)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        emoji: p.emoji,
+        isReady: p.isReady,
+        isYou: p.id === currentPlayer?.id,
+      }))
   }, [game?.players, currentPlayer?.id])
 
   const persistBrief = useCallback(
@@ -562,6 +603,7 @@ export default function BriefPage() {
                       emoji: player.emoji,
                       isReady: player.isReady,
                       isHost: player.isHost,
+                      seatIndex: player.seatIndex,
                     }
                   : candidate,
               )
@@ -574,6 +616,7 @@ export default function BriefPage() {
                   isReady: player.isReady,
                   isHost: player.isHost,
                   joinedAt: new Date().toISOString(),
+                  seatIndex: player.seatIndex,
                 },
               ]
           const hostId = players.find((candidate) => candidate.isHost)?.id ?? previous.hostId

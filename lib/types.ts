@@ -6,6 +6,7 @@ export interface Player {
   isReady: boolean
   isHost: boolean
   joinedAt: Date
+  seatIndex: number
 }
 
 export const GAME_STATUSES = ["lobby", "briefing", "creating", "presenting", "voting", "results"] as const

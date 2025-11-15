@@ -513,6 +513,7 @@ function makePlayer(overrides: Partial<PlayerSummary> & { id: string }): PlayerS
     emoji: overrides.emoji ?? "🎤",
     isReady: overrides.isReady ?? false,
     isHost: overrides.isHost ?? false,
+    seatIndex: overrides.seatIndex ?? 0,
   }
 }
 

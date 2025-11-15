@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Canvas } from "@/components/canvas"
 import { loadPlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
+import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import { canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/canvas"
 import { cn } from "@/lib/utils"
 import { useRealtime } from "@/components/realtime-provider"
@@ -20,6 +21,7 @@ interface GamePlayer {
   isReady: boolean
   isHost: boolean
   joinedAt: string
+  seatIndex: number
 }
 
 interface AdLob {
@@ -78,30 +80,52 @@ export default function VotePage() {
   const [isVoting, setIsVoting] = useState(false)
   const lastRealtimeStatusRef = useRef<RealtimeStatus>("idle")
   const latestGameRef = useRef<VoteGameState | null>(null)
+  const pendingFetchRef = useRef<Promise<void> | null>(null)
+  const lastFetchVersionRef = useRef<number>(0)
 
   useEffect(() => {
     setStoredPlayer(loadPlayer(roomCode))
   }, [roomCode])
 
   const fetchGame = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    // Deduplicate concurrent requests
+    if (pendingFetchRef.current) {
+      console.log("[vote] Deduplicating concurrent fetchGame call")
+      return pendingFetchRef.current
+    }
+
     if (!silent) {
       setLoading(true)
       setError(null)
     }
 
-    try {
-      const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
-      const payload = await response.json()
+    const fetchPromise = (async () => {
+      try {
+        // Vote page needs players and adlobs to display campaigns for voting
+        const response = await fetchWithRetry(`/api/games/${roomCode}?include=players,adlobs`, { cache: "no-store" })
+        const payload = await response.json()
 
-      if (!response.ok || !payload.success) {
-        setError(payload.error ?? "Unable to load voting data")
-        setGame(null)
-        return
-      }
+        if (!response.ok || !payload.success) {
+          setError(payload.error ?? "Unable to load voting data")
+          setGame(null)
+          return
+        }
 
-      const gameData = payload.game
+        const gameData = payload.game
+        const newVersion = typeof gameData.version === "number" ? gameData.version : 0
 
-      // Map the API response to our game state format
+        // Ignore stale responses (version guard)
+        if (newVersion < lastFetchVersionRef.current) {
+          console.warn("[vote] Ignoring stale response", {
+            received: newVersion,
+            current: lastFetchVersionRef.current,
+          })
+          return
+        }
+
+        lastFetchVersionRef.current = newVersion
+
+        // Map the API response to our game state format
       const mappedAdlobs: AdLob[] = (gameData.adlobs ?? []).map((adlob: any) => ({
         id: adlob.id,
         bigIdea: {
@@ -119,14 +143,22 @@ export default function VotePage() {
         voteCount: adlob.voteCount ?? 0,
       }))
 
-      const mappedPlayers: GamePlayer[] = (gameData.players ?? []).map((player: any) => ({
-        id: player.id,
-        name: player.name,
-        emoji: player.emoji,
-        isReady: player.isReady ?? false,
-        isHost: player.isHost ?? false,
-        joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
-      }))
+      const mappedPlayers: GamePlayer[] = (gameData.players ?? []).map(
+        (player: Partial<GamePlayer> & { joined_at?: string; seat_index?: number }) => ({
+          id: player.id ?? "",
+          name: player.name ?? "",
+          emoji: player.emoji ?? "",
+          isReady: Boolean(player.isReady),
+          isHost: Boolean(player.isHost),
+          joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
+          seatIndex:
+            typeof player.seatIndex === "number"
+              ? player.seatIndex
+              : typeof player.seat_index === "number"
+                ? player.seat_index
+                : 0,
+        }),
+      )
 
       setGame({
         id: gameData.id,
@@ -145,16 +177,21 @@ export default function VotePage() {
           return { ...previous, isHost: latestPlayer.isHost, emoji: latestPlayer.emoji, name: latestPlayer.name }
         }
         return previous
-      })
-    } catch (fetchError) {
-      console.error("Failed to fetch voting data", fetchError)
-      setError("Unable to load voting data")
-      setGame(null)
-    } finally {
-      if (!silent) {
-        setLoading(false)
+        })
+      } catch (fetchError) {
+        console.error("Failed to fetch voting data", fetchError)
+        setError("Unable to load voting data")
+        setGame(null)
+      } finally {
+        if (!silent) {
+          setLoading(false)
+        }
+        pendingFetchRef.current = null
       }
-    }
+    })()
+
+    pendingFetchRef.current = fetchPromise
+    return fetchPromise
   }, [roomCode])
 
   useEffect(() => {
@@ -196,7 +233,7 @@ export default function VotePage() {
     setError(null)
 
     try {
-      const response = await fetch("/api/votes", {
+      const response = await fetchWithRetry("/api/votes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -309,6 +346,7 @@ export default function VotePage() {
                       emoji: player.emoji,
                       isReady: player.isReady,
                       isHost: player.isHost,
+                      seatIndex: player.seatIndex,
                     }
                   : candidate,
               )
@@ -320,6 +358,7 @@ export default function VotePage() {
                   emoji: player.emoji,
                   isReady: player.isReady,
                   isHost: player.isHost,
+                  seatIndex: player.seatIndex,
                   joinedAt: new Date().toISOString(),
                 },
               ]

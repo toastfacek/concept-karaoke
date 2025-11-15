@@ -48,7 +48,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .update({ is_ready: parsed.data.isReady })
       .eq("id", playerId)
       .eq("room_id", room.id)
-      .select("id, name, emoji, is_ready, is_host")
+      .select("id, name, emoji, is_ready, is_host, seat_index")
       .maybeSingle()
 
     if (playerError) {
@@ -79,6 +79,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         emoji: player.emoji,
         isReady: player.is_ready,
         isHost: player.is_host,
+        seatIndex: player.seat_index,
       },
     })
   } catch (error) {

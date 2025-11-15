@@ -25,6 +25,7 @@ export default [
   js.configs.recommended,
   {
     files: ['**/*.{ts,tsx,js,jsx}'],
+    ignores: ['scripts/**/*.js'], // Exclude plain JS scripts from TypeScript parsing
     languageOptions: {
       parser,
       parserOptions: {
@@ -57,6 +58,20 @@ export default [
       'react/react-in-jsx-scope': 'off',
       '@typescript-eslint/consistent-type-imports': 'warn',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
+  // Override for plain JavaScript files in scripts directory
+  {
+    files: ['scripts/**/*.js'],
+    languageOptions: {
+      parser: undefined, // Use default parser for plain JS
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+      globals: {
+        ...globals.node,
+      },
     },
   },
 ]

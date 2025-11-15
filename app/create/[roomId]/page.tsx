@@ -18,6 +18,7 @@ import { useRoomRealtime, type RoomRealtimeListenerHelpers } from "@/hooks/use-r
 import { canvasHasContent, canvasStateSchema, cloneCanvasState, type CanvasState } from "@/lib/canvas"
 import { loadPlayer, savePlayer, type StoredPlayer } from "@/lib/player-storage"
 import { routes } from "@/lib/routes"
+import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import { cn } from "@/lib/utils"
 import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
 import type { CreationPhase } from "@/lib/types"
@@ -30,6 +31,7 @@ type GamePlayer = {
   isReady: boolean
   isHost: boolean
   joinedAt: string
+  seatIndex: number
 }
 
 type AdLobRecord = {
@@ -239,7 +241,8 @@ export default function CreatePage() {
 
       const fetchPromise = (async () => {
         try {
-          const response = await fetch(`/api/games/${roomCode}`, { cache: "no-store" })
+          // Create page needs players, brief, and adlobs (all data)
+          const response = await fetchWithRetry(`/api/games/${roomCode}?include=all`, { cache: "no-store" })
           const payload = await response.json()
 
         if (!response.ok || !payload.success) {
@@ -271,9 +274,19 @@ export default function CreatePage() {
           phaseStartTime: gameData.phaseStartTime ?? null,
           currentPresentIndex: gameData.currentPresentIndex ?? null,
           presentSequence: gameData.presentSequence ?? [],
-          players: (gameData.players ?? []).map((player: GamePlayer & { joined_at?: string }) => ({
-            ...player,
+          players: (gameData.players ?? []).map((player: Partial<GamePlayer> & { joined_at?: string; seat_index?: number }) => ({
+            id: player.id!,
+            name: player.name ?? "",
+            emoji: player.emoji ?? "",
+            isReady: Boolean(player.isReady),
+            isHost: Boolean(player.isHost),
             joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
+            seatIndex:
+              typeof player.seatIndex === "number"
+                ? player.seatIndex
+                : typeof player.seat_index === "number"
+                  ? player.seat_index
+                  : 0,
           })),
           adlobs: gameData.adlobs,
           version: newVersion,
@@ -460,6 +473,7 @@ export default function CreatePage() {
                     emoji: player.emoji,
                     isReady: player.isReady,
                     isHost: player.isHost,
+                    seatIndex: player.seatIndex,
                     joinedAt: existing.joinedAt ?? new Date().toISOString(),
                   }
                 : { ...existing, joinedAt: existing.joinedAt ?? new Date().toISOString() },
@@ -480,6 +494,7 @@ export default function CreatePage() {
               emoji: player.emoji,
               isReady: player.isReady,
               isHost: player.isHost,
+              seatIndex: player.seatIndex,
               joinedAt: new Date().toISOString(),
             },
           ]
@@ -566,15 +581,7 @@ export default function CreatePage() {
 
   const playerIndex = useMemo(() => {
     if (!game || !currentPlayer) return -1
-
-    // CRITICAL: Always sort players by joinedAt to ensure stable index
-    // Realtime events may reorder the array, causing playerIndex to change
-    const sortedPlayers = [...game.players].sort((a, b) => {
-      const timeA = new Date(a.joinedAt).getTime()
-      const timeB = new Date(b.joinedAt).getTime()
-      return timeA - timeB
-    })
-
+    const sortedPlayers = [...game.players].sort((a, b) => a.seatIndex - b.seatIndex)
     return sortedPlayers.findIndex((player) => player.id === currentPlayer.id)
   }, [game, currentPlayer])
 
@@ -716,7 +723,7 @@ export default function CreatePage() {
     } else if (nextPhase === "pitch") {
       setPitchInput(currentAdlob.pitch ?? "")
     }
-  }, [game?.currentPhase, currentAdlob?.id, currentAdlob])
+  }, [game, currentAdlob])
 
   const readyCount = useMemo(() => game?.players.filter((player) => player.isReady).length ?? 0, [game])
   const totalPlayers = game?.players.length ?? 0
@@ -750,13 +757,15 @@ export default function CreatePage() {
   )
 
   const playerStatusData = useMemo(() => {
-    return (game?.players ?? []).map((p) => ({
-      id: p.id,
-      name: p.name,
-      emoji: p.emoji,
-      isReady: p.isReady,
-      isYou: p.id === currentPlayer?.id,
-    }))
+    return [...(game?.players ?? [])]
+      .sort((a, b) => a.seatIndex - b.seatIndex)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        emoji: p.emoji,
+        isReady: p.isReady,
+        isYou: p.id === currentPlayer?.id,
+      }))
   }, [game?.players, currentPlayer?.id])
 
   const handleSubmitWork = async () => {

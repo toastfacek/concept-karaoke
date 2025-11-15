@@ -247,6 +247,7 @@ export type Database = {
           joined_at: string | null
           name: string
           room_id: string
+          seat_index: number
         }
         Insert: {
           disconnected?: boolean | null
@@ -257,6 +258,7 @@ export type Database = {
           joined_at?: string | null
           name: string
           room_id: string
+          seat_index: number
         }
         Update: {
           disconnected?: boolean | null
@@ -267,6 +269,7 @@ export type Database = {
           joined_at?: string | null
           name?: string
           room_id?: string
+          seat_index?: number
         }
         Relationships: [
           {
