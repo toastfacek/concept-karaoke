@@ -735,7 +735,9 @@ export default function CreatePage() {
     console.log("[create] Parsed visualCanvasData", {
       adlobId: currentAdlob?.id,
       hasData: !!currentAdlob?.visualCanvasData,
-      parsedElements: parsed?.elements?.length ?? 0,
+      parsedStrokes: parsed?.strokes?.length ?? 0,
+      parsedTextBlocks: parsed?.textBlocks?.length ?? 0,
+      parsedImages: parsed?.images?.length ?? 0,
     })
     return parsed
   }, [currentAdlob])
@@ -745,7 +747,9 @@ export default function CreatePage() {
     console.log("[create] Parsed headlineCanvasData", {
       adlobId: currentAdlob?.id,
       hasData: !!currentAdlob?.headlineCanvasData,
-      parsedElements: parsed?.elements?.length ?? 0,
+      parsedStrokes: parsed?.strokes?.length ?? 0,
+      parsedTextBlocks: parsed?.textBlocks?.length ?? 0,
+      parsedImages: parsed?.images?.length ?? 0,
     })
     return parsed
   }, [currentAdlob])
