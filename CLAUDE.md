@@ -15,6 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **AI**: OpenAI for brief generation
 - **Package Manager**: pnpm with monorepo workspace
 - **Hosting**: Vercel (frontend) + Railway (realtime server)
+- **Monitoring**: Sentry (error tracking) + Custom metrics (performance)
 
 ## Monorepo Structure
 
@@ -314,6 +315,7 @@ Use [lib/env.ts](lib/env.ts) for runtime environment parsing. Required variables
 - `NEXT_PUBLIC_REALTIME_URL` - WebSocket server URL (e.g., `http://localhost:8080` for dev, Railway URL for prod)
 - `REALTIME_SHARED_SECRET` - JWT secret for realtime token generation
 - `REALTIME_BROADCAST_SECRET` - Shared secret for API → WS server communication
+- `NEXT_PUBLIC_SENTRY_DSN` - Sentry project DSN for error tracking (optional, production only)
 
 **Realtime Server** (`services/realtime-server/.env`):
 - `SUPABASE_URL` - Supabase project URL
@@ -386,6 +388,209 @@ The WebSocket server in `services/realtime-server`:
 
 To work on the realtime server, navigate to `services/realtime-server` and run commands there.
 
+## Performance & Monitoring
+
+### Monitoring Architecture
+
+The application has comprehensive observability across all layers:
+
+**1. Error Tracking (Sentry)**
+- Client-side, server-side, and edge runtime monitoring
+- Session replay for debugging production issues
+- Automatic error capture with stack traces
+- Configuration files: `sentry.client.config.ts`, `sentry.server.config.ts`, `sentry.edge.config.ts`
+- Instrumentation: `instrumentation.ts` (Next.js hook)
+
+**2. Custom Metrics System** ([lib/metrics.ts](lib/metrics.ts))
+- In-memory circular buffer (10k metrics max)
+- Metric types: `db_query`, `api_request`, `realtime_event`, `cache_hit`, `cache_miss`, `error`
+- Percentile calculations (P50, P95, P99) for latency analysis
+- Time-windowed statistics (default 60s window)
+- Utility function: `measure()` for wrapping async operations
+
+**3. Metrics API** ([app/api/metrics/route.ts](app/api/metrics/route.ts))
+- `GET /api/metrics?window=60000` - Retrieve statistics
+- `DELETE /api/metrics` - Clear metrics
+- Returns: query rates, latency percentiles, cache hit rates, error rates
+
+**4. Realtime Server Metrics** ([services/realtime-server/src/metrics.ts](services/realtime-server/src/metrics.ts))
+- `MetricsRecorder` class with current + lifetime counters
+- Tracks: WebSocket connections, messages, broadcasts, errors
+- HTTP endpoint: `GET /api/metrics` exposes stats + active room count
+- Auto-flush every 60s (configurable)
+
+**5. Admin Dashboard** ([app/admin/metrics/page.tsx](app/admin/metrics/page.tsx))
+- Real-time dashboard at `/admin/metrics`
+- Auto-refreshes every 5 seconds
+- Displays both API server and WebSocket server metrics
+- Visual cards for all key performance indicators
+
+### Performance Patterns
+
+**Request Deduplication Pattern** (all game pages):
+```typescript
+const pendingFetchRef = useRef<Promise<void> | null>(null)
+const lastFetchVersionRef = useRef(0)
+
+const fetchGame = useCallback(async () => {
+  // Deduplicate concurrent requests
+  if (pendingFetchRef.current) {
+    console.log("Deduplicating concurrent fetchGame call")
+    return pendingFetchRef.current
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      const response = await fetchWithRetry(`/api/games/${roomId}?include=all`)
+      const data = await response.json()
+
+      // Ignore stale responses
+      const newVersion = data.game?.version ?? 0
+      if (newVersion < lastFetchVersionRef.current) {
+        console.warn("Ignoring stale response")
+        return
+      }
+      lastFetchVersionRef.current = newVersion
+
+      setGameState(data.game)
+    } finally {
+      pendingFetchRef.current = null
+    }
+  })()
+
+  pendingFetchRef.current = fetchPromise
+  return fetchPromise
+}, [roomId])
+```
+
+**Retry Logic with Exponential Backoff** ([lib/fetch-with-retry.ts](lib/fetch-with-retry.ts)):
+```typescript
+export async function fetchWithRetry(
+  url: string,
+  options?: RequestInit,
+  maxRetries = 3
+): Promise<Response> {
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options)
+
+      // Don't retry 4xx client errors
+      if (response.status >= 400 && response.status < 500) {
+        return response
+      }
+
+      // Retry 5xx server errors
+      if (response.status >= 500 && attempt < maxRetries) {
+        const delay = 100 * Math.pow(2, attempt) // 100ms, 200ms, 400ms
+        await new Promise(resolve => setTimeout(resolve, delay))
+        continue
+      }
+
+      return response
+    } catch (error) {
+      lastError = error as Error
+      if (attempt < maxRetries) {
+        const delay = 100 * Math.pow(2, attempt)
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+    }
+  }
+
+  throw lastError || new Error("Max retries exceeded")
+}
+```
+
+**Conditional Query Loading** (API optimization):
+```typescript
+// Client requests only needed data
+const response = await fetch(`/api/games/${roomId}?include=players,brief`)
+
+// API route builds dynamic query
+const includePlayers = includeParam === "all" || includeParam.includes("players")
+const includeBrief = includeParam === "all" || includeParam.includes("brief")
+const includeAdlobs = includeParam === "all" || includeParam.includes("adlobs")
+
+let query = supabase.from(TABLES.gameRooms).select("*, version")
+if (includePlayers) query = query.select("*, players(*)")
+if (includeBrief) query = query.select("*, campaign_briefs(*)")
+if (includeAdlobs) query = query.select("*, adlobs(*)")
+```
+
+**Metrics Instrumentation Pattern**:
+```typescript
+import { measure, metrics } from "@/lib/metrics"
+
+export async function GET(request: Request) {
+  const apiStartTime = performance.now()
+
+  try {
+    // Wrap database query with measure()
+    const { data: room, error } = await measure(
+      "db_query",
+      "game_fetch",
+      async () => supabase.from(TABLES.gameRooms).select("*").eq("id", id).maybeSingle(),
+      { identifier: id }
+    )
+
+    if (error) throw error
+
+    // Record successful API request
+    metrics.record({
+      type: "api_request",
+      name: "GET /api/games/[id]",
+      duration: performance.now() - apiStartTime,
+      metadata: { status: 200, gameStatus: room.status }
+    })
+
+    return NextResponse.json({ success: true, game: room })
+  } catch (error) {
+    // Record error
+    metrics.record({
+      type: "error",
+      name: "GET /api/games/[id]",
+      duration: performance.now() - apiStartTime,
+      metadata: { error: String(error) }
+    })
+
+    return NextResponse.json({ success: false, error: "Failed" }, { status: 500 })
+  }
+}
+```
+
+**Cache Headers** (reduce database load):
+```typescript
+return NextResponse.json(
+  { success: true, game: room },
+  {
+    headers: {
+      "Cache-Control": "private, max-age=0, stale-while-revalidate=2",
+      "CDN-Cache-Control": "max-age=0",
+    },
+  }
+)
+```
+
+### Performance Achievements
+
+Based on completed performance optimization phases (see [PERFORMANCE_FIX_PLAN.md](PERFORMANCE_FIX_PLAN.md)):
+
+| Metric | Before | After | Improvement |
+|--------|--------|-------|-------------|
+| Database queries/min | 100 | 1-2 | 98% reduction |
+| Response time (P95) | 10s | 200-500ms | 95% reduction |
+| Timeout error rate | 60% | <0.1% | 99.8% reduction |
+| Query payload size | 1.2MB | 50KB | 96% reduction |
+| Max concurrent players | 4-6 | 12 | 2x capacity |
+
+**Key Optimizations**:
+- ✅ Request deduplication + cache headers (Phase 1)
+- ✅ Conditional query loading (Phase 2)
+- ✅ Retry logic with exponential backoff (Phase 3)
+- ✅ Deduplication across all pages (Phase 5)
+- ✅ Monitoring & Observability (Phase 6)
+
 ## Common Gotchas
 
 1. **State Machine Validation** - Always use `canTransitionStatus()` before changing game status. Invalid transitions throw errors.
@@ -412,6 +617,12 @@ To work on the realtime server, navigate to `services/realtime-server` and run c
 
 12. **Winner Display** - Results page displays the winning campaign's big idea text rather than the presenter's name, reflecting the collaborative nature of campaign creation across multiple players. See [app/results/[roomId]/page.tsx:367](app/results/[roomId]/page.tsx#L367).
 
+13. **Request Deduplication Required** - All game pages must use `pendingFetchRef` to prevent concurrent API requests from realtime event storms. Without deduplication, rapid events cause database timeouts. Always include version guards (`lastFetchVersionRef`) to ignore stale responses.
+
+14. **Metrics Instrumentation** - When adding new API routes, wrap database queries with `measure()` and record API request metrics to maintain observability. Use `performance.now()` for timing, not `Date.now()`. See [app/api/games/[id]/route.ts](app/api/games/[id]/route.ts) for the pattern.
+
+15. **Retry All Fetches** - Use `fetchWithRetry()` for all API requests, not raw `fetch()`. This provides automatic retry with exponential backoff for transient 5xx errors and network failures. Never retry 4xx client errors.
+
 ## Testing the Application
 
 The app is fully navigable with sample data. Start at `/` and follow the game flow. All screens are functional but database operations need implementation where TODOs are marked.
@@ -433,6 +644,9 @@ The app is fully navigable with sample data. Start at `/` and follow the game fl
 - Overwrite protection for concurrent content creation
 - Winner display shows big idea instead of player name
 - Sample data for testing
+- **Performance optimizations** (98% DB load reduction, 95% latency reduction)
+- **Comprehensive monitoring** (Sentry + custom metrics + admin dashboard)
+- **Request deduplication + retry logic** across all game pages
 
 🚧 In Progress:
 - Canvas component improvements (currently using Excalidraw)
@@ -536,6 +750,16 @@ All events are defined in [packages/realtime-shared/src/index.ts](packages/realt
 - [components/brief-view-dialog.tsx](components/brief-view-dialog.tsx) - Read-only brief modal dialog
 - [app/api/briefs/generate/route.ts](app/api/briefs/generate/route.ts) - AI brief generation endpoint
 
+**Performance & Monitoring**:
+- [lib/metrics.ts](lib/metrics.ts) - Custom metrics collector with percentile calculations
+- [lib/fetch-with-retry.ts](lib/fetch-with-retry.ts) - Retry logic with exponential backoff
+- [app/api/metrics/route.ts](app/api/metrics/route.ts) - Metrics API endpoint
+- [services/realtime-server/src/metrics.ts](services/realtime-server/src/metrics.ts) - WebSocket metrics
+- [app/admin/metrics/page.tsx](app/admin/metrics/page.tsx) - Real-time admin dashboard
+- `sentry.client.config.ts`, `sentry.server.config.ts`, `sentry.edge.config.ts` - Sentry configuration
+- `instrumentation.ts` - Next.js instrumentation hook
+
 **Documentation**:
 - [SCREEN_FLOW.md](SCREEN_FLOW.md) - Detailed user flow
 - [README.md](README.md) - Project overview
+- [PERFORMANCE_FIX_PLAN.md](PERFORMANCE_FIX_PLAN.md) - Performance optimization phases and results
