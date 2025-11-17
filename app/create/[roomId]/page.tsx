@@ -615,19 +615,8 @@ export default function CreatePage() {
     const targetIndex = (playerIndex + phaseIndex) % sortedAdlobs.length
     const assignedAdlob = sortedAdlobs[targetIndex] ?? null
 
-    // Log assignment for debugging collisions
-    console.log("[create] Adlob assignment", {
-      playerName: currentPlayer.name,
-      playerId: currentPlayer.id,
-      playerIndex,
-      phase: game.currentPhase,
-      phaseIndex,
-      totalPlayers,
-      totalAdlobs: sortedAdlobs.length,
-      targetIndex,
-      assignedAdlobId: assignedAdlob?.id,
-      formula: `(${playerIndex} + ${phaseIndex}) % ${sortedAdlobs.length} = ${targetIndex}`,
-    })
+    // NOTE: Logging removed from here - it runs on every game state update.
+    // See the useEffect below for lock-specific logging (only when phase changes)
 
     return assignedAdlob
   }, [game, currentPlayer, playerIndex, phaseIndex])
@@ -635,20 +624,135 @@ export default function CreatePage() {
   // Lock the adlob assignment when phase changes
   // CRITICAL: Only depend on phaseIndex to prevent mid-phase reassignment
   // when realtime events trigger game state updates
+  const prevPhaseIndexRef = useRef<number>(-1)
+
   useEffect(() => {
-    if (phaseIndex !== -1 && calculatedAdlob) {
-      setLockedAdlobId(calculatedAdlob.id)
+    // Only lock when phase index CHANGES, not on every recalculation
+    if (phaseIndex === prevPhaseIndexRef.current) {
+      return
     }
-  }, [phaseIndex, calculatedAdlob])
+
+    console.log("[create] Phase index changed, recalculating lock", {
+      oldPhase: prevPhaseIndexRef.current,
+      newPhase: phaseIndex,
+      currentLock: lockedAdlobId,
+    })
+
+    prevPhaseIndexRef.current = phaseIndex
+
+    if (phaseIndex === -1) {
+      setLockedAdlobId(null)
+      console.log("[create] Cleared lock (phaseIndex = -1)")
+      return
+    }
+
+    // Recalculate assignment directly in effect to avoid stale closure
+    if (!game || !currentPlayer || !game.adlobs || game.adlobs.length === 0) {
+      console.warn("[create] Cannot lock - missing game data", {
+        hasGame: !!game,
+        hasPlayer: !!currentPlayer,
+        adlobCount: game?.adlobs?.length ?? 0,
+      })
+      return
+    }
+
+    const sortedPlayers = [...game.players].sort((a, b) => a.seatIndex - b.seatIndex)
+    const playerIdx = sortedPlayers.findIndex((player) => player.id === currentPlayer.id)
+
+    if (playerIdx === -1) {
+      console.error("[create] Player not found in sorted players list", {
+        playerId: currentPlayer.id,
+        players: sortedPlayers.map(p => ({ id: p.id, seatIndex: p.seatIndex })),
+      })
+      return
+    }
+
+    const sortedAdlobs = [...game.adlobs].sort((a, b) => {
+      const timeA = new Date(a.createdAt).getTime()
+      const timeB = new Date(b.createdAt).getTime()
+      if (timeA !== timeB) return timeA - timeB
+      return a.id.localeCompare(b.id)
+    })
+
+    const targetIndex = (playerIdx + phaseIndex) % sortedAdlobs.length
+    const assignedAdlob = sortedAdlobs[targetIndex]
+
+    if (assignedAdlob) {
+      setLockedAdlobId(assignedAdlob.id)
+      console.log("[create] ✓ Locked adlob assignment", {
+        phase: game.currentPhase,
+        phaseIndex,
+        playerIdx,
+        playerName: currentPlayer.name,
+        adlobId: assignedAdlob.id,
+        targetIndex,
+        formula: `(${playerIdx} + ${phaseIndex}) % ${sortedAdlobs.length} = ${targetIndex}`,
+        previousLock: lockedAdlobId,
+        isLockChanging: lockedAdlobId !== assignedAdlob.id,
+        allAdlobs: sortedAdlobs.map((a, i) => ({
+          index: i,
+          id: a.id,
+          createdAt: a.createdAt,
+          hasVisual: !!a.visualCanvasData,
+          hasHeadline: !!a.headlineCanvasData,
+        })),
+      })
+    } else {
+      console.error("[create] Failed to find assigned adlob", {
+        targetIndex,
+        adlobCount: sortedAdlobs.length,
+      })
+    }
+  }, [phaseIndex, game, currentPlayer])  // REMOVED lockedAdlobId to prevent circular dependency
+
+  // Runtime assertion: Disabled due to closure staleness
+  // The validation was firing false positives because it captured stale lockedAdlobId values
+  // Real validation happens in the locking effect above where we log the assignment
 
   // Use locked adlob reference to prevent mid-phase swapping
   const currentAdlob = useMemo(() => {
     if (!lockedAdlobId || !game?.adlobs) return null
-    return game.adlobs.find((adlob) => adlob.id === lockedAdlobId) ?? null
-  }, [lockedAdlobId, game?.adlobs])
+    const found = game.adlobs.find((adlob) => adlob.id === lockedAdlobId)
 
-  const visualCanvasData = useMemo(() => parseCanvasData(currentAdlob?.visualCanvasData), [currentAdlob])
-  const headlineCanvasData = useMemo(() => parseCanvasData(currentAdlob?.headlineCanvasData), [currentAdlob])
+    if (!found) {
+      console.error("[create] ⚠️  Locked adlob not found in game.adlobs!", {
+        lockedAdlobId,
+        availableAdlobs: game.adlobs.map(a => a.id),
+      })
+    } else {
+      console.log("[create] Using locked adlob", {
+        lockedAdlobId,
+        phase: game?.currentPhase,
+        phaseIndex,
+      })
+    }
+
+    return found ?? null
+  }, [lockedAdlobId, game?.adlobs, game?.currentPhase, phaseIndex])
+
+  const visualCanvasData = useMemo(() => {
+    const parsed = parseCanvasData(currentAdlob?.visualCanvasData)
+    console.log("[create] Parsed visualCanvasData", {
+      adlobId: currentAdlob?.id,
+      hasData: !!currentAdlob?.visualCanvasData,
+      parsedStrokes: parsed?.strokes?.length ?? 0,
+      parsedTextBlocks: parsed?.textBlocks?.length ?? 0,
+      parsedImages: parsed?.images?.length ?? 0,
+    })
+    return parsed
+  }, [currentAdlob])
+
+  const headlineCanvasData = useMemo(() => {
+    const parsed = parseCanvasData(currentAdlob?.headlineCanvasData)
+    console.log("[create] Parsed headlineCanvasData", {
+      adlobId: currentAdlob?.id,
+      hasData: !!currentAdlob?.headlineCanvasData,
+      parsedStrokes: parsed?.strokes?.length ?? 0,
+      parsedTextBlocks: parsed?.textBlocks?.length ?? 0,
+      parsedImages: parsed?.images?.length ?? 0,
+    })
+    return parsed
+  }, [currentAdlob])
 
   const currentAdlobIndex = useMemo(() => {
     if (!game || !currentAdlob) return -1
