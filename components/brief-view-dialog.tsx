@@ -10,14 +10,6 @@ interface BriefViewDialogProps {
 }
 
 export function BriefViewDialog({ brief, isOpen, onOpenChange }: BriefViewDialogProps) {
-  const parseBullets = (text: string): string[] => {
-    if (!text) return []
-    return text
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0)
-  }
-
   if (!brief) {
     return (
       <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -61,7 +53,7 @@ export function BriefViewDialog({ brief, isOpen, onOpenChange }: BriefViewDialog
               )}
             </div>
 
-            {/* Right Column - Product Name, Category, Main Point, Audience */}
+            {/* Right Column - Product Name, Category, Description, Audience */}
             <div className="space-y-4">
               {/* Product Name */}
               <div>
@@ -78,80 +70,40 @@ export function BriefViewDialog({ brief, isOpen, onOpenChange }: BriefViewDialog
                 <p className="text-sm leading-relaxed">{brief.productCategory}</p>
               </div>
 
-              {/* The Main Point */}
+              {/* What Is It */}
               <div className="space-y-2">
                 <h4 className="font-mono text-xs font-bold uppercase text-muted-foreground">
-                  The Main Point
+                  What Is It
                 </h4>
-                <p className="text-sm font-medium leading-relaxed">{brief.mainPoint}</p>
+                <p className="text-sm leading-relaxed">{brief.productDescription}</p>
               </div>
 
-              {/* Audience */}
+              {/* Who Is It For */}
               <div className="space-y-2">
                 <h4 className="font-mono text-xs font-bold uppercase text-muted-foreground">
-                  Audience
+                  Who Is It For
                 </h4>
-                {parseBullets(brief.audience).length > 0 ? (
-                  <ul className="list-disc space-y-1 pl-5 text-sm leading-relaxed">
-                    {parseBullets(brief.audience).map((bullet, idx) => (
-                      <li key={idx}>{bullet}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm leading-relaxed">{brief.audience}</p>
-                )}
+                <p className="text-sm leading-relaxed">{brief.audience}</p>
               </div>
             </div>
           </div>
 
-          {/* Bottom Grid - Business Problem, Objective, Strategy, Product Features */}
+          {/* Bottom Row - Unique Benefit and Main Message */}
           <div className="grid gap-6 md:grid-cols-2">
-            {/* Business Problem */}
+            {/* Unique Benefit */}
             <div className="space-y-2">
               <h4 className="font-mono text-xs font-bold uppercase text-muted-foreground">
-                Business Problem
+                Unique Benefit
               </h4>
-              {parseBullets(brief.businessProblem).length > 0 ? (
-                <ul className="list-disc space-y-1 pl-5 text-sm leading-relaxed">
-                  {parseBullets(brief.businessProblem).map((bullet, idx) => (
-                    <li key={idx}>{bullet}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm leading-relaxed">{brief.businessProblem}</p>
-              )}
+              <p className="text-sm leading-relaxed">{brief.uniqueBenefit}</p>
             </div>
 
-            {/* Campaign Objective */}
+            {/* Main Message */}
             <div className="space-y-2">
               <h4 className="font-mono text-xs font-bold uppercase text-muted-foreground">
-                Objective
+                Main Message
               </h4>
-              <p className="text-sm leading-relaxed">{brief.objective}</p>
-            </div>
-
-            {/* Strategy */}
-            <div className="space-y-2">
-              <h4 className="font-mono text-xs font-bold uppercase text-muted-foreground">
-                Strategy
-              </h4>
-              <p className="text-sm leading-relaxed">{brief.strategy}</p>
-            </div>
-
-            {/* Product Features */}
-            <div className="space-y-2">
-              <h4 className="font-mono text-xs font-bold uppercase text-muted-foreground">
-                Product Features
-              </h4>
-              {parseBullets(brief.productFeatures).length > 0 ? (
-                <ul className="list-disc space-y-1 pl-5 text-sm leading-relaxed">
-                  {parseBullets(brief.productFeatures).map((bullet, idx) => (
-                    <li key={idx}>{bullet}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm leading-relaxed">{brief.productFeatures}</p>
-              )}
+              <p className="text-sm font-medium leading-relaxed">{brief.mainMessage}</p>
             </div>
           </div>
         </div>

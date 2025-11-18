@@ -23,12 +23,10 @@ const requestSchema = z.object({
 const briefSchema = z.object({
   productName: z.string().min(1),
   productCategory: z.string().min(1),
-  mainPoint: z.string().min(1),
+  productDescription: z.string().min(1),
   audience: z.string().min(1),
-  businessProblem: z.string().min(1),
-  objective: z.string().min(1),
-  strategy: z.string().min(1),
-  productFeatures: z.string().min(1),
+  uniqueBenefit: z.string().min(1),
+  mainMessage: z.string().min(1),
 })
 
 const GEMINI_GENERATE_URL =
@@ -218,12 +216,10 @@ export async function POST(request: Request) {
       generatedBrief = {
         productName: "Untitled Product",
         productCategory: room.product_category ?? "All",
-        mainPoint: "Deliver a surprising benefit",
+        productDescription: "A product that needs a description",
         audience: "General audience",
-        businessProblem: "No business problem provided",
-        objective: "Create an engaging concept",
-        strategy: "Lean into humor and over-the-top claims",
-        productFeatures: "Feature 1, Feature 2, Feature 3",
+        uniqueBenefit: "Delivers a surprising benefit",
+        mainMessage: "Try it today",
       }
     }
 
@@ -231,7 +227,7 @@ export async function POST(request: Request) {
     let coverImageUrl: string | null = null
     try {
       const geminiKey = env.server.GEMINI_API_KEY ?? requireServerEnv("GEMINI_API_KEY")
-      const imagePrompt = `Professional product photograph for ${generatedBrief.productName}, a ${generatedBrief.productCategory} product. ${generatedBrief.mainPoint}. ${generatedBrief.productFeatures}. High-quality marketing image, clean composition, modern aesthetic.`
+      const imagePrompt = `Professional product photograph for ${generatedBrief.productName}, a ${generatedBrief.productCategory} product. ${generatedBrief.productDescription}. ${generatedBrief.uniqueBenefit}. High-quality marketing image, clean composition, modern aesthetic.`
       coverImageUrl = await generateProductImage(imagePrompt, geminiKey)
       if (!coverImageUrl) {
         console.warn("[Game Start] Failed to generate cover image, continuing without image")
@@ -259,12 +255,10 @@ export async function POST(request: Request) {
         .update({
           product_name: generatedBrief.productName,
           product_category: generatedBrief.productCategory,
-          main_point: generatedBrief.mainPoint,
+          product_description: generatedBrief.productDescription,
           audience: generatedBrief.audience,
-          business_problem: generatedBrief.businessProblem,
-          objective: generatedBrief.objective,
-          strategy: generatedBrief.strategy,
-          product_features: generatedBrief.productFeatures,
+          unique_benefit: generatedBrief.uniqueBenefit,
+          main_message: generatedBrief.mainMessage,
           cover_image_url: coverImageUrl,
         })
         .eq("id", existingBrief.id)
@@ -281,12 +275,10 @@ export async function POST(request: Request) {
           room_id: room.id,
           product_name: generatedBrief.productName,
           product_category: generatedBrief.productCategory,
-          main_point: generatedBrief.mainPoint,
+          product_description: generatedBrief.productDescription,
           audience: generatedBrief.audience,
-          business_problem: generatedBrief.businessProblem,
-          objective: generatedBrief.objective,
-          strategy: generatedBrief.strategy,
-          product_features: generatedBrief.productFeatures,
+          unique_benefit: generatedBrief.uniqueBenefit,
+          main_message: generatedBrief.mainMessage,
           cover_image_url: coverImageUrl,
         })
         .select("id")

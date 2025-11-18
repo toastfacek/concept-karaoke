@@ -19,12 +19,10 @@ type CampaignBrief = {
   productName: string
   productCategory: string
   coverImageUrl?: string
-  mainPoint: string
+  productDescription: string
   audience: string
-  businessProblem: string
-  objective: string
-  strategy: string
-  productFeatures: string
+  uniqueBenefit: string
+  mainMessage: string
 }
 
 type BriefRecord = CampaignBrief & {
@@ -44,12 +42,10 @@ type GamePlayer = {
 const EMPTY_BRIEF: CampaignBrief = {
   productName: "",
   productCategory: "",
-  mainPoint: "",
+  productDescription: "",
   audience: "",
-  businessProblem: "",
-  objective: "",
-  strategy: "",
-  productFeatures: "",
+  uniqueBenefit: "",
+  mainMessage: "",
   coverImageUrl: undefined,
 }
 
@@ -121,12 +117,10 @@ export default function BriefPage() {
               productName: payload.game.brief.productName,
               productCategory: payload.game.brief.productCategory,
               coverImageUrl: payload.game.brief.coverImageUrl,
-              mainPoint: payload.game.brief.mainPoint,
+              productDescription: payload.game.brief.productDescription,
               audience: payload.game.brief.audience,
-              businessProblem: payload.game.brief.businessProblem,
-              objective: payload.game.brief.objective,
-              strategy: payload.game.brief.strategy,
-              productFeatures: payload.game.brief.productFeatures,
+              uniqueBenefit: payload.game.brief.uniqueBenefit,
+              mainMessage: payload.game.brief.mainMessage,
             }
           : null
 
@@ -277,12 +271,10 @@ export default function BriefPage() {
         body: JSON.stringify({
           productName: draft.productName,
           productCategory: draft.productCategory,
-          mainPoint: draft.mainPoint,
+          productDescription: draft.productDescription,
           audience: draft.audience,
-          businessProblem: draft.businessProblem,
-          objective: draft.objective,
-          strategy: draft.strategy,
-          productFeatures: draft.productFeatures,
+          uniqueBenefit: draft.uniqueBenefit,
+          mainMessage: draft.mainMessage,
           coverImageUrl: draft.coverImageUrl,
           playerId: currentPlayer.id,
         }),
@@ -299,12 +291,10 @@ export default function BriefPage() {
         productName: payload.brief.productName,
         productCategory: payload.brief.productCategory,
         coverImageUrl: payload.brief.coverImageUrl,
-        mainPoint: payload.brief.mainPoint,
+        productDescription: payload.brief.productDescription,
         audience: payload.brief.audience,
-        businessProblem: payload.brief.businessProblem,
-        objective: payload.brief.objective,
-        strategy: payload.brief.strategy,
-        productFeatures: payload.brief.productFeatures,
+        uniqueBenefit: payload.brief.uniqueBenefit,
+        mainMessage: payload.brief.mainMessage,
       }
 
       setGame((previous) =>
@@ -444,12 +434,10 @@ export default function BriefPage() {
         productName: payload.brief.productName,
         productCategory: payload.brief.productCategory,
         coverImageUrl: payload.brief.coverImageUrl,
-        mainPoint: payload.brief.mainPoint,
+        productDescription: payload.brief.productDescription,
         audience: payload.brief.audience,
-        businessProblem: payload.brief.businessProblem,
-        objective: payload.brief.objective,
-        strategy: payload.brief.strategy,
-        productFeatures: payload.brief.productFeatures,
+        uniqueBenefit: payload.brief.uniqueBenefit,
+        mainMessage: payload.brief.mainMessage,
       }
 
       setBriefDraft(generated)
@@ -471,12 +459,10 @@ export default function BriefPage() {
       if (game.brief) {
         const hasUnsavedChanges =
           briefDraft.productName !== game.brief.productName ||
-          briefDraft.mainPoint !== game.brief.mainPoint ||
+          briefDraft.productDescription !== game.brief.productDescription ||
           briefDraft.audience !== game.brief.audience ||
-          briefDraft.businessProblem !== game.brief.businessProblem ||
-          briefDraft.objective !== game.brief.objective ||
-          briefDraft.strategy !== game.brief.strategy ||
-          briefDraft.productFeatures !== game.brief.productFeatures
+          briefDraft.uniqueBenefit !== game.brief.uniqueBenefit ||
+          briefDraft.mainMessage !== game.brief.mainMessage
 
         if (hasUnsavedChanges) {
           try {

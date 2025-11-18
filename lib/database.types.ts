@@ -133,47 +133,41 @@ export type Database = {
       campaign_briefs: {
         Row: {
           audience: string
-          business_problem: string
           cover_image_url: string | null
           created_at: string | null
           id: string
-          main_point: string
-          objective: string
+          main_message: string
           product_category: string
-          product_features: string
+          product_description: string
           product_name: string
           room_id: string
-          strategy: string
+          unique_benefit: string
           updated_at: string | null
         }
         Insert: {
           audience: string
-          business_problem: string
           cover_image_url?: string | null
           created_at?: string | null
           id?: string
-          main_point: string
-          objective: string
+          main_message: string
           product_category: string
-          product_features: string
+          product_description: string
           product_name: string
           room_id: string
-          strategy: string
+          unique_benefit: string
           updated_at?: string | null
         }
         Update: {
           audience?: string
-          business_problem?: string
           cover_image_url?: string | null
           created_at?: string | null
           id?: string
-          main_point?: string
-          objective?: string
+          main_message?: string
           product_category?: string
-          product_features?: string
+          product_description?: string
           product_name?: string
           room_id?: string
-          strategy?: string
+          unique_benefit?: string
           updated_at?: string | null
         }
         Relationships: [
@@ -201,6 +195,7 @@ export type Database = {
           product_category: string | null
           status: string
           version: number
+          wacky_brief_style: string | null
           updated_at: string | null
         }
         Insert: {
@@ -217,6 +212,7 @@ export type Database = {
           product_category?: string | null
           status: string
           version?: number
+          wacky_brief_style?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -233,6 +229,7 @@ export type Database = {
           product_category?: string | null
           status?: string
           version?: number
+          wacky_brief_style?: string | null
           updated_at?: string | null
         }
         Relationships: []

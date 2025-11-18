@@ -6,7 +6,7 @@ import { TABLES } from "@/lib/db"
 import { env, requireServerEnv } from "@/lib/env"
 import { generateProductImage } from "@/lib/gemini-image"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
-import { SPECIFIC_PRODUCT_CATEGORIES, type BriefStyle } from "@/lib/types"
+import { SPECIFIC_PRODUCT_CATEGORIES, type BriefStyle, type WackyBriefStyle } from "@/lib/types"
 
 const requestSchema = z.object({
   roomId: z.string().uuid("Invalid room identifier"),
@@ -15,12 +15,10 @@ const requestSchema = z.object({
 const briefSchema = z.object({
   productName: z.string().min(1),
   productCategory: z.string().min(1),
-  mainPoint: z.string().min(1),
+  productDescription: z.string().min(1),
   audience: z.string().min(1),
-  businessProblem: z.string().min(1),
-  objective: z.string().min(1),
-  strategy: z.string().min(1),
-  productFeatures: z.string().min(1),
+  uniqueBenefit: z.string().min(1),
+  mainMessage: z.string().min(1),
 })
 
 const GEMINI_GENERATE_URL =
@@ -49,7 +47,7 @@ export async function POST(request: Request) {
     console.log("[Brief Generate] Fetching room...")
     const { data: room, error: roomError } = await supabase
       .from(TABLES.gameRooms)
-      .select("id, product_category, brief_style, status")
+      .select("id, product_category, brief_style, wacky_brief_style, status")
       .eq("id", parsed.data.roomId)
       .maybeSingle()
 
@@ -74,7 +72,8 @@ export async function POST(request: Request) {
 
     const selectedCategory = room.product_category ?? "All"
     const briefStyle = (room.brief_style as BriefStyle) ?? "wacky"
-    console.log("[Brief Generate] Room found. Category:", selectedCategory, "Style:", briefStyle)
+    const wackyBriefStyle = (room.wacky_brief_style as WackyBriefStyle) ?? "absurd_constraints"
+    console.log("[Brief Generate] Room found. Category:", selectedCategory, "Style:", briefStyle, "Wacky style:", wackyBriefStyle)
 
     // If "All" is selected, randomly pick from specific categories
     const productCategory = selectedCategory === "All"
@@ -82,7 +81,7 @@ export async function POST(request: Request) {
       : selectedCategory
 
     console.log("[Brief Generate] Final category:", productCategory)
-    const prompt = getBriefPrompt(productCategory, briefStyle)
+    const prompt = getBriefPrompt(productCategory, briefStyle, wackyBriefStyle)
     console.log("[Brief Generate] Generated prompt length:", prompt.length)
 
     console.log("[Brief Generate] Calling Gemini API for text generation...")
@@ -127,7 +126,7 @@ export async function POST(request: Request) {
     console.log("[Brief Generate] Starting image generation...")
     let coverImageUrl: string | null = null
     try {
-      const imagePrompt = `Professional product photograph for ${parsedBrief.productName}, a ${parsedBrief.productCategory} product. ${parsedBrief.mainPoint}. ${parsedBrief.productFeatures}. High-quality marketing image, clean composition, modern aesthetic.`
+      const imagePrompt = `Professional product photograph for ${parsedBrief.productName}, a ${parsedBrief.productCategory} product. ${parsedBrief.productDescription}. ${parsedBrief.uniqueBenefit}. High-quality marketing image, clean composition, modern aesthetic.`
       coverImageUrl = await generateProductImage(imagePrompt, geminiKey)
       if (!coverImageUrl) {
         console.warn("[Brief Generate] Failed to generate cover image, continuing without image")
@@ -158,12 +157,10 @@ export async function POST(request: Request) {
         .update({
           product_name: parsedBrief.productName,
           product_category: parsedBrief.productCategory,
-          main_point: parsedBrief.mainPoint,
+          product_description: parsedBrief.productDescription,
           audience: parsedBrief.audience,
-          business_problem: parsedBrief.businessProblem,
-          objective: parsedBrief.objective,
-          strategy: parsedBrief.strategy,
-          product_features: parsedBrief.productFeatures,
+          unique_benefit: parsedBrief.uniqueBenefit,
+          main_message: parsedBrief.mainMessage,
           cover_image_url: coverImageUrl,
         })
         .eq("id", existing.id)
@@ -179,12 +176,10 @@ export async function POST(request: Request) {
         room_id: parsed.data.roomId,
         product_name: parsedBrief.productName,
         product_category: parsedBrief.productCategory,
-        main_point: parsedBrief.mainPoint,
+        product_description: parsedBrief.productDescription,
         audience: parsedBrief.audience,
-        business_problem: parsedBrief.businessProblem,
-        objective: parsedBrief.objective,
-        strategy: parsedBrief.strategy,
-        product_features: parsedBrief.productFeatures,
+        unique_benefit: parsedBrief.uniqueBenefit,
+        main_message: parsedBrief.mainMessage,
         cover_image_url: coverImageUrl,
       })
 

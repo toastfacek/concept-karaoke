@@ -4,7 +4,7 @@ import { z } from "zod"
 import { TABLES } from "@/lib/db"
 import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
-import { BRIEF_STYLES, PRODUCT_CATEGORIES } from "@/lib/types"
+import { BRIEF_STYLES, PRODUCT_CATEGORIES, WACKY_BRIEF_STYLES } from "@/lib/types"
 
 const settingsSchema = z.object({
   productCategory: z.enum(PRODUCT_CATEGORIES).optional(),
@@ -12,6 +12,7 @@ const settingsSchema = z.object({
     message: "Phase duration must be 30, 60, 90, or 120 seconds",
   }).optional(),
   briefStyle: z.enum(BRIEF_STYLES).optional(),
+  wackyBriefStyle: z.enum(WACKY_BRIEF_STYLES).optional(),
   playerId: z.string().uuid("Invalid player identifier"),
 })
 
@@ -27,10 +28,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ success: false, error: message }, { status: 400 })
     }
 
-    const { productCategory, phaseDurationSeconds, briefStyle, playerId } = parsed.data
+    const { productCategory, phaseDurationSeconds, briefStyle, wackyBriefStyle, playerId } = parsed.data
 
     // Validate at least one setting is being updated
-    if (!productCategory && !phaseDurationSeconds && !briefStyle) {
+    if (!productCategory && !phaseDurationSeconds && !briefStyle && !wackyBriefStyle) {
       return NextResponse.json({ success: false, error: "No settings to update" }, { status: 400 })
     }
 
@@ -86,13 +87,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (briefStyle) {
       updates.brief_style = briefStyle
     }
+    if (wackyBriefStyle) {
+      updates.wacky_brief_style = wackyBriefStyle
+    }
 
     // Update settings
     const { data: updatedRoom, error: updateError } = await supabase
       .from(TABLES.gameRooms)
       .update(updates)
       .eq("id", room.id)
-      .select("product_category, phase_duration_seconds, brief_style")
+      .select("product_category, phase_duration_seconds, brief_style, wacky_brief_style")
       .single()
 
     if (updateError) {
@@ -117,6 +121,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       roomCode: currentRoom?.code ?? roomCode,
       productCategory: updatedRoom.product_category ?? "All",
       phaseDurationSeconds: updatedRoom.phase_duration_seconds ?? 60,
+      briefStyle: updatedRoom.brief_style ?? "wacky",
+      wackyBriefStyle: updatedRoom.wacky_brief_style ?? "absurd_constraints",
       version: 0, // Version managed by WS server
     })
 
@@ -126,6 +132,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         productCategory: updatedRoom.product_category,
         phaseDurationSeconds: updatedRoom.phase_duration_seconds,
         briefStyle: updatedRoom.brief_style,
+        wackyBriefStyle: updatedRoom.wacky_brief_style,
       },
     })
   } catch (error) {

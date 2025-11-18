@@ -4,16 +4,17 @@ import { useState } from "react"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { PRODUCT_CATEGORIES, PHASE_DURATIONS, BRIEF_STYLES, type ProductCategory, type PhaseDuration, type BriefStyle } from "@/lib/types"
+import { PRODUCT_CATEGORIES, PHASE_DURATIONS, BRIEF_STYLES, WACKY_BRIEF_STYLES, type ProductCategory, type PhaseDuration, type BriefStyle, type WackyBriefStyle } from "@/lib/types"
 
 interface GameSettingsProps {
   productCategory: ProductCategory
   phaseDurationSeconds: PhaseDuration
   briefStyle: BriefStyle
+  wackyBriefStyle: WackyBriefStyle
   isHost: boolean
   roomCode: string
   playerId: string
-  onSettingsChange?: (settings: { productCategory: ProductCategory; phaseDurationSeconds: PhaseDuration; briefStyle: BriefStyle }) => void
+  onSettingsChange?: (settings: { productCategory: ProductCategory; phaseDurationSeconds: PhaseDuration; briefStyle: BriefStyle; wackyBriefStyle: WackyBriefStyle }) => void
 }
 
 const DURATION_LABELS: Record<PhaseDuration, string> = {
@@ -33,10 +34,25 @@ const BRIEF_STYLE_DESCRIPTIONS: Record<BriefStyle, string> = {
   realistic: "Professional, strategic campaigns",
 }
 
+const WACKY_STYLE_LABELS: Record<WackyBriefStyle, string> = {
+  absurd_constraints: "Absurd Constraints",
+  genre_mashups: "Genre Mashups",
+  unnecessary_solutions: "Unnecessary Solutions",
+  conflicting_elements: "Conflicting Elements",
+}
+
+const WACKY_STYLE_DESCRIPTIONS: Record<WackyBriefStyle, string> = {
+  absurd_constraints: "Wild limitations that make no sense",
+  genre_mashups: "Mix unexpected genres together",
+  unnecessary_solutions: "Solve problems that don't exist",
+  conflicting_elements: "Combine contradictory features",
+}
+
 export function GameSettings({
   productCategory,
   phaseDurationSeconds,
   briefStyle,
+  wackyBriefStyle,
   isHost,
   roomCode,
   playerId,
@@ -45,10 +61,11 @@ export function GameSettings({
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>(productCategory)
   const [selectedDuration, setSelectedDuration] = useState<PhaseDuration>(phaseDurationSeconds)
   const [selectedBriefStyle, setSelectedBriefStyle] = useState<BriefStyle>(briefStyle)
+  const [selectedWackyStyle, setSelectedWackyStyle] = useState<WackyBriefStyle>(wackyBriefStyle)
   const [isUpdating, setIsUpdating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const hasChanges = selectedCategory !== productCategory || selectedDuration !== phaseDurationSeconds || selectedBriefStyle !== briefStyle
+  const hasChanges = selectedCategory !== productCategory || selectedDuration !== phaseDurationSeconds || selectedBriefStyle !== briefStyle || selectedWackyStyle !== wackyBriefStyle
 
   const handleSave = async () => {
     if (!hasChanges) return
@@ -64,6 +81,7 @@ export function GameSettings({
           productCategory: selectedCategory,
           phaseDurationSeconds: selectedDuration,
           briefStyle: selectedBriefStyle,
+          wackyBriefStyle: selectedWackyStyle,
           playerId,
         }),
       })
@@ -78,6 +96,7 @@ export function GameSettings({
         productCategory: payload.settings.productCategory,
         phaseDurationSeconds: payload.settings.phaseDurationSeconds,
         briefStyle: payload.settings.briefStyle,
+        wackyBriefStyle: payload.settings.wackyBriefStyle,
       })
     } catch (err) {
       console.error(err)
@@ -86,6 +105,7 @@ export function GameSettings({
       setSelectedCategory(productCategory)
       setSelectedDuration(phaseDurationSeconds)
       setSelectedBriefStyle(briefStyle)
+      setSelectedWackyStyle(wackyBriefStyle)
     } finally {
       setIsUpdating(false)
     }
@@ -95,6 +115,7 @@ export function GameSettings({
     setSelectedCategory(productCategory)
     setSelectedDuration(phaseDurationSeconds)
     setSelectedBriefStyle(briefStyle)
+    setSelectedWackyStyle(wackyBriefStyle)
     setError(null)
   }
 
@@ -127,6 +148,30 @@ export function GameSettings({
               </Button>
             ))}
           </div>
+
+          {/* Wacky Sub-Style Selector */}
+          {selectedBriefStyle === "wacky" && (
+            <div className="mt-3 space-y-2">
+              <Label className="font-mono text-xs uppercase text-muted-foreground">
+                Wacky Style
+              </Label>
+              <div className="grid grid-cols-2 gap-2">
+                {WACKY_BRIEF_STYLES.map((style) => (
+                  <Button
+                    key={style}
+                    type="button"
+                    variant={selectedWackyStyle === style ? "secondary" : "ghost"}
+                    className="retro-border flex flex-col items-start h-auto py-2 text-left"
+                    onClick={() => setSelectedWackyStyle(style)}
+                    disabled={!isHost || isUpdating}
+                  >
+                    <span className="text-sm font-semibold">{WACKY_STYLE_LABELS[style]}</span>
+                    <span className="text-xs font-normal opacity-70">{WACKY_STYLE_DESCRIPTIONS[style]}</span>
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="space-y-2">

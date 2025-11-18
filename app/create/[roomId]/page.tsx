@@ -56,12 +56,10 @@ type CampaignBrief = {
   productName: string
   productCategory: string
   coverImageUrl?: string
-  mainPoint: string
+  productDescription: string
   audience: string
-  businessProblem: string
-  objective: string
-  strategy: string
-  productFeatures: string
+  uniqueBenefit: string
+  mainMessage: string
 }
 
 type GameState = SnapshotDrivenState<GamePlayer> & {
@@ -139,19 +137,11 @@ const IDEA_THEMES = [
 
 type IdeaTheme = (typeof IDEA_THEMES)[number]
 
-function hashToThemeIndex(value: string | null, length: number) {
-  if (!value) return 0
-  let hash = 0
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash << 5) - hash + value.charCodeAt(index)
-    hash |= 0
-  }
-  return Math.abs(hash) % length
-}
-
-function getIdeaTheme(adlobId: string | null): IdeaTheme {
-  const index = hashToThemeIndex(adlobId, IDEA_THEMES.length)
-  return IDEA_THEMES[index]
+function getIdeaTheme(adlobIndex: number): IdeaTheme {
+  // Use index-based assignment to guarantee unique colors for each concept
+  // (up to IDEA_THEMES.length concepts)
+  if (adlobIndex < 0) return IDEA_THEMES[0]
+  return IDEA_THEMES[adlobIndex % IDEA_THEMES.length]
 }
 
 function formatIdeaLabel(index: number) {
@@ -296,12 +286,10 @@ export default function CreatePage() {
                 productName: gameData.brief.productName,
                 productCategory: gameData.brief.productCategory,
                 coverImageUrl: gameData.brief.coverImageUrl,
-                mainPoint: gameData.brief.mainPoint,
+                productDescription: gameData.brief.productDescription,
                 audience: gameData.brief.audience,
-                businessProblem: gameData.brief.businessProblem,
-                objective: gameData.brief.objective,
-                strategy: gameData.brief.strategy,
-                productFeatures: gameData.brief.productFeatures,
+                uniqueBenefit: gameData.brief.uniqueBenefit,
+                mainMessage: gameData.brief.mainMessage,
               }
             : null,
         })
@@ -865,7 +853,7 @@ export default function CreatePage() {
     return phases
   }, [currentAdlob])
 
-  const ideaTheme = useMemo(() => getIdeaTheme(currentAdlob?.id ?? null), [currentAdlob?.id])
+  const ideaTheme = useMemo(() => getIdeaTheme(currentAdlobIndex), [currentAdlobIndex])
   const ideaLabel = useMemo(() => formatIdeaLabel(currentAdlobIndex), [currentAdlobIndex])
   const phaseChips = useMemo(
     () =>

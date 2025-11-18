@@ -8,12 +8,10 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 const briefSchema = z.object({
   productName: z.string().min(1, "Product name is required").max(100),
   productCategory: z.string().min(1, "Product category is required").max(100),
-  mainPoint: z.string().min(1, "Main point is required"),
+  productDescription: z.string().min(1, "Product description is required"),
   audience: z.string().min(1, "Audience is required"),
-  businessProblem: z.string().min(1, "Business problem is required"),
-  objective: z.string().min(1, "Objective is required"),
-  strategy: z.string().min(1, "Strategy is required"),
-  productFeatures: z.string().min(1, "Product features are required"),
+  uniqueBenefit: z.string().min(1, "Unique benefit is required"),
+  mainMessage: z.string().min(1, "Main message is required"),
   coverImageUrl: z.string().optional(),
   playerId: z.string().min(1, "Player ID is required"),
 })
@@ -62,16 +60,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       .update({
         product_name: parsed.data.productName,
         product_category: parsed.data.productCategory,
-        main_point: parsed.data.mainPoint,
+        product_description: parsed.data.productDescription,
         audience: parsed.data.audience,
-        business_problem: parsed.data.businessProblem,
-        objective: parsed.data.objective,
-        strategy: parsed.data.strategy,
-        product_features: parsed.data.productFeatures,
+        unique_benefit: parsed.data.uniqueBenefit,
+        main_message: parsed.data.mainMessage,
         cover_image_url: parsed.data.coverImageUrl ?? null,
       })
       .eq("id", id)
-      .select("id, room_id, product_name, product_category, main_point, audience, business_problem, objective, strategy, product_features, cover_image_url, updated_at")
+      .select("id, room_id, product_name, product_category, product_description, audience, unique_benefit, main_message, cover_image_url, updated_at")
       .maybeSingle()
 
     if (updateError) {
@@ -111,12 +107,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         roomId: brief.room_id,
         productName: brief.product_name,
         productCategory: brief.product_category,
-        mainPoint: brief.main_point,
+        productDescription: brief.product_description,
         audience: brief.audience,
-        businessProblem: brief.business_problem,
-        objective: brief.objective,
-        strategy: brief.strategy,
-        productFeatures: brief.product_features,
+        uniqueBenefit: brief.unique_benefit,
+        mainMessage: brief.main_message,
         coverImageUrl: brief.cover_image_url,
         updatedAt: brief.updated_at,
       },

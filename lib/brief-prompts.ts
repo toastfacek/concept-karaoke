@@ -1,101 +1,150 @@
-import type { BriefStyle } from "./types"
+import type { BriefStyle, WackyBriefStyle } from "./types"
 
-export function getBriefPrompt(category: string, style: BriefStyle): string {
+export function getBriefPrompt(
+  category: string,
+  style: BriefStyle,
+  wackyStyle?: WackyBriefStyle
+): string {
   if (style === "wacky") {
-    return getWackyPrompt(category)
+    return getWackyPrompt(category, wackyStyle || "absurd_constraints")
   }
   return getRealisticPrompt(category)
 }
 
-function getWackyPrompt(category: string): string {
+function getWackyPrompt(category: string, wackyStyle: WackyBriefStyle): string {
+  const styleInstructions = getWackyStyleInstructions(wackyStyle)
+
   return [
-    `Generate a creative advertising brief for a ridiculous fictional product in the "${category}" category.`,
+    `Generate a quick, funny advertising brief for a fictional product in the "${category}" category.`,
     "",
-    "Make it SPECIFIC and ABSURD. The product should have:",
-    "- A distinctive quirk, flaw, or overly-specific use case",
-    "- An unexpected combination of features or a bizarre selling point",
-    "- A business problem that's hilariously mismatched with the solution",
-    "- Enough weird detail to spark creative riffing",
+    "STYLE: " + styleInstructions.name,
+    styleInstructions.description,
     "",
-    "Respond with valid JSON matching this TypeScript interface:",
+    "CRITICAL: Keep everything SHORT and PUNCHY. The brief should take 30 seconds to read.",
+    "",
+    "Respond with valid JSON matching this structure:",
     "{",
     '  "productName": string,',
     '  "productCategory": string,',
-    '  "mainPoint": string,',
+    '  "productDescription": string,',
     '  "audience": string,',
-    '  "businessProblem": string,',
-    '  "objective": string,',
-    '  "strategy": string,',
-    '  "productFeatures": string',
+    '  "uniqueBenefit": string,',
+    '  "mainMessage": string',
     "}",
     "",
     `The productCategory field MUST be exactly: "${category}"`,
     "",
-    "Field requirements:",
-    "- mainPoint: A short, absurd phrase (4-8 words) describing the singular weird communication objective",
-    "- audience: 1-2 bullet points about the hilariously specific target demographic (use \\n between bullets)",
-    "- businessProblem: 1-3 bullet points about the ridiculous business challenge (use \\n between bullets)",
-    "- objective: The key absurd outcome the campaign should achieve",
-    "- strategy: How this bizarre creative campaign should achieve the objective",
-    "- productFeatures: Exactly 3 bullet points describing key absurd features (use \\n between bullets)",
+    "Field requirements (BE BRIEF!):",
+    "- productName: Realistic-sounding brand name (2-4 words) like 'Hearthco Mug' or 'Nimbus Chair'",
+    "- productDescription: ONE sentence, ~10 words max. What is it? Example: 'A self-warming travel mug'",
+    "- audience: ONE phrase, ~8 words max. Who's it for? Example: 'Young busy commuters and working professionals'",
+    "- uniqueBenefit: ONE sentence, ~12 words max. What makes it different? " + styleInstructions.benefitExample,
+    "- mainMessage: ONE phrase, ~6 words max. What should the ad say? " + styleInstructions.messageExample,
     "",
-    "Examples of the absurdity level to aim for:",
-    "- A luxury sleeping bag for business meetings",
-    "- Edible post-it notes that taste like the priority level",
-    "- A meditation app that only works while you're screaming",
+    styleInstructions.examples,
     "",
-    "Make it weird, specific, and memorable. Do not wrap the JSON in markdown fences or add extra text.",
+    "Make it weird and memorable, but keep it SHORT. Do not wrap the JSON in markdown fences.",
   ].join("\n")
+}
+
+function getWackyStyleInstructions(style: WackyBriefStyle): {
+  name: string
+  description: string
+  benefitExample: string
+  messageExample: string
+  examples: string
+} {
+  switch (style) {
+    case "absurd_constraints":
+      return {
+        name: "Absurd Constraints",
+        description: "Normal product with a bizarre limitation or overly-specific use case.",
+        benefitExample: "Example: 'Only works when you're slightly annoyed'",
+        messageExample: "Example: 'Frustration has its rewards'",
+        examples: [
+          "Examples of this style:",
+          "- A vacuum that only works during full moons",
+          "- Headphones that pause when you make eye contact",
+          "- A toaster that only toasts bread cut at exactly 45-degree angles",
+        ].join("\n"),
+      }
+    case "genre_mashups":
+      return {
+        name: "Genre Mashups",
+        description: "Apply an unexpected genre tone (film noir, romance novel, conspiracy theory) to a mundane product.",
+        benefitExample: "Example: 'Finally, a stapler that understands betrayal'",
+        messageExample: "Example: 'Trust no one. Staple everything.'",
+        examples: [
+          "Examples of this style:",
+          "- Film noir office supplies: 'The pen that's seen too much'",
+          "- Romance novel kitchen tools: 'The Spatula of Longing'",
+          "- Conspiracy theory toiletries: 'They don't want you to know about this soap'",
+        ].join("\n"),
+      }
+    case "unnecessary_solutions":
+      return {
+        name: "Unnecessary Solutions",
+        description: "Products that solve non-problems with excessive seriousness.",
+        benefitExample: "Example: 'Never waste the first 30 seconds of gum-chewing again'",
+        messageExample: "Example: 'Reclaim your jaw's potential'",
+        examples: [
+          "Examples of this style:",
+          "- Pre-moistened ice cubes for faster melting",
+          "- Doorbell that texts you when you're home",
+          "- Pants with built-in sitting detection",
+        ].join("\n"),
+      }
+    case "conflicting_elements":
+      return {
+        name: "Conflicting Elements",
+        description: "Create comedy through mismatch - serious product with absurd audience, or mundane product with dramatic message.",
+        benefitExample: "Example: 'The only welding mask endorsed by lifestyle influencers'",
+        messageExample: "Example: 'Paperclips: Because chaos is the alternative'",
+        examples: [
+          "Examples of this style:",
+          "- Industrial equipment for teenagers",
+          "- Luxury products for mundane tasks",
+          "- Epic dramatic messaging for boring items",
+        ].join("\n"),
+      }
+  }
 }
 
 function getRealisticPrompt(category: string): string {
   return [
-    `Generate a creative advertising brief for a realistic fictional product in the "${category}" category.`,
+    `Generate a quick advertising brief for a realistic product in the "${category}" category.`,
     "",
-    "Make it SPECIFIC and DIFFERENTIATED. The product should have:",
-    "- A concrete market gap or underserved customer need (not just 'better' or 'innovative')",
-    "- A distinctive positioning angle or unique value proposition",
-    "- Specific product features with measurable benefits or outcomes",
-    "- A well-defined target audience with specific demographics, behaviors, and pain points",
-    "- Clear business objectives tied to metrics (awareness, consideration, conversion, retention)",
-    "- Enough concrete detail to inspire distinctive creative campaigns",
+    "CRITICAL: Keep everything SHORT and PUNCHY. The brief should take 30 seconds to read.",
     "",
-    "VARY these elements to create diverse briefs:",
-    "- Price positioning (luxury, premium, mid-market, budget, value)",
-    "- Business model (subscription, one-time purchase, freemium, B2B, D2C)",
-    "- Innovation type (category disruption, incremental improvement, category creation)",
-    "- Primary customer pain point (time, money, convenience, status, safety, sustainability)",
-    "- Distribution channel (retail, direct-to-consumer, B2B, marketplace)",
+    "Make it SPECIFIC and DIFFERENTIATED:",
+    "- A concrete market gap or underserved need",
+    "- A distinctive positioning angle",
+    "- A realistic product name (like 'Hearthco Mug' not 'MegaSuper InnovatePro 3000')",
     "",
-    "Respond with valid JSON matching this TypeScript interface:",
+    "Respond with valid JSON matching this structure:",
     "{",
     '  "productName": string,',
     '  "productCategory": string,',
-    '  "mainPoint": string,',
+    '  "productDescription": string,',
     '  "audience": string,',
-    '  "businessProblem": string,',
-    '  "objective": string,',
-    '  "strategy": string,',
-    '  "productFeatures": string',
+    '  "uniqueBenefit": string,',
+    '  "mainMessage": string',
     "}",
     "",
     `The productCategory field MUST be exactly: "${category}"`,
     "",
-    "Field requirements:",
-    "- mainPoint: A short, punchy phrase (4-8 words) describing the singular key communication objective",
-    "- audience: 1-2 bullet points about who the target demographic is, including specific demographics, psychographics, and behaviors (use \\n between bullets)",
-    "- businessProblem: 1-3 bullet points about the specific market challenge this campaign should solve for the business (use \\n between bullets)",
-    "- objective: The key measurable outcome the campaign should achieve",
-    "- strategy: How this creative campaign should achieve the objective (1-2 sentences)",
-    "- productFeatures: Exactly 3 bullet points describing key features with concrete benefits (use \\n between bullets)",
+    "Field requirements (BE BRIEF!):",
+    "- productName: Realistic brand name (2-4 words). Examples: 'Hearthco Mug', 'Nimbus Chair', 'Verde Kitchen'",
+    "- productDescription: ONE sentence, ~10 words max. Example: 'A self-warming travel mug'",
+    "- audience: ONE phrase, ~8 words max. Example: 'Young busy commuters and working professionals'",
+    "- uniqueBenefit: ONE sentence, ~12 words max. Example: 'Bluetooth connects to phone for appointment reminders'",
+    "- mainMessage: ONE phrase, ~6 words max. Example: 'Never drink cold coffee again'",
     "",
-    "Examples of the specificity level to aim for:",
-    "- FlexDesk Pro: A modular standing desk system with built-in cable management and wireless charging, targeting remote workers in small apartments (under 600 sq ft) who struggle with dedicated workspace and need furniture that adapts throughout the day",
-    "- SnackLab: A personalized snack subscription using AI taste profiling, targeting health-conscious Gen Z consumers (18-24) with dietary restrictions who want discovery without the guilt of traditional snack boxes",
-    "- CareCircle: A family coordination app with medication reminders and appointment scheduling, targeting adult children (35-50) managing care for aging parents across different cities",
+    "Examples of good briefs:",
+    "- Hearthco Mug: Self-warming travel mug for busy commuters. Benefit: keeps drinks hot for 8 hours. Message: 'Your coffee, always ready'",
+    "- Nimbus Chair: Ergonomic desk chair for remote workers. Benefit: adapts to your posture automatically. Message: 'Sit better, work longer'",
+    "- Sprout Box: Weekly meal kit for busy parents. Benefit: kid-approved recipes ready in 15 minutes. Message: 'Dinner solved'",
     "",
-    "Make it believable, strategically grounded, and specific enough to inspire creative advertising concepts.",
-    "Avoid generic products - each brief should feel distinct and memorable.",
-    "Do not wrap the JSON in markdown fences or add extra text.",
+    "Make it believable and specific. Do not wrap the JSON in markdown fences.",
   ].join("\n")
 }
