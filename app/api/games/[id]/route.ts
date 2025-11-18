@@ -74,7 +74,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     if (includeBrief) {
       selectParts.push(
-        "brief:campaign_briefs(id, product_name, product_category, main_point, audience, business_problem, objective, strategy, product_features, cover_image_url, updated_at)",
+        "brief:campaign_briefs(id, product_name, product_category, product_description, audience, unique_benefit, main_message, cover_image_url, updated_at)",
       )
     }
 
