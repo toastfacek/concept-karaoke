@@ -709,26 +709,43 @@ export default function CreatePage() {
   // The validation was firing false positives because it captured stale lockedAdlobId values
   // Real validation happens in the locking effect above where we log the assignment
 
-  // Use locked adlob reference to prevent mid-phase swapping
+  // Calculate assigned adlob synchronously to avoid timing issues with effects
+  // This ensures we always use the correct adlob based on current phase, not stale locked state
   const currentAdlob = useMemo(() => {
-    if (!lockedAdlobId || !game?.adlobs) return null
-    const found = game.adlobs.find((adlob) => adlob.id === lockedAdlobId)
-
-    if (!found) {
-      console.error("[create] ⚠️  Locked adlob not found in game.adlobs!", {
-        lockedAdlobId,
-        availableAdlobs: game.adlobs.map(a => a.id),
-      })
-    } else {
-      console.log("[create] Using locked adlob", {
-        lockedAdlobId,
-        phase: game?.currentPhase,
-        phaseIndex,
-      })
+    if (!game?.adlobs || game.adlobs.length === 0 || !currentPlayer || phaseIndex === -1) {
+      return null
     }
 
-    return found ?? null
-  }, [lockedAdlobId, game?.adlobs, game?.currentPhase, phaseIndex])
+    // Calculate assignment synchronously using the rotation formula
+    const sortedPlayers = [...game.players].sort((a, b) => a.seatIndex - b.seatIndex)
+    const playerIdx = sortedPlayers.findIndex((player) => player.id === currentPlayer.id)
+
+    if (playerIdx === -1) {
+      console.error("[create] Player not found in sorted players list for currentAdlob calculation")
+      return null
+    }
+
+    const sortedAdlobs = [...game.adlobs].sort((a, b) => {
+      const timeA = new Date(a.createdAt).getTime()
+      const timeB = new Date(b.createdAt).getTime()
+      if (timeA !== timeB) return timeA - timeB
+      return a.id.localeCompare(b.id)
+    })
+
+    const targetIndex = (playerIdx + phaseIndex) % sortedAdlobs.length
+    const assignedAdlob = sortedAdlobs[targetIndex]
+
+    console.log("[create] Using assigned adlob", {
+      adlobId: assignedAdlob?.id,
+      phase: game?.currentPhase,
+      phaseIndex,
+      playerIdx,
+      targetIndex,
+      formula: `(${playerIdx} + ${phaseIndex}) % ${sortedAdlobs.length} = ${targetIndex}`,
+    })
+
+    return assignedAdlob ?? null
+  }, [game?.adlobs, game?.players, game?.currentPhase, currentPlayer, phaseIndex])
 
   const visualCanvasData = useMemo(() => {
     const parsed = parseCanvasData(currentAdlob?.visualCanvasData)
