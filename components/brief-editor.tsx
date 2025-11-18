@@ -18,7 +18,7 @@ interface BriefEditorProps {
   showReveal?: boolean
 }
 
-type EditableField = "productName" | "mainPoint" | "audience" | "businessProblem" | "objective" | "strategy" | "productFeatures"
+type EditableField = "productName" | "productDescription" | "audience" | "uniqueBenefit" | "mainMessage"
 
 export function BriefEditor({
   initialBrief,
@@ -32,12 +32,10 @@ export function BriefEditor({
   const [brief, setBrief] = useState<CampaignBrief>({
     productName: "",
     productCategory: "",
-    mainPoint: "",
+    productDescription: "",
     audience: "",
-    businessProblem: "",
-    objective: "",
-    strategy: "",
-    productFeatures: "",
+    uniqueBenefit: "",
+    mainMessage: "",
   })
   const [editingField, setEditingField] = useState<EditableField | null>(null)
   const [editValue, setEditValue] = useState("")
@@ -69,20 +67,11 @@ export function BriefEditor({
     }
   }
 
-  const parseBullets = (text: string): string[] => {
-    if (!text) return []
-    return text
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0)
-  }
-
   const renderField = (
     field: EditableField,
     label: string,
     value: string,
     multiline: boolean = false,
-    showBullets: boolean = false,
   ) => {
     const isEditing = editingField === field
 
@@ -109,7 +98,7 @@ export function BriefEditor({
               <Textarea
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
-                rows={3}
+                rows={2}
                 className="font-mono"
                 autoFocus
               />
@@ -130,12 +119,6 @@ export function BriefEditor({
               </Button>
             </div>
           </div>
-        ) : showBullets && value ? (
-          <ul className="list-disc space-y-1 pl-5 text-sm leading-relaxed">
-            {parseBullets(value).map((bullet, idx) => (
-              <li key={idx}>{bullet}</li>
-            ))}
-          </ul>
         ) : (
           <p className="text-sm leading-relaxed">
             {value || <span className="text-muted-foreground">Not set</span>}
@@ -185,7 +168,7 @@ export function BriefEditor({
           )}
         </div>
 
-        {/* Right Column - Product Name, Category, Main Point, Audience */}
+        {/* Right Column - Product Name, Category, Description, Audience */}
         <div className="space-y-4">
           {/* Product Name - Large heading */}
           <div className="space-y-2">
@@ -246,20 +229,18 @@ export function BriefEditor({
             </p>
           </div>
 
-          {/* The Main Point */}
-          {renderField("mainPoint", "The Main Point", brief.mainPoint, false, false)}
+          {/* Product Description */}
+          {renderField("productDescription", "What Is It", brief.productDescription, false)}
 
           {/* Audience */}
-          {renderField("audience", "Audience", brief.audience, true, true)}
+          {renderField("audience", "Who Is It For", brief.audience, false)}
         </div>
       </div>
 
-      {/* Bottom Grid - Business Problem, Objective, Strategy, Product Features */}
+      {/* Bottom Row - Unique Benefit and Main Message */}
       <div className="grid gap-6 md:grid-cols-2">
-        {renderField("businessProblem", "Business Problem", brief.businessProblem, true, true)}
-        {renderField("objective", "Objective", brief.objective, true, false)}
-        {renderField("strategy", "Strategy", brief.strategy, true, false)}
-        {renderField("productFeatures", "Product Features", brief.productFeatures, true, true)}
+        {renderField("uniqueBenefit", "Unique Benefit", brief.uniqueBenefit, true)}
+        {renderField("mainMessage", "Main Message", brief.mainMessage, false)}
       </div>
 
       {!isLocked && onLock && (

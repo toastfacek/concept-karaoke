@@ -43,16 +43,22 @@ export type PhaseDuration = (typeof PHASE_DURATIONS)[number]
 export const BRIEF_STYLES = ["wacky", "realistic"] as const
 export type BriefStyle = (typeof BRIEF_STYLES)[number]
 
+export const WACKY_BRIEF_STYLES = [
+  "absurd_constraints",
+  "genre_mashups",
+  "unnecessary_solutions",
+  "conflicting_elements",
+] as const
+export type WackyBriefStyle = (typeof WACKY_BRIEF_STYLES)[number]
+
 export interface CampaignBrief {
-  productName: string
-  productCategory: string
-  coverImageUrl?: string
-  mainPoint: string
-  audience: string
-  businessProblem: string
-  objective: string
-  strategy: string
-  productFeatures: string
+  productName: string // 2-4 words
+  productCategory: string // From game settings
+  coverImageUrl?: string // AI-generated product image
+  productDescription: string // 1 sentence, ~10 words
+  audience: string // 1 phrase, ~8 words
+  uniqueBenefit: string // 1 sentence, ~12 words
+  mainMessage: string // 1 phrase, ~6 words
 }
 
 export interface AdLob {
@@ -95,4 +101,5 @@ export interface GameRoom {
   productCategory: string
   phaseDurationSeconds: number
   briefStyle: BriefStyle
+  wackyBriefStyle: WackyBriefStyle
 }

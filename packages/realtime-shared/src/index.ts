@@ -121,6 +121,8 @@ export type ServerToClientEvent =
       roomCode: string
       productCategory: string
       phaseDurationSeconds: number
+      briefStyle: string
+      wackyBriefStyle: string
       version: number
     }
   | {

@@ -14,12 +14,10 @@ type RawBrief = {
   id: string
   product_name: string | null
   product_category: string | null
-  main_point: string | null
+  product_description: string | null
   audience: string | null
-  business_problem: string | null
-  objective: string | null
-  strategy: string | null
-  product_features: string | null
+  unique_benefit: string | null
+  main_message: string | null
   cover_image_url: string | null
   updated_at: string | null
 }
@@ -55,6 +53,7 @@ type RawGameRow = {
   product_category: string | null
   phase_duration_seconds: number | null
   brief_style: string | null
+  wacky_brief_style: string | null
   version?: number | null
   players?: RawPlayer[] | null
   brief?: RawBrief[] | null
@@ -81,12 +80,10 @@ function serializeBrief(row?: RawBrief | null) {
     id: row.id,
     productName: row.product_name ?? "",
     productCategory: row.product_category ?? "All",
-    mainPoint: row.main_point ?? "",
+    productDescription: row.product_description ?? "",
     audience: row.audience ?? "",
-    businessProblem: row.business_problem ?? "",
-    objective: row.objective ?? "",
-    strategy: row.strategy ?? "",
-    productFeatures: row.product_features ?? "",
+    uniqueBenefit: row.unique_benefit ?? "",
+    mainMessage: row.main_message ?? "",
     coverImageUrl: row.cover_image_url ?? undefined,
     updatedAt: row.updated_at ?? null,
   }
@@ -129,6 +126,7 @@ export function serializeGameRow(row: RawGameRow) {
     productCategory: row.product_category ?? "All",
     phaseDurationSeconds: row.phase_duration_seconds ?? 60,
     briefStyle: row.brief_style ?? "wacky",
+    wackyBriefStyle: row.wacky_brief_style ?? "absurd_constraints",
     players,
     adlobs: (row.adlobs ?? []).map(serializeAdlob),
     brief: serializeBrief(briefCandidates[0]),

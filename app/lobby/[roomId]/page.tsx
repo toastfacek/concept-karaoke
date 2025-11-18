@@ -14,7 +14,7 @@ import { routes } from "@/lib/routes"
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import { mergeSnapshotIntoState, stateToSnapshot, type SnapshotDrivenState } from "@/lib/realtime/snapshot"
 import type { RealtimeStatus } from "@/lib/realtime-client"
-import type { BriefStyle, ProductCategory, PhaseDuration } from "@/lib/types"
+import type { BriefStyle, ProductCategory, PhaseDuration, WackyBriefStyle } from "@/lib/types"
 
 type LobbyPlayer = {
   id: string
@@ -30,6 +30,7 @@ type LobbyState = SnapshotDrivenState<LobbyPlayer> & {
   productCategory: string
   phaseDurationSeconds: number
   briefStyle: string
+  wackyBriefStyle: string
 }
 
 export default function LobbyPage() {
@@ -128,6 +129,7 @@ export default function LobbyPage() {
             productCategory: payload.game.productCategory ?? "All",
             phaseDurationSeconds: payload.game.phaseDurationSeconds ?? 60,
             briefStyle: payload.game.briefStyle ?? "wacky",
+            wackyBriefStyle: payload.game.wackyBriefStyle ?? "absurd_constraints",
           })
 
           const localPlayer = loadPlayer(roomCode)
@@ -351,7 +353,7 @@ export default function LobbyPage() {
     }
   }
 
-  const handleSettingsChange = (settings: { productCategory: string; phaseDurationSeconds: number; briefStyle: string }) => {
+  const handleSettingsChange = (settings: { productCategory: string; phaseDurationSeconds: number; briefStyle: string; wackyBriefStyle: string }) => {
     setLobby((previous) =>
       previous
         ? {
@@ -359,6 +361,7 @@ export default function LobbyPage() {
             productCategory: settings.productCategory,
             phaseDurationSeconds: settings.phaseDurationSeconds,
             briefStyle: settings.briefStyle,
+            wackyBriefStyle: settings.wackyBriefStyle,
           }
         : previous,
     )
@@ -486,11 +489,13 @@ export default function LobbyPage() {
 
       const unsubscribeSettingsChanged = addListener(
         "settings_changed",
-        ({ productCategory, phaseDurationSeconds, version }) => {
+        ({ productCategory, phaseDurationSeconds, briefStyle, wackyBriefStyle, version }) => {
           console.log("[lobby realtime] settings_changed", {
             roomCode,
             productCategory,
             phaseDurationSeconds,
+            briefStyle,
+            wackyBriefStyle,
             version,
           })
           setLobby((previous) =>
@@ -500,6 +505,8 @@ export default function LobbyPage() {
                   version,
                   productCategory,
                   phaseDurationSeconds,
+                  briefStyle,
+                  wackyBriefStyle,
                 }
               : previous,
           )
@@ -579,6 +586,7 @@ export default function LobbyPage() {
                 productCategory={lobby.productCategory as ProductCategory}
                 phaseDurationSeconds={lobby.phaseDurationSeconds as PhaseDuration}
                 briefStyle={lobby.briefStyle as BriefStyle}
+                wackyBriefStyle={lobby.wackyBriefStyle as WackyBriefStyle}
                 isHost={isHost}
                 roomCode={roomCode}
                 playerId={currentPlayer.id}
