@@ -1,64 +1,12 @@
-import type { BriefStyle, WackyBriefStyle } from "./types"
+"use client"
 
-export function getBriefPrompt(
-  category: string,
-  style: BriefStyle,
-  wackyStyle?: WackyBriefStyle
-): string {
-  if (style === "wacky") {
-    return getWackyPrompt(category, wackyStyle || "absurd_constraints")
-  }
-  return getRealisticPrompt(category)
-}
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { PRODUCT_CATEGORIES, WACKY_BRIEF_STYLES, type WackyBriefStyle } from "@/lib/types"
 
-function getWackyPrompt(category: string, wackyStyle: WackyBriefStyle): string {
-  const styleInstructions = getWackyStyleInstructions(wackyStyle)
-
-  return [
-    `Generate a quick, funny advertising brief for a fictional product in the "${category}" category.`,
-    "",
-    "STYLE: " + styleInstructions.name,
-    styleInstructions.description,
-    "",
-    "CRITICAL: Keep everything SHORT and PUNCHY. The brief should take 30 seconds to read.",
-    "",
-    "Respond with valid JSON matching this structure:",
-    "{",
-    '  "productName": string,',
-    '  "productCategory": string,',
-    '  "productDescription": string,',
-    '  "audience": string,',
-    '  "uniqueBenefit": string,',
-    '  "mainMessage": string',
-    "}",
-    "",
-    `The productCategory field MUST be exactly: "${category}"`,
-    "",
-    "Field requirements (BE BRIEF!):",
-    "- productName: Realistic-sounding brand name (2-4 words) like 'Hearthco Mug' or 'Nimbus Chair' - NO PUNS",
-    "- productDescription: ONE sentence, ~10 words max. What is it? Must be a FAMILIAR product form.",
-    "- audience: ONE phrase, ~8 words max. Who's it for?",
-    "- uniqueBenefit: ONE sentence, ~12 words max. " + styleInstructions.benefitGuidance,
-    "- mainMessage: ONE phrase, ~6 words max. " + styleInstructions.messageGuidance,
-    "",
-    styleInstructions.examples,
-    "",
-    "WHY IT'S FUNNY:",
-    styleInstructions.whyFunny,
-    "",
-    "TONE: Deadpan corporate. Never wink at the joke. Treat the absurdity as completely normal.",
-    "Make it weird and memorable, but keep it SHORT. Do not wrap the JSON in markdown fences.",
-  ].join("\n")
-}
-
-function getWackyStyleInstructions(style: WackyBriefStyle): {
-  name: string
-  description: string
-  benefitGuidance: string
-  messageGuidance: string
-  whyFunny: string
-  examples: string
-} {
+// Inline prompt generation (no DB schema)
+function getWackyStyleInstructions(style: WackyBriefStyle) {
   switch (style) {
     case "absurd_constraints":
       return {
@@ -123,16 +71,16 @@ function getWackyStyleInstructions(style: WackyBriefStyle): {
   }
 }
 
-function getRealisticPrompt(category: string): string {
+function generatePrompt(category: string, wackyStyle: WackyBriefStyle): string {
+  const styleInstructions = getWackyStyleInstructions(wackyStyle)
+
   return [
-    `Generate a quick advertising brief for a realistic product in the "${category}" category.`,
+    `Generate a quick, funny advertising brief for a fictional product in the "${category}" category.`,
+    "",
+    "STYLE: " + styleInstructions.name,
+    styleInstructions.description,
     "",
     "CRITICAL: Keep everything SHORT and PUNCHY. The brief should take 30 seconds to read.",
-    "",
-    "Make it SPECIFIC and DIFFERENTIATED:",
-    "- A concrete market gap or underserved need",
-    "- A distinctive positioning angle",
-    "- A realistic product name (like 'Hearthco Mug' not 'MegaSuper InnovatePro 3000')",
     "",
     "Respond with valid JSON matching this structure:",
     "{",
@@ -147,17 +95,115 @@ function getRealisticPrompt(category: string): string {
     `The productCategory field MUST be exactly: "${category}"`,
     "",
     "Field requirements (BE BRIEF!):",
-    "- productName: Realistic brand name (2-4 words). Examples: 'Hearthco Mug', 'Nimbus Chair', 'Verde Kitchen'",
-    "- productDescription: ONE sentence, ~10 words max. Example: 'A self-warming travel mug'",
-    "- audience: ONE phrase, ~8 words max. Example: 'Young busy commuters and working professionals'",
-    "- uniqueBenefit: ONE sentence, ~12 words max. Example: 'Bluetooth connects to phone for appointment reminders'",
-    "- mainMessage: ONE phrase, ~6 words max. Example: 'Never drink cold coffee again'",
+    "- productName: Realistic-sounding brand name (2-4 words) like 'Hearthco Mug' or 'Nimbus Chair' - NO PUNS",
+    "- productDescription: ONE sentence, ~10 words max. What is it? Must be a FAMILIAR product form.",
+    "- audience: ONE phrase, ~8 words max. Who's it for?",
+    "- uniqueBenefit: ONE sentence, ~12 words max. " + styleInstructions.benefitGuidance,
+    "- mainMessage: ONE phrase, ~6 words max. " + styleInstructions.messageGuidance,
     "",
-    "Examples of good briefs:",
-    "- Hearthco Mug: Self-warming travel mug for busy commuters. Benefit: keeps drinks hot for 8 hours. Message: 'Your coffee, always ready'",
-    "- Nimbus Chair: Ergonomic desk chair for remote workers. Benefit: adapts to your posture automatically. Message: 'Sit better, work longer'",
-    "- Sprout Box: Weekly meal kit for busy parents. Benefit: kid-approved recipes ready in 15 minutes. Message: 'Dinner solved'",
+    styleInstructions.examples,
     "",
-    "Make it believable and specific. Do not wrap the JSON in markdown fences.",
+    "WHY IT'S FUNNY:",
+    styleInstructions.whyFunny,
+    "",
+    "TONE: Deadpan corporate. Never wink at the joke. Treat the absurdity as completely normal.",
+    "Make it weird and memorable, but keep it SHORT. Do not wrap the JSON in markdown fences.",
   ].join("\n")
+}
+
+export default function TestPromptsPage() {
+  const [category, setCategory] = useState("Consumer Electronics")
+  const [expandedStyle, setExpandedStyle] = useState<WackyBriefStyle | null>(null)
+
+  const styleLabels: Record<WackyBriefStyle, string> = {
+    absurd_constraints: "Absurd Constraints",
+    genre_mashups: "Genre Mashups",
+    unnecessary_solutions: "Unnecessary Solutions",
+    conflicting_elements: "Conflicting Elements",
+  }
+
+  const styleDescriptions: Record<WackyBriefStyle, string> = {
+    absurd_constraints: "Normal product with one impossible requirement",
+    genre_mashups: "Two incompatible categories fused together",
+    unnecessary_solutions: "Over-engineered fix for a non-problem",
+    conflicting_elements: "Product with self-defeating feature",
+  }
+
+  return (
+    <div className="min-h-screen bg-background p-8">
+      <div className="max-w-6xl mx-auto space-y-6">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold">Prompt Test Page</h1>
+          <p className="text-muted-foreground">
+            View all 4 wacky brief prompts side-by-side
+          </p>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <label className="font-mono text-sm uppercase">Category:</label>
+          <Select value={category} onValueChange={setCategory}>
+            <SelectTrigger className="w-64">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PRODUCT_CATEGORIES.filter(c => c !== "All").map((cat) => (
+                <SelectItem key={cat} value={cat}>
+                  {cat}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {WACKY_BRIEF_STYLES.map((style) => {
+            const prompt = generatePrompt(category, style)
+            const isExpanded = expandedStyle === style
+
+            return (
+              <div
+                key={style}
+                className="border rounded-lg p-4 space-y-3 bg-card"
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold">{styleLabels[style]}</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {styleDescriptions[style]}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setExpandedStyle(isExpanded ? null : style)}
+                  >
+                    {isExpanded ? "Collapse" : "Expand"}
+                  </Button>
+                </div>
+
+                <div
+                  className={`font-mono text-xs bg-muted p-3 rounded overflow-auto ${
+                    isExpanded ? "max-h-none" : "max-h-64"
+                  }`}
+                >
+                  <pre className="whitespace-pre-wrap">{prompt}</pre>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{prompt.length} characters</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigator.clipboard.writeText(prompt)}
+                  >
+                    Copy
+                  </Button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
 }

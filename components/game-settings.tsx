@@ -30,7 +30,7 @@ const BRIEF_STYLE_LABELS: Record<BriefStyle, string> = {
 }
 
 const BRIEF_STYLE_DESCRIPTIONS: Record<BriefStyle, string> = {
-  wacky: "Absurd, specific, and hilarious products",
+  wacky: "Absurd, hilarious product concepts",
   realistic: "Professional, strategic campaigns",
 }
 
@@ -42,10 +42,10 @@ const WACKY_STYLE_LABELS: Record<WackyBriefStyle, string> = {
 }
 
 const WACKY_STYLE_DESCRIPTIONS: Record<WackyBriefStyle, string> = {
-  absurd_constraints: "Wild limitations that make no sense",
-  genre_mashups: "Mix unexpected genres together",
-  unnecessary_solutions: "Solve problems that don't exist",
-  conflicting_elements: "Combine contradictory features",
+  absurd_constraints: "Normal product with one impossible requirement",
+  genre_mashups: "Two incompatible categories fused together",
+  unnecessary_solutions: "Over-engineered fix for a non-problem",
+  conflicting_elements: "Product with self-defeating feature",
 }
 
 export function GameSettings({

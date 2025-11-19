@@ -105,14 +105,14 @@ export default function BriefPage() {
           const payload = await response.json()
 
           if (!response.ok || !payload.success) {
-          setError(payload.error ?? "Unable to load briefing room.")
-          setGame(null)
-          setShowLoadingModal(false)
-          return
-        }
+            setError(payload.error ?? "Unable to load briefing room.")
+            setGame(null)
+            setShowLoadingModal(false)
+            return
+          }
 
-        const briefResponse = payload.game.brief
-          ? {
+          const briefResponse = payload.game.brief
+            ? {
               id: payload.game.brief.id,
               productName: payload.game.brief.productName,
               productCategory: payload.game.brief.productCategory,
@@ -122,81 +122,81 @@ export default function BriefPage() {
               uniqueBenefit: payload.game.brief.uniqueBenefit,
               mainMessage: payload.game.brief.mainMessage,
             }
-          : null
+            : null
 
-        const gameData = payload.game
-        const newVersion = typeof gameData.version === "number" ? gameData.version : 0
+          const gameData = payload.game
+          const newVersion = typeof gameData.version === "number" ? gameData.version : 0
 
-        // Ignore stale responses (version guard)
-        if (newVersion < lastFetchVersionRef.current) {
-          console.warn("[brief] Ignoring stale response", {
-            received: newVersion,
-            current: lastFetchVersionRef.current,
-          })
-          return
-        }
-
-        lastFetchVersionRef.current = newVersion
-
-        const players: GamePlayer[] = (gameData.players ?? []).map(
-          (player: Partial<GamePlayer> & { joined_at?: string; seat_index?: number }) => ({
-            id: player.id ?? "",
-            name: player.name ?? "",
-            emoji: player.emoji ?? "",
-            isReady: Boolean(player.isReady),
-            isHost: Boolean(player.isHost),
-            joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
-            seatIndex:
-              typeof player.seatIndex === "number"
-                ? player.seatIndex
-                : typeof player.seat_index === "number"
-                  ? player.seat_index
-                  : 0,
-          }),
-        )
-
-        setGame({
-          id: payload.game.id,
-          code: payload.game.code,
-          status: payload.game.status,
-          hostId: payload.game.hostId,
-          players,
-          brief: briefResponse,
-          version: typeof payload.game.version === "number" ? payload.game.version : 0,
-        })
-
-        setBriefDraft(briefResponse ?? EMPTY_BRIEF)
-
-        // Handle loading modal and reveal animation
-        const shouldShowReveal = briefResponse && briefResponse.productName
-        if (shouldShowReveal) {
-          setTimeout(() => {
-            setShowLoadingModal(false)
-            setTimeout(() => {
-              setShowBriefReveal(true)
-            }, 200)
-          }, 1500) // Keep modal visible for a minimum time for better UX
-        }
-        // If no brief content yet, keep modal visible (don't hide it)
-
-        if (initialLoadRef.current) {
-          initialLoadRef.current = false
-        }
-
-        const localPlayer = loadPlayer(roomCode)
-        if (localPlayer) {
-          const latest = payload.game.players.find((player: GamePlayer) => player.id === localPlayer.id)
-          if (latest) {
-            const synced: StoredPlayer = {
-              id: latest.id,
-              name: latest.name,
-              emoji: latest.emoji,
-              isHost: latest.isHost,
-            }
-            savePlayer(roomCode, synced)
-            setStoredPlayer(synced)
+          // Ignore stale responses (version guard)
+          if (newVersion < lastFetchVersionRef.current) {
+            console.warn("[brief] Ignoring stale response", {
+              received: newVersion,
+              current: lastFetchVersionRef.current,
+            })
+            return
           }
-        }
+
+          lastFetchVersionRef.current = newVersion
+
+          const players: GamePlayer[] = (gameData.players ?? []).map(
+            (player: Partial<GamePlayer> & { joined_at?: string; seat_index?: number }) => ({
+              id: player.id ?? "",
+              name: player.name ?? "",
+              emoji: player.emoji ?? "",
+              isReady: Boolean(player.isReady),
+              isHost: Boolean(player.isHost),
+              joinedAt: player.joinedAt ?? player.joined_at ?? new Date().toISOString(),
+              seatIndex:
+                typeof player.seatIndex === "number"
+                  ? player.seatIndex
+                  : typeof player.seat_index === "number"
+                    ? player.seat_index
+                    : 0,
+            }),
+          )
+
+          setGame({
+            id: payload.game.id,
+            code: payload.game.code,
+            status: payload.game.status,
+            hostId: payload.game.hostId,
+            players,
+            brief: briefResponse,
+            version: typeof payload.game.version === "number" ? payload.game.version : 0,
+          })
+
+          setBriefDraft(briefResponse ?? EMPTY_BRIEF)
+
+          // Handle loading modal and reveal animation
+          const shouldShowReveal = briefResponse && briefResponse.productName
+          if (shouldShowReveal) {
+            setTimeout(() => {
+              setShowLoadingModal(false)
+              setTimeout(() => {
+                setShowBriefReveal(true)
+              }, 200)
+            }, 1500) // Keep modal visible for a minimum time for better UX
+          }
+          // If no brief content yet, keep modal visible (don't hide it)
+
+          if (initialLoadRef.current) {
+            initialLoadRef.current = false
+          }
+
+          const localPlayer = loadPlayer(roomCode)
+          if (localPlayer) {
+            const latest = payload.game.players.find((player: GamePlayer) => player.id === localPlayer.id)
+            if (latest) {
+              const synced: StoredPlayer = {
+                id: latest.id,
+                name: latest.name,
+                emoji: latest.emoji,
+                isHost: latest.isHost,
+              }
+              savePlayer(roomCode, synced)
+              setStoredPlayer(synced)
+            }
+          }
         } catch (fetchError) {
           console.error(fetchError)
           setError("Unable to load briefing room.")
@@ -300,9 +300,9 @@ export default function BriefPage() {
       setGame((previous) =>
         previous
           ? {
-              ...previous,
-              brief: updatedBrief,
-            }
+            ...previous,
+            brief: updatedBrief,
+          }
           : previous,
       )
       setBriefDraft(updatedBrief)
@@ -340,11 +340,11 @@ export default function BriefPage() {
       setGame((previous) =>
         previous
           ? {
-              ...previous,
-              players: previous.players.map((player) =>
-                player.id === currentPlayer.id ? { ...player, isReady: true } : player,
-              ),
-            }
+            ...previous,
+            players: previous.players.map((player) =>
+              player.id === currentPlayer.id ? { ...player, isReady: true } : player,
+            ),
+          }
           : previous,
       )
     } catch (lockError) {
@@ -365,11 +365,11 @@ export default function BriefPage() {
     setGame((previous) =>
       previous
         ? {
-            ...previous,
-            players: previous.players.map((player) =>
-              player.id === currentPlayer.id ? { ...player, isReady: desiredReady } : player,
-            ),
-          }
+          ...previous,
+          players: previous.players.map((player) =>
+            player.id === currentPlayer.id ? { ...player, isReady: desiredReady } : player,
+          ),
+        }
         : previous,
     )
 
@@ -402,11 +402,11 @@ export default function BriefPage() {
       setGame((previous) =>
         previous
           ? {
-              ...previous,
-              players: previous.players.map((player) =>
-                player.id === currentPlayer.id ? { ...player, isReady: !desiredReady } : player,
-              ),
-            }
+            ...previous,
+            players: previous.players.map((player) =>
+              player.id === currentPlayer.id ? { ...player, isReady: !desiredReady } : player,
+            ),
+          }
           : previous,
       )
     } finally {
@@ -497,9 +497,9 @@ export default function BriefPage() {
         setGame((previous) =>
           previous
             ? {
-                ...previous,
-                status: nextStatus,
-              }
+              ...previous,
+              status: nextStatus,
+            }
             : previous,
         )
 
@@ -566,12 +566,12 @@ export default function BriefPage() {
         setGame((previous) =>
           previous
             ? {
-                ...previous,
-                version,
-                players: previous.players.map((player) =>
-                  player.id === readyPlayerId ? { ...player, isReady } : player,
-                ),
-              }
+              ...previous,
+              version,
+              players: previous.players.map((player) =>
+                player.id === readyPlayerId ? { ...player, isReady } : player,
+              ),
+            }
             : previous,
         )
       })
@@ -582,29 +582,29 @@ export default function BriefPage() {
           const existing = previous.players.find((candidate) => candidate.id === player.id)
           const players = existing
             ? previous.players.map((candidate) =>
-                candidate.id === player.id
-                  ? {
-                      ...candidate,
-                      name: player.name,
-                      emoji: player.emoji,
-                      isReady: player.isReady,
-                      isHost: player.isHost,
-                      seatIndex: player.seatIndex,
-                    }
-                  : candidate,
-              )
-            : [
-                ...previous.players,
-                {
-                  id: player.id,
+              candidate.id === player.id
+                ? {
+                  ...candidate,
                   name: player.name,
                   emoji: player.emoji,
                   isReady: player.isReady,
                   isHost: player.isHost,
-                  joinedAt: new Date().toISOString(),
                   seatIndex: player.seatIndex,
-                },
-              ]
+                }
+                : candidate,
+            )
+            : [
+              ...previous.players,
+              {
+                id: player.id,
+                name: player.name,
+                emoji: player.emoji,
+                isReady: player.isReady,
+                isHost: player.isHost,
+                joinedAt: new Date().toISOString(),
+                seatIndex: player.seatIndex,
+              },
+            ]
           const hostId = players.find((candidate) => candidate.isHost)?.id ?? previous.hostId
           return {
             ...previous,
@@ -619,12 +619,12 @@ export default function BriefPage() {
         setGame((previous) =>
           previous
             ? {
-                ...previous,
-                version,
-                players: previous.players.map((player) =>
-                  player.id === leftPlayerId ? { ...player, isReady: false } : player,
-                ),
-              }
+              ...previous,
+              version,
+              players: previous.players.map((player) =>
+                player.id === leftPlayerId ? { ...player, isReady: false } : player,
+              ),
+            }
             : previous,
         )
       })
@@ -633,10 +633,10 @@ export default function BriefPage() {
         setGame((previous) =>
           previous
             ? {
-                ...previous,
-                status,
-                version,
-              }
+              ...previous,
+              status,
+              version,
+            }
             : previous,
         )
       })
@@ -645,9 +645,9 @@ export default function BriefPage() {
         setGame((previous) =>
           previous
             ? {
-                ...previous,
-                version,
-              }
+              ...previous,
+              version,
+            }
             : previous,
         )
       })
