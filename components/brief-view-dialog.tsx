@@ -38,17 +38,49 @@ export function BriefViewDialog({ brief, isOpen, onOpenChange }: BriefViewDialog
     })
   }
 
-  // Parse brief content into paragraphs
+  // Parse brief content into sections with bullets
   const renderBriefContent = (content: string) => {
     if (!content) return null
 
-    const paragraphs = content.split("\n\n").filter(p => p.trim())
+    // Split into sections by double newlines
+    const sections = content.split("\n\n").filter(s => s.trim())
 
-    return paragraphs.map((paragraph, i) => (
-      <p key={i} className="text-sm leading-relaxed">
-        {renderMarkdownBold(paragraph)}
-      </p>
-    ))
+    return sections.map((section, sectionIndex) => {
+      const lines = section.split("\n").filter(l => l.trim())
+
+      // First line is usually the bold header
+      const header = lines[0]
+      const bulletLines = lines.slice(1)
+
+      // Check if this section has bullets (lines starting with "- ")
+      const hasBullets = bulletLines.some(line => line.trim().startsWith("- "))
+
+      if (hasBullets) {
+        // Render as header + bullet list
+        return (
+          <div key={sectionIndex} className="space-y-2">
+            <div className="text-sm leading-relaxed">
+              {renderMarkdownBold(header)}
+            </div>
+            <ul className="list-disc list-inside space-y-1 text-sm leading-relaxed">
+              {bulletLines.map((line, lineIndex) => {
+                const bulletText = line.trim().replace(/^- /, "")
+                return bulletText ? (
+                  <li key={lineIndex}>{bulletText}</li>
+                ) : null
+              })}
+            </ul>
+          </div>
+        )
+      } else {
+        // Render as plain paragraph (fallback for old format)
+        return (
+          <p key={sectionIndex} className="text-sm leading-relaxed">
+            {renderMarkdownBold(section)}
+          </p>
+        )
+      }
+    })
   }
 
   return (

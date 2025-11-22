@@ -46,17 +46,23 @@ export const samplePlayers: Player[] = [
 export const sampleBrief: CampaignBrief = {
   productName: "Hearthco Mug",
   productCategory: "Consumer Electronics",
-  briefContent: `**What Is It**
-Hearthco Mug is a self-warming travel mug designed for busy professionals. It keeps your beverage at the perfect temperature for up to 8 hours without needing a power source.
+  briefContent: `**Main Message**
+- Never drink cold coffee again
+- Your morning routine, perfected
+
+**What Is It**
+- Self-warming travel mug for busy professionals
+- Keeps beverages at perfect temperature for 8 hours
+- No power source needed
 
 **Who It's For**
-Young commuters and working professionals who are always on the go and hate drinking cold coffee.
+- Young commuters always on the go
+- Working professionals who hate cold coffee
 
 **The Difference**
-Unlike standard travel mugs, Hearthco connects to your phone via Bluetooth to send appointment reminders when you pick it up. Smart technology meets your morning routine.
-
-**Main Message**
-Never drink cold coffee again. Your morning routine, perfected.`,
+- Connects to phone via Bluetooth
+- Sends appointment reminders when you pick it up
+- Smart technology meets morning routine`,
 }
 
 export const sampleAdLobs: AdLob[] = [
