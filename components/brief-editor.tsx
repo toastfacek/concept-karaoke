@@ -57,20 +57,20 @@ export function BriefEditor({
 
       // First line is usually the bold header
       const header = lines[0]
-      const bulletLines = lines.slice(1)
+      const contentLines = lines.slice(1)
 
       // Check if this section has bullets (lines starting with "- ")
-      const hasBullets = bulletLines.some(line => line.trim().startsWith("- "))
+      const hasBullets = contentLines.some(line => line.trim().startsWith("- "))
 
       if (hasBullets) {
         // Render as header + bullet list
         return (
           <div key={sectionIndex} className="space-y-2">
-            <div className="text-sm leading-relaxed">
+            <div className="text-sm font-semibold leading-relaxed">
               {renderMarkdownBold(header)}
             </div>
             <ul className="list-disc list-inside space-y-1 text-sm leading-relaxed">
-              {bulletLines.map((line, lineIndex) => {
+              {contentLines.map((line, lineIndex) => {
                 const bulletText = line.trim().replace(/^- /, "")
                 return bulletText ? (
                   <li key={lineIndex}>{bulletText}</li>
@@ -79,8 +79,22 @@ export function BriefEditor({
             </ul>
           </div>
         )
+      } else if (contentLines.length > 0) {
+        // Render as header + content text (for Main Message single phrase)
+        return (
+          <div key={sectionIndex} className="space-y-2">
+            <div className="text-sm font-semibold leading-relaxed">
+              {renderMarkdownBold(header)}
+            </div>
+            <div className="text-sm leading-relaxed">
+              {contentLines.map((line, idx) => (
+                <span key={idx}>{line}</span>
+              ))}
+            </div>
+          </div>
+        )
       } else {
-        // Render as plain paragraph (fallback for old format)
+        // Single line (header only) - render as paragraph
         return (
           <p key={sectionIndex} className="text-sm leading-relaxed">
             {renderMarkdownBold(section)}
