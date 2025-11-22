@@ -497,11 +497,29 @@ export default function ResultsPage() {
         </div>
 
         <div className="flex justify-center gap-4">
-          <Button variant="outline" onClick={() => router.push(routes.lobby(roomCode))} size="lg">
-            Back to Lobby
+          <Button
+            variant="outline"
+            onClick={async () => {
+              try {
+                const response = await fetch("/api/games/create", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ playerId: player?.playerId, playerName: player?.name, playerEmoji: player?.emoji }),
+                })
+                const data = await response.json()
+                if (data.success && data.room?.code) {
+                  router.push(routes.lobby(data.room.code))
+                }
+              } catch (error) {
+                console.error("Failed to create new game:", error)
+              }
+            }}
+            size="lg"
+          >
+            New Game
           </Button>
-          <Button onClick={() => router.push(routes.create(roomCode))} size="lg">
-            Play Again
+          <Button onClick={() => router.push(routes.home)} size="lg">
+            Home
           </Button>
         </div>
       </div>
