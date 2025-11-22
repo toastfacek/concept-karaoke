@@ -56,10 +56,7 @@ type CampaignBrief = {
   productName: string
   productCategory: string
   coverImageUrl?: string
-  productDescription: string
-  audience: string
-  uniqueBenefit: string
-  mainMessage: string
+  briefContent: string
 }
 
 type GameState = SnapshotDrivenState<GamePlayer> & {
@@ -286,10 +283,7 @@ export default function CreatePage() {
                 productName: gameData.brief.productName,
                 productCategory: gameData.brief.productCategory,
                 coverImageUrl: gameData.brief.coverImageUrl,
-                productDescription: gameData.brief.productDescription,
-                audience: gameData.brief.audience,
-                uniqueBenefit: gameData.brief.uniqueBenefit,
-                mainMessage: gameData.brief.mainMessage,
+                briefContent: gameData.brief.briefContent,
               }
             : null,
         })

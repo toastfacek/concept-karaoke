@@ -23,10 +23,7 @@ const requestSchema = z.object({
 const briefSchema = z.object({
   productName: z.string().min(1),
   productCategory: z.string().min(1),
-  productDescription: z.string().min(1),
-  audience: z.string().min(1),
-  uniqueBenefit: z.string().min(1),
-  mainMessage: z.string().min(1),
+  briefContent: z.string().min(1),
 })
 
 const GEMINI_GENERATE_URL =
@@ -216,10 +213,17 @@ export async function POST(request: Request) {
       generatedBrief = {
         productName: "Untitled Product",
         productCategory: room.product_category ?? "All",
-        productDescription: "A product that needs a description",
-        audience: "General audience",
-        uniqueBenefit: "Delivers a surprising benefit",
-        mainMessage: "Try it today",
+        briefContent: `**What Is It**
+A product that needs a description.
+
+**Who It's For**
+General audience looking for quality solutions.
+
+**The Difference**
+Delivers a surprising benefit that sets it apart.
+
+**Main Message**
+Try it today and experience the difference.`,
       }
     }
 
@@ -227,7 +231,7 @@ export async function POST(request: Request) {
     let coverImageUrl: string | null = null
     try {
       const geminiKey = env.server.GEMINI_API_KEY ?? requireServerEnv("GEMINI_API_KEY")
-      const imagePrompt = `Professional product photograph for ${generatedBrief.productName}, a ${generatedBrief.productCategory} product. ${generatedBrief.productDescription}. ${generatedBrief.uniqueBenefit}. High-quality marketing image, clean composition, modern aesthetic.`
+      const imagePrompt = `Professional product photograph for ${generatedBrief.productName}, a ${generatedBrief.productCategory} product. ${generatedBrief.briefContent}. High-quality marketing image, clean composition, modern aesthetic.`
       coverImageUrl = await generateProductImage(imagePrompt, geminiKey)
       if (!coverImageUrl) {
         console.warn("[Game Start] Failed to generate cover image, continuing without image")
@@ -255,10 +259,7 @@ export async function POST(request: Request) {
         .update({
           product_name: generatedBrief.productName,
           product_category: generatedBrief.productCategory,
-          product_description: generatedBrief.productDescription,
-          audience: generatedBrief.audience,
-          unique_benefit: generatedBrief.uniqueBenefit,
-          main_message: generatedBrief.mainMessage,
+          brief_content: generatedBrief.briefContent,
           cover_image_url: coverImageUrl,
         })
         .eq("id", existingBrief.id)
@@ -275,10 +276,7 @@ export async function POST(request: Request) {
           room_id: room.id,
           product_name: generatedBrief.productName,
           product_category: generatedBrief.productCategory,
-          product_description: generatedBrief.productDescription,
-          audience: generatedBrief.audience,
-          unique_benefit: generatedBrief.uniqueBenefit,
-          main_message: generatedBrief.mainMessage,
+          brief_content: generatedBrief.briefContent,
           cover_image_url: coverImageUrl,
         })
         .select("id")

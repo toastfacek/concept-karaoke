@@ -1,44 +1,28 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Pencil } from "lucide-react"
 
 import { Button } from "./ui/button"
-import { Input } from "./ui/input"
-import { Textarea } from "./ui/textarea"
 import type { CampaignBrief } from "@/lib/types"
 
 interface BriefEditorProps {
   initialBrief?: CampaignBrief
-  onChange?: (brief: CampaignBrief) => void
-  onLock?: (brief: CampaignBrief) => void
   onRegenerate?: () => void
-  isLocked?: boolean
-  isLocking?: boolean
+  isRegenerating?: boolean
   showReveal?: boolean
 }
 
-type EditableField = "productName" | "productDescription" | "audience" | "uniqueBenefit" | "mainMessage"
-
 export function BriefEditor({
   initialBrief,
-  onChange,
-  onLock,
   onRegenerate,
-  isLocked = false,
-  isLocking = false,
+  isRegenerating = false,
   showReveal = false,
 }: BriefEditorProps) {
   const [brief, setBrief] = useState<CampaignBrief>({
     productName: "",
     productCategory: "",
-    productDescription: "",
-    audience: "",
-    uniqueBenefit: "",
-    mainMessage: "",
+    briefContent: "",
   })
-  const [editingField, setEditingField] = useState<EditableField | null>(null)
-  const [editValue, setEditValue] = useState("")
 
   useEffect(() => {
     if (initialBrief) {
@@ -46,108 +30,58 @@ export function BriefEditor({
     }
   }, [initialBrief])
 
-  const startEditing = (field: EditableField) => {
-    if (isLocked) return
-    setEditingField(field)
-    setEditValue(brief[field] ?? "")
+  // Helper function to render markdown bold text
+  const renderMarkdownBold = (text: string) => {
+    const parts = text.split(/(\*\*.*?\*\*)/)
+    return parts.map((part, i) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return (
+          <strong key={i} className="font-bold text-foreground">
+            {part.slice(2, -2)}
+          </strong>
+        )
+      }
+      return <span key={i}>{part}</span>
+    })
   }
 
-  const cancelEditing = () => {
-    setEditingField(null)
-    setEditValue("")
-  }
+  // Parse brief content into paragraphs
+  const renderBriefContent = (content: string) => {
+    if (!content) return null
 
-  const saveField = () => {
-    if (editingField) {
-      const updated = { ...brief, [editingField]: editValue }
-      setBrief(updated)
-      onChange?.(updated)
-      setEditingField(null)
-      setEditValue("")
-    }
-  }
+    const paragraphs = content.split("\n\n").filter(p => p.trim())
 
-  const renderField = (
-    field: EditableField,
-    label: string,
-    value: string,
-    multiline: boolean = false,
-  ) => {
-    const isEditing = editingField === field
-
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h3 className="font-mono text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</h3>
-          {!isLocked && !isEditing && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => startEditing(field)}
-              className="gap-2"
-            >
-              <Pencil className="size-4" />
-              Edit
-            </Button>
-          )}
-        </div>
-        {isEditing ? (
-          <div className="space-y-2">
-            {multiline ? (
-              <Textarea
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                rows={2}
-                className="font-mono"
-                autoFocus
-              />
-            ) : (
-              <Input
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                className="font-mono"
-                autoFocus
-              />
-            )}
-            <div className="flex gap-2">
-              <Button type="button" size="sm" onClick={saveField}>
-                Save
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={cancelEditing}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm leading-relaxed">
-            {value || <span className="text-muted-foreground">Not set</span>}
-          </p>
-        )}
-      </div>
-    )
+    return paragraphs.map((paragraph, i) => (
+      <p key={i} className="text-sm leading-relaxed">
+        {renderMarkdownBold(paragraph)}
+      </p>
+    ))
   }
 
   return (
     <div
-      className={`retro-border space-y-6 bg-card p-8 transition-all duration-700 ${showReveal
+      className={`retro-border space-y-6 bg-card p-8 transition-all duration-700 ${
+        showReveal
           ? "animate-in fade-in slide-in-from-bottom-4 zoom-in-95"
           : ""
-        }`}
+      }`}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-3xl font-bold text-purple-600 dark:text-purple-400">
           {brief.productName || "Campaign Brief"}
         </h2>
-        {!isLocked && (
-          <Button type="button" variant="outline" onClick={onRegenerate}>
-            Regenerate Brief
-          </Button>
-        )}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onRegenerate}
+          disabled={isRegenerating}
+        >
+          {isRegenerating ? "Regenerating..." : "Regenerate Brief"}
+        </Button>
       </div>
 
-      {/* Two-column layout: Image on left, Product info on right */}
-      <div className="grid gap-6 md:grid-cols-[1fr,1fr]">
+      {/* Two-column layout: Image on left, Content on right */}
+      <div className="grid gap-6 md:grid-cols-[1fr,2fr]">
         {/* Left Column - Product Image */}
         <div>
           {brief.coverImageUrl ? (
@@ -165,61 +99,9 @@ export function BriefEditor({
               </span>
             </div>
           )}
-        </div>
 
-        {/* Right Column - Product Name, Category, Description, Audience */}
-        <div className="space-y-4">
-          {/* Product Name - Large heading */}
-          <div className="space-y-2">
-            {editingField === "productName" ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-mono text-xs font-bold uppercase text-muted-foreground">
-                    Product Name
-                  </h3>
-                </div>
-                <Input
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  className="text-2xl font-bold"
-                  autoFocus
-                />
-                <div className="flex gap-2">
-                  <Button type="button" size="sm" onClick={saveField}>
-                    Save
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={cancelEditing}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <h3 className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                    {brief.productName || (
-                      <span className="text-muted-foreground">&lt;Product Name&gt;</span>
-                    )}
-                  </h3>
-                  {!isLocked && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => startEditing("productName")}
-                      className="gap-2"
-                    >
-                      <Pencil className="size-4" />
-                      Edit
-                    </Button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Product Category - Read-only */}
-          <div className="space-y-1">
+          {/* Product Category below image */}
+          <div className="mt-4 space-y-1">
             <h3 className="font-mono text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               Product Category
             </h3>
@@ -227,34 +109,19 @@ export function BriefEditor({
               {brief.productCategory || <span className="text-muted-foreground">Not set</span>}
             </p>
           </div>
+        </div>
 
-          {/* Product Description */}
-          {renderField("productDescription", "What Is It", brief.productDescription, false)}
-
-          {/* Audience */}
-          {renderField("audience", "Who Is It For", brief.audience, false)}
+        {/* Right Column - Brief Content */}
+        <div className="space-y-4">
+          {brief.briefContent ? (
+            renderBriefContent(brief.briefContent)
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No brief content yet. Click "Regenerate Brief" to generate one.
+            </p>
+          )}
         </div>
       </div>
-
-      {/* Bottom Row - Unique Benefit and Main Message */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {renderField("uniqueBenefit", "Unique Benefit", brief.uniqueBenefit, true)}
-        {renderField("mainMessage", "Main Message", brief.mainMessage, false)}
-      </div>
-
-      {!isLocked && onLock && (
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Button
-            type="button"
-            className="w-full sm:w-auto"
-            size="lg"
-            onClick={() => onLock(brief)}
-            disabled={isLocking}
-          >
-            {isLocking ? "Locking..." : "Lock Brief"}
-          </Button>
-        </div>
-      )}
     </div>
   )
 }

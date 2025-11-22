@@ -23,19 +23,44 @@ export function BriefViewDialog({ brief, isOpen, onOpenChange }: BriefViewDialog
     )
   }
 
+  // Helper function to render markdown bold text
+  const renderMarkdownBold = (text: string) => {
+    const parts = text.split(/(\*\*.*?\*\*)/)
+    return parts.map((part, i) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return (
+          <strong key={i} className="font-bold text-foreground">
+            {part.slice(2, -2)}
+          </strong>
+        )
+      }
+      return <span key={i}>{part}</span>
+    })
+  }
+
+  // Parse brief content into paragraphs
+  const renderBriefContent = (content: string) => {
+    if (!content) return null
+
+    const paragraphs = content.split("\n\n").filter(p => p.trim())
+
+    return paragraphs.map((paragraph, i) => (
+      <p key={i} className="text-sm leading-relaxed">
+        {renderMarkdownBold(paragraph)}
+      </p>
+    ))
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[80vh] max-w-3xl overflow-y-auto">
-        <DialogTitle className="text-lg font-bold">Campaign Brief</DialogTitle>
+        <DialogTitle className="text-lg font-bold">{brief.productName}</DialogTitle>
 
         <div className="space-y-6">
-          {/* Two-column layout: Image on left, Product info on right */}
-          <div className="grid gap-6 md:grid-cols-[1fr,1fr]">
+          {/* Two-column layout: Image on left, Content on right */}
+          <div className="grid gap-6 md:grid-cols-[1fr,2fr]">
             {/* Left Column - Product Image */}
-            <div className="space-y-2">
-              <h4 className="font-mono text-xs font-bold uppercase text-muted-foreground">
-                Product Image
-              </h4>
+            <div>
               {brief.coverImageUrl ? (
                 <div className="overflow-hidden rounded border-2 border-border">
                   <img
@@ -51,59 +76,25 @@ export function BriefViewDialog({ brief, isOpen, onOpenChange }: BriefViewDialog
                   </span>
                 </div>
               )}
-            </div>
 
-            {/* Right Column - Product Name, Category, Description, Audience */}
-            <div className="space-y-4">
-              {/* Product Name */}
-              <div>
-                <h3 className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                  {brief.productName}
-                </h3>
-              </div>
-
-              {/* Product Category */}
-              <div className="space-y-1">
+              {/* Product Category below image */}
+              <div className="mt-4 space-y-1">
                 <h4 className="font-mono text-xs font-bold uppercase text-muted-foreground">
                   Product Category
                 </h4>
                 <p className="text-sm leading-relaxed">{brief.productCategory}</p>
               </div>
-
-              {/* What Is It */}
-              <div className="space-y-2">
-                <h4 className="font-mono text-xs font-bold uppercase text-muted-foreground">
-                  What Is It
-                </h4>
-                <p className="text-sm leading-relaxed">{brief.productDescription}</p>
-              </div>
-
-              {/* Who Is It For */}
-              <div className="space-y-2">
-                <h4 className="font-mono text-xs font-bold uppercase text-muted-foreground">
-                  Who Is It For
-                </h4>
-                <p className="text-sm leading-relaxed">{brief.audience}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Row - Unique Benefit and Main Message */}
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* Unique Benefit */}
-            <div className="space-y-2">
-              <h4 className="font-mono text-xs font-bold uppercase text-muted-foreground">
-                Unique Benefit
-              </h4>
-              <p className="text-sm leading-relaxed">{brief.uniqueBenefit}</p>
             </div>
 
-            {/* Main Message */}
-            <div className="space-y-2">
-              <h4 className="font-mono text-xs font-bold uppercase text-muted-foreground">
-                Main Message
-              </h4>
-              <p className="text-sm font-medium leading-relaxed">{brief.mainMessage}</p>
+            {/* Right Column - Brief Content */}
+            <div className="space-y-4">
+              {brief.briefContent ? (
+                renderBriefContent(brief.briefContent)
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No brief content available.
+                </p>
+              )}
             </div>
           </div>
         </div>

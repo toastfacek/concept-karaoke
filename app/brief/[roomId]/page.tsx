@@ -19,10 +19,7 @@ type CampaignBrief = {
   productName: string
   productCategory: string
   coverImageUrl?: string
-  productDescription: string
-  audience: string
-  uniqueBenefit: string
-  mainMessage: string
+  briefContent: string
 }
 
 type BriefRecord = CampaignBrief & {
@@ -42,10 +39,7 @@ type GamePlayer = {
 const EMPTY_BRIEF: CampaignBrief = {
   productName: "",
   productCategory: "",
-  productDescription: "",
-  audience: "",
-  uniqueBenefit: "",
-  mainMessage: "",
+  briefContent: "",
   coverImageUrl: undefined,
 }
 
@@ -62,10 +56,8 @@ export default function BriefPage() {
 
   const [storedPlayer, setStoredPlayer] = useState<StoredPlayer | null>(null)
   const [game, setGame] = useState<BriefGameState | null>(null)
-  const [briefDraft, setBriefDraft] = useState<CampaignBrief>(EMPTY_BRIEF)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isLockingBrief, setIsLockingBrief] = useState(false)
   const [isUpdatingReady, setIsUpdatingReady] = useState(false)
   const [isAdvancing, setIsAdvancing] = useState(false)
   const [showLoadingModal, setShowLoadingModal] = useState(false)
@@ -117,10 +109,7 @@ export default function BriefPage() {
               productName: payload.game.brief.productName,
               productCategory: payload.game.brief.productCategory,
               coverImageUrl: payload.game.brief.coverImageUrl,
-              productDescription: payload.game.brief.productDescription,
-              audience: payload.game.brief.audience,
-              uniqueBenefit: payload.game.brief.uniqueBenefit,
-              mainMessage: payload.game.brief.mainMessage,
+              briefContent: payload.game.brief.briefContent,
             }
             : null
 
@@ -164,8 +153,6 @@ export default function BriefPage() {
             brief: briefResponse,
             version: typeof payload.game.version === "number" ? payload.game.version : 0,
           })
-
-          setBriefDraft(briefResponse ?? EMPTY_BRIEF)
 
           // Handle loading modal and reveal animation
           const shouldShowReveal = briefResponse && briefResponse.productName
@@ -255,105 +242,6 @@ export default function BriefPage() {
       }))
   }, [game?.players, currentPlayer?.id])
 
-  const persistBrief = useCallback(
-    async (draft: CampaignBrief) => {
-      if (!game?.brief) {
-        throw new Error("Brief not ready yet.")
-      }
-
-      if (!currentPlayer) {
-        throw new Error("Player not found")
-      }
-
-      const response = await fetch(`/api/briefs/${game.brief.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productName: draft.productName,
-          productCategory: draft.productCategory,
-          productDescription: draft.productDescription,
-          audience: draft.audience,
-          uniqueBenefit: draft.uniqueBenefit,
-          mainMessage: draft.mainMessage,
-          coverImageUrl: draft.coverImageUrl,
-          playerId: currentPlayer.id,
-        }),
-      })
-
-      const payload = await response.json()
-
-      if (!response.ok || !payload.success) {
-        throw new Error(payload.error ?? "Failed to save brief")
-      }
-
-      const updatedBrief: BriefRecord = {
-        id: payload.brief.id,
-        productName: payload.brief.productName,
-        productCategory: payload.brief.productCategory,
-        coverImageUrl: payload.brief.coverImageUrl,
-        productDescription: payload.brief.productDescription,
-        audience: payload.brief.audience,
-        uniqueBenefit: payload.brief.uniqueBenefit,
-        mainMessage: payload.brief.mainMessage,
-      }
-
-      setGame((previous) =>
-        previous
-          ? {
-            ...previous,
-            brief: updatedBrief,
-          }
-          : previous,
-      )
-      setBriefDraft(updatedBrief)
-
-      return updatedBrief
-    },
-    [game, currentPlayer],
-  )
-
-  const handleLockBrief = async (draft: CampaignBrief) => {
-    if (!currentPlayer) return
-
-    setIsLockingBrief(true)
-    setError(null)
-    try {
-      await persistBrief(draft)
-
-      const response = await fetch(`/api/games/${roomCode}/players/${currentPlayer.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isReady: true }),
-      })
-      const payload = await response.json()
-      if (!response.ok || !payload.success) {
-        throw new Error(payload.error ?? "Failed to lock brief")
-      }
-
-      sendRealtime({
-        type: "set_ready",
-        roomCode,
-        playerId: currentPlayer.id,
-        isReady: true,
-      })
-
-      setGame((previous) =>
-        previous
-          ? {
-            ...previous,
-            players: previous.players.map((player) =>
-              player.id === currentPlayer.id ? { ...player, isReady: true } : player,
-            ),
-          }
-          : previous,
-      )
-    } catch (lockError) {
-      console.error(lockError)
-      setError(lockError instanceof Error ? lockError.message : "Failed to lock brief.")
-    } finally {
-      setIsLockingBrief(false)
-    }
-  }
 
   const handleToggleReady = async () => {
     if (!currentPlayer) return
@@ -430,17 +318,6 @@ export default function BriefPage() {
         throw new Error(payload.error ?? "Failed to generate brief")
       }
 
-      const generated: CampaignBrief = {
-        productName: payload.brief.productName,
-        productCategory: payload.brief.productCategory,
-        coverImageUrl: payload.brief.coverImageUrl,
-        productDescription: payload.brief.productDescription,
-        audience: payload.brief.audience,
-        uniqueBenefit: payload.brief.uniqueBenefit,
-        mainMessage: payload.brief.mainMessage,
-      }
-
-      setBriefDraft(generated)
       await fetchGame({ silent: true })
     } catch (generateError) {
       console.error(generateError)
@@ -455,25 +332,6 @@ export default function BriefPage() {
     setError(null)
 
     try {
-      // Auto-save any unsaved brief changes before advancing
-      if (game.brief) {
-        const hasUnsavedChanges =
-          briefDraft.productName !== game.brief.productName ||
-          briefDraft.productDescription !== game.brief.productDescription ||
-          briefDraft.audience !== game.brief.audience ||
-          briefDraft.uniqueBenefit !== game.brief.uniqueBenefit ||
-          briefDraft.mainMessage !== game.brief.mainMessage
-
-        if (hasUnsavedChanges) {
-          try {
-            await persistBrief(briefDraft)
-          } catch (saveError) {
-            console.error("Failed to auto-save brief before advancing", saveError)
-            throw new Error("Failed to save brief changes. Please try again.")
-          }
-        }
-      }
-
       const response = await fetch(`/api/games/${roomCode}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -727,12 +585,9 @@ export default function BriefPage() {
           {/* Left Column - Brief Editor & Actions */}
           <div className="flex-1 space-y-6">
             <BriefEditor
-              initialBrief={briefDraft}
-              onChange={setBriefDraft}
-              onLock={currentPlayer?.isHost ? handleLockBrief : undefined}
+              initialBrief={game?.brief ?? undefined}
               onRegenerate={handleRegenerate}
-              isLocked={!isBriefing || loading}
-              isLocking={isLockingBrief}
+              isRegenerating={loading}
               showReveal={showBriefReveal}
             />
 

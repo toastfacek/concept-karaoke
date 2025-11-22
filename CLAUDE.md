@@ -132,16 +132,11 @@ Core types in [lib/types.ts](lib/types.ts):
 
 - **GameRoom** - Game instance with status, phase timing, settings
 - **Player** - User in a game with name, emoji, ready state
-- **CampaignBrief** - AI-generated product brief with 9 fields:
-  - `productName` - Product name
+- **CampaignBrief** - AI-generated product brief with prose format:
+  - `productName` - Product name (2-4 words)
   - `productCategory` - Product category (from game settings)
-  - `coverImageUrl` - Optional product image URL
-  - `mainPoint` - The main campaign message (4-8 words)
-  - `audience` - Target audience (1-2 bullet points, newline-separated)
-  - `businessProblem` - Business problem (1-3 bullet points, newline-separated)
-  - `objective` - Campaign objective (single paragraph)
-  - `strategy` - Campaign strategy (1-2 sentences)
-  - `productFeatures` - Key product features (exactly 3 bullet points, newline-separated)
+  - `coverImageUrl` - Optional AI-generated product image URL
+  - `briefContent` - Prose campaign brief (80-120 words) with markdown bold subheadings: **What Is It**, **Who It's For**, **The Difference**, **Main Message**
 - **AdLob** - A campaign with 4 phases: `bigIdea`, `visual`, `headline`, `pitch`
 
 Database table constants in [lib/db.ts](lib/db.ts): `game_rooms`, `players`, `campaign_briefs`, `adlobs`, `votes`
@@ -279,27 +274,30 @@ Cassette Futurism + Classic Ogilvy Advertising aesthetic:
 
 The campaign brief is displayed using two specialized components with a consistent layout:
 
-**[components/brief-editor.tsx](components/brief-editor.tsx)** - Editable brief interface used during briefing stage:
-- **Two-column layout**: Product image (left) with hatched placeholder pattern when no image; Product name, category, main point, and audience (right)
-- **Bottom grid**: Business Problem, Objective, Strategy, and Product Features in 2x2 responsive grid
-- **Bullet parsing**: Newline-separated text (`\n`) automatically renders as proper `<ul>` lists for: Audience, Business Problem, Product Features
+**[components/brief-editor.tsx](components/brief-editor.tsx)** - Brief display used during briefing stage:
+- **Two-column layout**: Product image (left, 1fr) with hatched placeholder pattern when no image; Brief prose content (right, 2fr)
+- **Product Category**: Displayed below image (read-only, set from game settings)
+- **Markdown rendering**: Parses `**bold**` syntax to render subheadings
+- **Paragraph parsing**: Splits on `\n\n` to create proper paragraph spacing
 - **Typography hierarchy**:
-  - Product Name: Large purple heading (text-2xl, purple-600)
-  - Section headings: Monospace uppercase labels (font-mono text-xs)
-  - Body text: Readable size with proper spacing (text-sm)
-- **Edit functionality**: Inline editing with pencil icons, preserves all edits until "Lock Brief"
-- **Product Category**: Read-only field (set from game settings)
+  - Product Name: Large purple heading (text-3xl, purple-600) at top
+  - Bold subheadings: Rendered from markdown `**text**` syntax
+  - Body text: Readable size with proper spacing (text-sm leading-relaxed)
+- **No edit functionality**: Briefs can only be regenerated, not manually edited
+- **Regenerate button**: Allows host to generate a new brief via AI
 
 **[components/brief-view-dialog.tsx](components/brief-view-dialog.tsx)** - Read-only brief modal used during creation/presentation:
 - **Same layout structure** as BriefEditor for consistency
-- **No edit controls**: Clean, distraction-free view
-- **Bullet rendering**: Same newline parsing for bulleted fields
+- **Same markdown rendering**: Parses bold subheadings and paragraphs
+- **Modal format**: Dialog overlay with scrollable content
 
 **Key design decisions**:
-1. **Newline-separated bullets**: Brief generation creates bullet points separated by `\n`. Components split on newlines and render as `<li>` elements.
-2. **Image placeholder**: Diagonal stripe pattern using CSS gradients when `coverImageUrl` is null
-3. **Responsive grid**: Two-column layout on desktop (`md:grid-cols-[1fr,1fr]`), stacked on mobile
-4. **Cassette aesthetic**: Maintains retro borders, monospace labels, and bold typography throughout
+1. **Prose format**: Brief is a single 80-120 word prose field with markdown formatting, not separate structured fields
+2. **Markdown bold subheadings**: AI generates content with `**What Is It**`, `**Who It's For**`, `**The Difference**`, `**Main Message**` as section markers
+3. **Image placeholder**: Diagonal stripe pattern using CSS gradients when `coverImageUrl` is null
+4. **Two-column layout**: Product image (1fr) + brief content (2fr) on desktop, stacked on mobile
+5. **No manual editing**: Removed inline editing and "Lock Brief" - players only ready up to confirm the AI-generated brief
+6. **Cassette aesthetic**: Maintains retro borders, monospace labels, and bold typography throughout
 
 ## Important Patterns
 
@@ -361,12 +359,12 @@ router.push(routes.create(roomId))
 
 [lib/sample-data.ts](lib/sample-data.ts) provides mock data for testing UI without database:
 - `samplePlayers` - 4 test players
-- `sampleBrief` - Pre-filled campaign brief with all 9 fields (uses newline-separated bullets)
+- `sampleBrief` - Pre-filled campaign brief in prose format (80-120 words with markdown bold subheadings)
 - `sampleAdLobs` - Complete AdLob examples
 - `sampleGameRoom` - Game state
 - `emojis` - 24 emoji options
 
-**Note**: `sampleBrief` demonstrates the correct format for bullet points - fields like `audience`, `businessProblem`, and `productFeatures` use `\n` characters to separate individual bullet points.
+**Note**: `sampleBrief` demonstrates the correct prose format with `**Bold Subheadings**` and paragraph breaks (`\n\n`) separating sections.
 
 ## Supabase Schema
 
