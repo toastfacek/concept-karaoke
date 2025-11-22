@@ -132,42 +132,33 @@ export type Database = {
       }
       campaign_briefs: {
         Row: {
-          audience: string
+          brief_content: string
           cover_image_url: string | null
           created_at: string | null
           id: string
-          main_message: string
           product_category: string
-          product_description: string
           product_name: string
           room_id: string
-          unique_benefit: string
           updated_at: string | null
         }
         Insert: {
-          audience: string
+          brief_content: string
           cover_image_url?: string | null
           created_at?: string | null
           id?: string
-          main_message: string
           product_category: string
-          product_description: string
           product_name: string
           room_id: string
-          unique_benefit: string
           updated_at?: string | null
         }
         Update: {
-          audience?: string
+          brief_content?: string
           cover_image_url?: string | null
           created_at?: string | null
           id?: string
-          main_message?: string
           product_category?: string
-          product_description?: string
           product_name?: string
           room_id?: string
-          unique_benefit?: string
           updated_at?: string | null
         }
         Relationships: [
