@@ -14,10 +14,7 @@ type RawBrief = {
   id: string
   product_name: string | null
   product_category: string | null
-  product_description: string | null
-  audience: string | null
-  unique_benefit: string | null
-  main_message: string | null
+  brief_content: string | null
   cover_image_url: string | null
   updated_at: string | null
 }
@@ -80,10 +77,7 @@ function serializeBrief(row?: RawBrief | null) {
     id: row.id,
     productName: row.product_name ?? "",
     productCategory: row.product_category ?? "All",
-    productDescription: row.product_description ?? "",
-    audience: row.audience ?? "",
-    uniqueBenefit: row.unique_benefit ?? "",
-    mainMessage: row.main_message ?? "",
+    briefContent: row.brief_content ?? "",
     coverImageUrl: row.cover_image_url ?? undefined,
     updatedAt: row.updated_at ?? null,
   }
