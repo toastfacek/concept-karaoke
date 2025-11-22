@@ -86,7 +86,14 @@ export function BriefViewDialog({ brief, isOpen, onOpenChange }: BriefViewDialog
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[80vh] max-w-3xl overflow-y-auto">
-        <DialogTitle className="text-lg font-bold">{brief.productName}</DialogTitle>
+        <div>
+          <DialogTitle className="text-lg font-bold">{brief.productName}</DialogTitle>
+          {brief.productCategory && brief.productCategory !== "All" && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {brief.productCategory}
+            </p>
+          )}
+        </div>
 
         <div className="space-y-6">
           {/* Two-column layout: Image on left, Content on right */}
@@ -108,14 +115,6 @@ export function BriefViewDialog({ brief, isOpen, onOpenChange }: BriefViewDialog
                   </span>
                 </div>
               )}
-
-              {/* Product Category below image */}
-              <div className="mt-4 space-y-1">
-                <h4 className="font-mono text-xs font-bold uppercase text-muted-foreground">
-                  Product Category
-                </h4>
-                <p className="text-sm leading-relaxed">{brief.productCategory}</p>
-              </div>
             </div>
 
             {/* Right Column - Brief Content */}

@@ -35,12 +35,11 @@ function getWackyPrompt(category: string, wackyStyle: WackyBriefStyle): string {
     "FORMAT REQUIREMENTS:",
     "- Write a bulleted brief with 80-120 words total across all sections",
     "- Use markdown bullets (- ) for each point",
-    "- Each section should have 2-4 concise bullet points",
     "- Structure with these markdown bold subheadings in this exact order:",
-    "  **Main Message** - 2-3 bullets. " + styleInstructions.messageGuidance,
-    "  **What Is It** - 2-3 bullets describing the product form",
-    "  **Who It's For** - 2-3 bullets about the target audience",
-    "  **The Difference** - 2-3 bullets. " + styleInstructions.benefitGuidance,
+    "  **Main Message** - Single concise phrase (4-8 words). " + styleInstructions.messageGuidance,
+    "  **What Is It** - 2-3 bullets. MUST capture the absurd constraint/feature that makes this funny. " + styleInstructions.productGuidance,
+    "  **Who It's For** - Exactly 1 bullet about the target audience",
+    "  **Unique Product Benefits** - 2-3 bullets. " + styleInstructions.benefitGuidance,
     "",
     "CROSS-CATEGORY EXAMPLES:",
     "These patterns work across electronics, food, fashion, wellness, finance, etc:",
@@ -66,6 +65,7 @@ function getWackyStyleInstructions(style: WackyBriefStyle): {
   name: string
   description: string
   benefitGuidance: string
+  productGuidance: string
   messageGuidance: string
   whyFunny: string
   examples: string
@@ -76,6 +76,7 @@ function getWackyStyleInstructions(style: WackyBriefStyle): {
         name: "Absurd Constraints",
         description: "A completely normal, familiar product with ONE absurd operational requirement that makes it nearly useless. The product itself is instantly understood - the constraint is the only weird part.",
         benefitGuidance: "State the constraint matter-of-factly as if it's a feature. Example: 'Only activates above 10,000 feet altitude'",
+        productGuidance: "Lead with the constraint. Example: 'Premium umbrella that only opens above 10,000 feet altitude'",
         messageGuidance: "Earnest value prop that ignores the constraint. Example: 'Stay dry in any weather'",
         whyFunny: "The corporate seriousness applied to an obviously impractical limitation. The brief never acknowledges that the constraint is a problem.",
         examples: [
@@ -91,6 +92,7 @@ function getWackyStyleInstructions(style: WackyBriefStyle): {
         name: "Genre Mashups",
         description: "A product that genuinely tries to serve TWO incompatible purposes at once. Pick a second category that has NO logical connection to the primary one. The brief earnestly tries to unify both.",
         benefitGuidance: "Try to serve both purposes. Example: 'Track your heart rate while filing your taxes'",
+        productGuidance: "Emphasize the clash. Example: 'Meditation app with competitive racing game mechanics'",
         messageGuidance: "Unify both purposes. Example: 'Relax your way to financial clarity'",
         whyFunny: "The collision of two legitimate but incompatible purposes creates absurdity. The brief's earnest attempt to unify them makes it funnier.",
         examples: [
@@ -106,6 +108,7 @@ function getWackyStyleInstructions(style: WackyBriefStyle): {
         name: "Unnecessary Solutions",
         description: "An impressively over-engineered solution to a trivial micro-annoyance that nobody actually needs solved. The product form is familiar (app, device, service) - the 'problem' it solves is hilariously specific.",
         benefitGuidance: "Treat the micro-problem as urgent. Example: 'Eliminates the 3 seconds of uncertainty about which pocket'",
+        productGuidance: "Highlight the trivial problem being solved. Example: 'Subscription service that reminds you which pocket your phone is in'",
         messageGuidance: "Deadly serious about the trivial problem. Example: 'Never wonder again'",
         whyFunny: "The mismatch between the elaborate, serious solution and the trivial non-problem. The brief's urgency about something nobody cares about.",
         examples: [
@@ -121,6 +124,7 @@ function getWackyStyleInstructions(style: WackyBriefStyle): {
         name: "Conflicting Elements",
         description: "A product with a feature that directly contradicts or undermines its primary purpose. The brief must NOT acknowledge the contradiction - present the undermining feature as a BENEFIT.",
         benefitGuidance: "Spin the contradiction as a feature. Example: 'Built-in flashlight ensures you can always find it'",
+        productGuidance: "State the contradiction upfront. Example: 'Sleep mask with built-in flashlight for midnight convenience'",
         messageGuidance: "Confident about the main purpose. Example: 'Sleep deeper than ever'",
         whyFunny: "The internal contradiction that everyone notices but the brief ignores. The marketing spin on why the undermining feature is actually good.",
         examples: [
@@ -152,17 +156,15 @@ function getRealisticPrompt(category: string): string {
     "FORMAT REQUIREMENTS:",
     "- Write a bulleted brief with 80-120 words total across all sections",
     "- Use markdown bullets (- ) for each point",
-    "- Each section should have 2-4 concise bullet points",
     "- Structure with these markdown bold subheadings in this exact order:",
-    "  **Main Message** - 2-3 bullets with the core campaign message",
-    "  **What Is It** - 2-3 bullets describing the product",
-    "  **Who It's For** - 2-3 bullets about the target audience",
-    "  **The Difference** - 2-3 bullets about what makes it unique",
+    "  **Main Message** - Single concise phrase (4-8 words) capturing the core campaign message",
+    "  **What Is It** - 2-3 bullets describing the product and its key feature",
+    "  **Who It's For** - Exactly 1 bullet about the target audience",
+    "  **Unique Product Benefits** - 2-3 bullets about what makes it unique",
     "",
     "EXAMPLE FORMAT:",
     "**Main Message**",
-    "- Never drink cold coffee again",
-    "- Your morning routine, perfected",
+    "Never drink cold coffee again",
     "",
     "**What Is It**",
     "- Self-warming travel mug for busy professionals",
@@ -170,10 +172,9 @@ function getRealisticPrompt(category: string): string {
     "- No power source needed",
     "",
     "**Who It's For**",
-    "- Young commuters always on the go",
     "- Working professionals who hate cold coffee",
     "",
-    "**The Difference**",
+    "**Unique Product Benefits**",
     "- Connects to phone via Bluetooth",
     "- Sends appointment reminders when you pick it up",
     "- Smart technology meets morning routine",

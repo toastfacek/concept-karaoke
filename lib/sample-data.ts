@@ -45,10 +45,9 @@ export const samplePlayers: Player[] = [
 
 export const sampleBrief: CampaignBrief = {
   productName: "Hearthco Mug",
-  productCategory: "Consumer Electronics",
+  productCategory: "Consumer Technology",
   briefContent: `**Main Message**
-- Never drink cold coffee again
-- Your morning routine, perfected
+Never drink cold coffee again
 
 **What Is It**
 - Self-warming travel mug for busy professionals
@@ -56,10 +55,9 @@ export const sampleBrief: CampaignBrief = {
 - No power source needed
 
 **Who It's For**
-- Young commuters always on the go
 - Working professionals who hate cold coffee
 
-**The Difference**
+**Unique Product Benefits**
 - Connects to phone via Bluetooth
 - Sends appointment reminders when you pick it up
 - Smart technology meets morning routine`,
@@ -101,7 +99,7 @@ export const sampleGameRoom: GameRoom = {
   phaseStartTime: null,
   createdAt: new Date(),
   hostId: "1",
-  productCategory: "Consumer Electronics",
+  productCategory: "Consumer Technology",
   phaseDurationSeconds: 60,
   briefStyle: "wacky",
   wackyBriefStyle: "absurd_constraints",

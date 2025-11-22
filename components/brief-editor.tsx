@@ -99,9 +99,16 @@ export function BriefEditor({
       }`}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-          {brief.productName || "Campaign Brief"}
-        </h2>
+        <div>
+          <h2 className="text-3xl font-bold text-foreground">
+            {brief.productName || "Campaign Brief"}
+          </h2>
+          {brief.productCategory && brief.productCategory !== "All" && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {brief.productCategory}
+            </p>
+          )}
+        </div>
         <Button
           type="button"
           variant="outline"
@@ -131,16 +138,6 @@ export function BriefEditor({
               </span>
             </div>
           )}
-
-          {/* Product Category below image */}
-          <div className="mt-4 space-y-1">
-            <h3 className="font-mono text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Product Category
-            </h3>
-            <p className="text-sm leading-relaxed">
-              {brief.productCategory || <span className="text-muted-foreground">Not set</span>}
-            </p>
-          </div>
         </div>
 
         {/* Right Column - Brief Content */}
