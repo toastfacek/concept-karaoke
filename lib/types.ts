@@ -17,21 +17,16 @@ export type CreationPhase = (typeof CREATION_PHASES)[number]
 
 export const PRODUCT_CATEGORIES = [
   "All",
-  "Consumer Electronics",
+  "Consumer Technology",
   "Food & Beverage",
   "Fashion & Apparel",
   "Beauty & Cosmetics",
-  "Automotive",
   "Sports & Fitness",
   "Home & Garden",
   "Travel & Hospitality",
   "Entertainment & Media",
-  "Financial Services",
   "Healthcare & Wellness",
-  "Technology & Software",
-  "Education",
-  "Real Estate",
-  "Other",
+  "Financial Services",
 ] as const
 export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number]
 

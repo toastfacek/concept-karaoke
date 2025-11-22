@@ -18,8 +18,7 @@ const briefSchema = z.object({
   briefContent: z.string().min(1),
 })
 
-const GEMINI_GENERATE_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
 export async function POST(request: Request) {
   console.log("[Brief Generate] Request received")
@@ -34,9 +33,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: message }, { status: 400 })
     }
 
-    console.log("[Brief Generate] Getting Gemini API key...")
+    console.log("[Brief Generate] Getting API keys...")
+    const anthropicKey = env.server.ANTHROPIC_API_KEY ?? requireServerEnv("ANTHROPIC_API_KEY")
     const geminiKey = env.server.GEMINI_API_KEY ?? requireServerEnv("GEMINI_API_KEY")
-    console.log("[Brief Generate] Gemini key exists:", !!geminiKey, "length:", geminiKey?.length)
+    console.log("[Brief Generate] Anthropic key exists:", !!anthropicKey, "Gemini key exists:", !!geminiKey)
 
     console.log("[Brief Generate] Initializing Supabase client...")
     const supabase = getSupabaseAdminClient()
@@ -81,38 +81,39 @@ export async function POST(request: Request) {
     const prompt = getBriefPrompt(productCategory, briefStyle, wackyBriefStyle)
     console.log("[Brief Generate] Generated prompt length:", prompt.length)
 
-    console.log("[Brief Generate] Calling Gemini API for text generation...")
-    const completionResponse = await fetch(`${GEMINI_GENERATE_URL}?key=${geminiKey}`, {
+    console.log("[Brief Generate] Calling Claude Haiku 4.5 API for text generation...")
+    const completionResponse = await fetch(ANTHROPIC_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-api-key": anthropicKey,
+        "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        contents: [
+        model: "claude-haiku-4-20250514",
+        max_tokens: 1024,
+        temperature: 0.7,
+        messages: [
           {
             role: "user",
-            parts: [{ text: prompt }],
+            content: prompt,
           },
         ],
-        generationConfig: {
-          temperature: 0.7,
-          responseMimeType: "application/json",
-        },
       }),
     })
 
     if (!completionResponse.ok) {
       const errorText = await completionResponse.text()
-      console.error("[Brief Generate] Gemini API error. Status:", completionResponse.status, "Body:", errorText)
-      throw new Error(`Gemini request failed: ${errorText}`)
+      console.error("[Brief Generate] Claude API error. Status:", completionResponse.status, "Body:", errorText)
+      throw new Error(`Claude request failed: ${errorText}`)
     }
 
-    console.log("[Brief Generate] Gemini text generation successful, parsing response...")
+    console.log("[Brief Generate] Claude text generation successful, parsing response...")
     const completionPayload = await completionResponse.json()
-    const textContent = completionPayload?.candidates?.[0]?.content?.parts?.[0]?.text
+    const textContent = completionPayload?.content?.[0]?.text
     if (typeof textContent !== "string") {
-      console.error("[Brief Generate] Unexpected Gemini response format:", JSON.stringify(completionPayload))
-      throw new Error("Unexpected Gemini response format")
+      console.error("[Brief Generate] Unexpected Claude response format:", JSON.stringify(completionPayload))
+      throw new Error("Unexpected Claude response format")
     }
 
     console.log("[Brief Generate] Parsing brief JSON...")

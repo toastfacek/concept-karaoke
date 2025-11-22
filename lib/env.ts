@@ -13,6 +13,7 @@ const serverSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
   REALTIME_SHARED_SECRET: z.string().optional(),
   REALTIME_BROADCAST_SECRET: z.string().optional(),
 })
@@ -32,6 +33,7 @@ const rawServerEnv = {
   STRIPE_WEBHOOK_SECRET: optional(process.env.STRIPE_WEBHOOK_SECRET),
   OPENAI_API_KEY: optional(process.env.OPENAI_API_KEY),
   GEMINI_API_KEY: optional(process.env.GEMINI_API_KEY),
+  ANTHROPIC_API_KEY: optional(process.env.ANTHROPIC_API_KEY),
   REALTIME_SHARED_SECRET: optional(process.env.REALTIME_SHARED_SECRET),
   REALTIME_BROADCAST_SECRET: optional(process.env.REALTIME_BROADCAST_SECRET),
 }
