@@ -55,10 +55,7 @@ export interface CampaignBrief {
   productName: string // 2-4 words
   productCategory: string // From game settings
   coverImageUrl?: string // AI-generated product image
-  productDescription: string // 1 sentence, ~10 words
-  audience: string // 1 phrase, ~8 words
-  uniqueBenefit: string // 1 sentence, ~12 words
-  mainMessage: string // 1 phrase, ~6 words
+  briefContent: string // Prose brief (80-120 words) with markdown bold subheadings
 }
 
 export interface AdLob {

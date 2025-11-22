@@ -56,10 +56,7 @@ type CampaignBrief = {
   productName: string
   productCategory: string
   coverImageUrl?: string
-  productDescription: string
-  audience: string
-  uniqueBenefit: string
-  mainMessage: string
+  briefContent: string
 }
 
 type GameState = SnapshotDrivenState<GamePlayer> & {

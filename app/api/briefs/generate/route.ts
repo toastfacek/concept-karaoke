@@ -15,10 +15,7 @@ const requestSchema = z.object({
 const briefSchema = z.object({
   productName: z.string().min(1),
   productCategory: z.string().min(1),
-  productDescription: z.string().min(1),
-  audience: z.string().min(1),
-  uniqueBenefit: z.string().min(1),
-  mainMessage: z.string().min(1),
+  briefContent: z.string().min(1),
 })
 
 const GEMINI_GENERATE_URL =
@@ -126,7 +123,7 @@ export async function POST(request: Request) {
     console.log("[Brief Generate] Starting image generation...")
     let coverImageUrl: string | null = null
     try {
-      const imagePrompt = `Professional product photograph for ${parsedBrief.productName}, a ${parsedBrief.productCategory} product. ${parsedBrief.productDescription}. ${parsedBrief.uniqueBenefit}. High-quality marketing image, clean composition, modern aesthetic.`
+      const imagePrompt = `Professional product photograph for ${parsedBrief.productName}, a ${parsedBrief.productCategory} product. ${parsedBrief.briefContent}. High-quality marketing image, clean composition, modern aesthetic.`
       coverImageUrl = await generateProductImage(imagePrompt, geminiKey)
       if (!coverImageUrl) {
         console.warn("[Brief Generate] Failed to generate cover image, continuing without image")
@@ -157,10 +154,7 @@ export async function POST(request: Request) {
         .update({
           product_name: parsedBrief.productName,
           product_category: parsedBrief.productCategory,
-          product_description: parsedBrief.productDescription,
-          audience: parsedBrief.audience,
-          unique_benefit: parsedBrief.uniqueBenefit,
-          main_message: parsedBrief.mainMessage,
+          brief_content: parsedBrief.briefContent,
           cover_image_url: coverImageUrl,
         })
         .eq("id", existing.id)
@@ -176,10 +170,7 @@ export async function POST(request: Request) {
         room_id: parsed.data.roomId,
         product_name: parsedBrief.productName,
         product_category: parsedBrief.productCategory,
-        product_description: parsedBrief.productDescription,
-        audience: parsedBrief.audience,
-        unique_benefit: parsedBrief.uniqueBenefit,
-        main_message: parsedBrief.mainMessage,
+        brief_content: parsedBrief.briefContent,
         cover_image_url: coverImageUrl,
       })
 
