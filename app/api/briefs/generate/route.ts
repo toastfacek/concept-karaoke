@@ -5,6 +5,7 @@ import { getBriefPrompt } from "@/lib/brief-prompts"
 import { TABLES } from "@/lib/db"
 import { env, requireServerEnv } from "@/lib/env"
 import { generateProductImage } from "@/lib/gemini-image"
+import { broadcastToRoom } from "@/lib/realtime-broadcast"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 import { SPECIFIC_PRODUCT_CATEGORIES, type BriefStyle, type WackyBriefStyle } from "@/lib/types"
 
@@ -182,6 +183,23 @@ export async function POST(request: Request) {
       console.log("[Brief Generate] Brief inserted successfully")
     }
 
+    // Broadcast to WebSocket clients
+    console.log("[Brief Generate] Broadcasting brief update to room...")
+    const { data: roomData } = await supabase
+      .from(TABLES.gameRooms)
+      .select("code")
+      .eq("id", parsed.data.roomId)
+      .single()
+
+    if (roomData) {
+      await broadcastToRoom(roomData.code, {
+        type: "brief_updated",
+        roomCode: roomData.code,
+        version: 0,
+      })
+      console.log("[Brief Generate] WebSocket broadcast sent")
+    }
+
     console.log("[Brief Generate] Request completed successfully")
     return NextResponse.json({
       success: true,
@@ -192,6 +210,7 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error("[Brief Generate] Fatal error:", error)
-    return NextResponse.json({ success: false, error: "Failed to generate brief" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "Failed to generate brief"
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 })
   }
 }

@@ -106,17 +106,23 @@ function getWackyStyleInstructions(style: WackyBriefStyle): {
     case "unnecessary_solutions":
       return {
         name: "Unnecessary Solutions",
-        description: "An impressively over-engineered solution to a trivial micro-annoyance that nobody actually needs solved. The product form is familiar (app, device, service) - the 'problem' it solves is hilariously specific.",
-        benefitGuidance: "Treat the micro-problem as urgent. Example: 'Eliminates the 3 seconds of uncertainty about which pocket'",
-        productGuidance: "Highlight the trivial problem being solved. Example: 'Subscription service that reminds you which pocket your phone is in'",
-        messageGuidance: "Deadly serious about the trivial problem. Example: 'Never wonder again'",
-        whyFunny: "The mismatch between the elaborate, serious solution and the trivial non-problem. The brief's urgency about something nobody cares about.",
+        description: "An impressively over-engineered solution to a TRIVIAL 2-3 SECOND micro-annoyance that nobody actually needs solved. The problem must be a tiny daily inconvenience - NOT a constraint on how the product works. The product form is familiar (app, device, service) but the 'problem' it solves is hilariously specific and pointless.",
+        benefitGuidance: "Treat the trivial micro-problem as if it's a serious pain point. Example: 'Eliminates the 3 seconds of uncertainty about which pocket your phone is in'",
+        productGuidance: "State the trivial problem being solved FIRST. Example: 'Subscription service that reminds you which pocket your phone is in' or 'App that tracks which hand you're holding your coffee in'. The problem should be a micro-inconvenience, NOT an operational constraint.",
+        messageGuidance: "Deadpan serious about solving the trivial problem. Example: 'Never wonder again' or 'Total pocket certainty'",
+        whyFunny: "The mismatch between the elaborate, serious solution and the trivial non-problem that takes 2 seconds to resolve naturally. The brief's corporate urgency about something nobody cares about.",
         examples: [
-          "Examples of this style:",
+          "Examples of this style (notice the TRIVIAL problems):",
           "- PocketPing: A subscription service that reminds you which pocket your phone is in",
-          "- KeyScale: A precision weight tracker specifically for your keys",
-          "- BailPredict AI: An AI that predicts which of your friends will cancel plans",
-          "- LockCheck Pro: A smart device that confirms you locked your door (only after you've left)",
+          "- KeyScale: A precision weight tracker specifically for your keys to know if you're carrying them",
+          "- BailPredict AI: An AI that predicts which of your friends will cancel plans this week",
+          "- LockCheck Pro: A smart device that confirms you locked your door (but only sends notification after you've left)",
+          "- CupSide: An app that tracks which hand you're holding your coffee cup in",
+          "",
+          "ANTI-EXAMPLES (these are absurd_constraints, NOT unnecessary_solutions):",
+          "- A Wi-Fi hotspot that requires no Wi-Fi signals nearby (this is a CONSTRAINT, not a trivial problem)",
+          "- A coffee maker that only works during full moons (this is a CONSTRAINT, not a trivial problem)",
+          "- Headphones that require silence to activate (this is a CONSTRAINT, not a trivial problem)",
         ].join("\n"),
       }
     case "conflicting_elements":
