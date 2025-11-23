@@ -567,7 +567,7 @@ export default function BriefPage() {
     <main className="min-h-screen bg-background">
       <BriefLoadingModal
         isOpen={showLoadingModal}
-        category={game?.brief?.productCategory ?? "All"}
+        category={game?.productCategory ?? "All"}
       />
 
       {/* Main Container */}
