@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google"
 import "./globals.css"
 import { RealtimeProvider } from "@/components/realtime-provider"
+import { FeedbackButton } from "@/components/feedback-button"
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -30,6 +31,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} font-sans antialiased`}>
         <RealtimeProvider>{children}</RealtimeProvider>
+        <FeedbackButton />
       </body>
     </html>
   )
